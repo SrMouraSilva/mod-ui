@@ -188,6 +188,8 @@ class Protocol(object):
 
         "am": [str, str, str, str], # alsamixer
 
+        "en_ms": [int], # enable_mass_storage
+
         # unused
         "get_pb_name": [],
         "encoder_clicked": [int],

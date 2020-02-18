@@ -419,6 +419,8 @@ class Host(object):
 
         Protocol.register_cmd_callback("am", self.hmi_amixer)
 
+        Protocol.register_cmd_callback("en_ms", self.hmi_enable_mass_storage)
+
         # not used
         #Protocol.register_cmd_callback("get_pb_name", self.hmi_get_pb_name)
 
@@ -5305,6 +5307,11 @@ _:b%i
             callback(False)
             return
         os.system("/usr/bin/mod-amixer {} {} {} {}".format(arg1, arg2, arg3, arg4))
+        callback(True)
+
+    def hmi_enable_mass_storage(self, enable, callback):
+        print("hmi_enable_mass_storage", enable)
+        os.system("/usr/sbin/enable-usb-mass-storage.sh {}".format("on" if enable else "off"))
         callback(True)
 
     @gen.coroutine
