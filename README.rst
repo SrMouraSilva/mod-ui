@@ -117,12 +117,18 @@ Usage in the page (or in the browser console), where it is available as ``window
     await instance.move({ x: 320, y: 140 });
     await plugins.remove(instance);
 
+    // Keep a screen up to date: events about the running pedalboard, whoever changes it (no event makes a request)
+    const off = client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));   // also removed, connection:*, loading, loaded
+    plugin.params.get('gain').on('change', ({ value }) => knob.set(value), { ignoreSource: knob });     // follows others, not its own gesture
+    knob.onDrag((value) => plugin.params.get('gain').setValue(value, { source: knob }));
+
 From another origin or from Node, pass ``new ModUiClient({ baseUrl: 'http://modduo.local' })``.
 The developer guide, with architecture, class and sequence diagrams, is ``docs/modui-client.md``.
 Every public symbol is documented in the sources (TSDoc); the current scope (pedalboards) and the planned API
 are in ``docs/plans/2026-10-modui-client-pedalboard.md`` (live editing of the running pedalboard:
 ``docs/plans/2026-10-modui-client-pedalboard-graph.md``; patch parameters such as strings and file paths:
-``docs/plans/2026-10-modui-client-patch-params.md``).
+``docs/plans/2026-10-modui-client-patch-params.md``; events for frontends that update themselves:
+``docs/plans/2026-10-modui-client-events.md``).
 
 Known limitation: when the client loads a pedalboard while the classic UI is open, the canvas reloads through the
 WebSocket, but the title shown by the classic UI is not updated.

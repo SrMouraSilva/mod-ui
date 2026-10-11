@@ -7,7 +7,7 @@
  */
 
 import type { PedalboardGraph, PluginInstance } from './pedalboard-graph';
-import type { PluginTarget, Position } from './types';
+import type { PluginTarget, Position, WriteOptions } from './types';
 
 /**
  * The plugin instances of the running pedalboard (`client.device.currentPedalboard.plugins`).
@@ -43,6 +43,19 @@ export class PedalboardPlugins {
   }
 
   /**
+   * One plugin of the pedalboard by its path, the same object every time (`list()` returns it too), or `undefined` when there is
+   * none.
+   * @param instance The instance path (`/graph/Gain`; the leading slash is optional).
+   * @throws {ModUiTimeoutError} when the WebSocket does not get in sync.
+   * @example
+   * const gain = await client.device.currentPedalboard.plugins.get('/graph/Gain');
+   * gain?.on('active', ({ active }) => console.log(active));
+   */
+  get(instance: string): Promise<PluginInstance | undefined> {
+    return this.graph.getInstance(instance);
+  }
+
+  /**
    * Adds a plugin to the pedalboard and resolves once the backend confirmed it with the WebSocket `add` frame.
    *
    * The instance name is generated like the classic UI does it: the last part of the URI, made of letters, digits and
@@ -52,6 +65,7 @@ export class PedalboardPlugins {
    * pedalboard is marked as modified.
    * @param plugin A {@link Plugin} (from `device.plugins.list()`), a plugin URI, or anything with a `uri`.
    * @param position Place of the block in the canvas. Default `{ x: 0, y: 0 }`.
+   * @param options.source Marks the change as yours: `plugin:added` carries it, and `{ ignoreSource }` skips it.
    * @throws {ModUiError} when the backend refuses (the plugin is not installed).
    * @throws {ModUiHttpError} on HTTP errors. Note: `404` can also mean that the plugin was created but its description
    * could not be read; it then stays in the pedalboard.
@@ -59,8 +73,8 @@ export class PedalboardPlugins {
    * const created = await client.device.currentPedalboard.plugins.add(gain, { x: 200, y: 100 });
    * console.log(created.instance, created.ports.audio.input.map((port) => port.id));
    */
-  add(plugin: PluginTarget, position?: Position): Promise<PluginInstance> {
-    return this.graph.addPlugin(plugin, position);
+  add(plugin: PluginTarget, position?: Position, options?: WriteOptions): Promise<PluginInstance> {
+    return this.graph.addPlugin(plugin, position, options);
   }
 
   /**
@@ -69,11 +83,12 @@ export class PedalboardPlugins {
    * Backend: `GET /effect/remove/{instance}` (operationId `removePlugin`). The backend also drops the addressings
    * of the plugin.
    * @param instance A {@link PluginInstance} or its path (`/graph/Gain`; the leading slash is optional).
+   * @param options.source Marks the change as yours (see {@link PedalboardPlugins.add}).
    * @throws {ModUiError} when there is no such plugin in the pedalboard, or the backend refuses.
    * @example
    * await client.device.currentPedalboard.plugins.remove('/graph/Gain');
    */
-  remove(instance: string | { readonly instance: string }): Promise<void> {
-    return this.graph.removePlugin(instance);
+  remove(instance: string | { readonly instance: string }, options?: WriteOptions): Promise<void> {
+    return this.graph.removePlugin(instance, options);
   }
 }

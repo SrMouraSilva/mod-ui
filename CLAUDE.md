@@ -16,7 +16,10 @@ mod-ui is the web interface of MOD audio devices.
   client built on `fetch` and the main WebSocket. Current scope: pedalboards (list, info, remove, load, loadDefault, reset, currentPedalboard get/save/saveAs)
   and live editing of the running pedalboard (`device.plugins.list`, `currentPedalboard.plugins` list/add/remove,
   `.connections` list/connect/disconnect, `.ports.list()` and `.ports.<audio|midi|cv>.<input()|output()>`; per instance:
-  `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `move`).
+  `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `move`)
+  and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading events), `instance.on`, `param.on('change')`,
+  `patchParam.on('change')`, stable objects (`plugins.get`, `alive`) and a `{ source }` option on every write (phase 1 of
+  `docs/plans/2026-10-modui-client-events.md`; connection state, snapshots and device state are planned).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -70,7 +73,7 @@ own for the client's sake.
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `graph-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `graph-state.ts`, `emitter.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
   `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
@@ -90,6 +93,12 @@ own for the client's sake.
   the same sequence as the classic UI (`html/js/desktop.js`).
 - A socket opened by the client answers `ping` (`pong`) and `data_ready <n>` (echo). A socket shared through
   `options.webSocket` is only listened to.
+- Notifications: `GraphModel.apply()` reports what a frame changed (`GraphChange`); `PedalboardStore` builds the plugin objects
+  (stable per instance path) and emits on one `Emitter`. A write that the backend does not echo (`param_set`, `patch_set`,
+  `plugin_pos`) is applied to the model with `GraphState.applyLocal()`, so it emits like a frame; a write confirmed by a frame
+  registers `store.expect(...)` before the request so the frame is tagged `'local'`. Events never make HTTP requests (only a new
+  plugin's description does, once per URI). Events are delivered in frame order, never nested, and a throwing handler is rethrown
+  asynchronously. Every write takes `{ source }` (`WriteOptions`).
 - Every public symbol has TSDoc in English: what it does, which backend calls it makes (with the OpenAPI
   `operationId`), errors thrown, and an `@example`. Write it for both developers and AI tools.
 

@@ -14,7 +14,7 @@ import type { HttpTransport } from './http';
 import { PedalboardGraph } from './pedalboard-graph';
 import type { PedalboardsApi } from './pedalboards';
 import type { PluginsApi } from './plugins';
-import type { LoadOptions, LoadResult, PedalboardTarget } from './types';
+import type { LoadOptions, LoadResult, PedalboardTarget, WriteOptions } from './types';
 
 /**
  * What runs on the device right now (`client.device`).
@@ -27,6 +27,7 @@ import type { LoadOptions, LoadResult, PedalboardTarget } from './types';
  */
 export class Device {
   private queue: Promise<unknown> = Promise.resolve();
+  private readonly graph: PedalboardGraph;
 
   /** The pedalboard that is running now: find it, save it, edit its plugins and connections. */
   readonly currentPedalboard: CurrentPedalboard;
@@ -46,8 +47,8 @@ export class Device {
     this.plugins = plugins;
     const enqueue = <T>(task: () => Promise<T>) => this.enqueue(task);
     const state = new GraphState(events, graph.openSnapshotChannel);
-    const pedalboardGraph = new PedalboardGraph(http, events, state, plugins, enqueue, graph.confirmTimeoutMs);
-    this.currentPedalboard = new CurrentPedalboard(http, pedalboards, enqueue, pedalboardGraph);
+    this.graph = new PedalboardGraph(http, events, state, plugins, enqueue, graph.confirmTimeoutMs);
+    this.currentPedalboard = new CurrentPedalboard(http, pedalboards, enqueue, this.graph);
   }
 
   /**
@@ -98,13 +99,21 @@ export class Device {
   }
 
   /**
-   * Clears the running pedalboard (all plugins, connections and addressings). The WebSocket broadcasts `remove :all`.
+   * Clears the running pedalboard (all plugins, connections and addressings). The WebSocket broadcasts `remove :all`, which
+   * `currentPedalboard.on('cleared')` reports (with `origin: 'local'` and the `source` given here).
    *
    * Backend: `GET /reset` (operationId `resetPedalboard`).
    * @throws {ModUiError} when the backend refuses.
    */
-  reset(): Promise<void> {
-    return this.enqueue(() => this.resetNow());
+  reset(options: WriteOptions = {}): Promise<void> {
+    return this.enqueue(async () => {
+      const release = this.graph.expect((change) => change.type === 'cleared', options.source);
+      try {
+        await this.resetNow();
+      } finally {
+        release();
+      }
+    });
   }
 
   // ------------------------------------------------------------------------------------------------------------------
@@ -123,6 +132,20 @@ export class Device {
   }
 
   private async loadBundle(bundlepath: string, isDefault: boolean, options: LoadOptions): Promise<LoadResult> {
+    // The reset, `loading_start` and `loading_end` that follow are caused by this call (a load by someone else at the same
+    // moment cannot be told apart: see the note of the class).
+    const release = this.graph.expect(
+      (change) => change.type === 'cleared' || change.type === 'loading' || change.type === 'loaded',
+      options.source,
+    );
+    try {
+      return await this.loadBundleNow(bundlepath, isDefault, options);
+    } finally {
+      release();
+    }
+  }
+
+  private async loadBundleNow(bundlepath: string, isDefault: boolean, options: LoadOptions): Promise<LoadResult> {
     await this.events.connect();
     await this.resetNow();
 

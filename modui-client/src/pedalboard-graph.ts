@@ -7,13 +7,24 @@
  * @module
  */
 
+import type { ListenOptions, Unsubscribe } from './emitter';
 import { ModUiError } from './errors';
 import type { EventChannel } from './events';
 import type { HttpTransport } from './http';
-import type { GraphModel, GraphState, ModelPlugin } from './graph-state';
+import type { GraphChange, GraphModel, GraphState, ModelPlugin } from './graph-state';
 import { PluginPatchParams, patchFrameValue } from './patch-params';
+import type { ParamEvent, PluginEvents, StoreEvents } from './pedalboard-events';
+import { PedalboardStore } from './pedalboard-store';
 import type { PluginsApi } from './plugins';
-import type { PluginInfo, PluginPortInfo, PluginTarget, PortDirection, PortType, Position } from './types';
+import type {
+  PluginInfo,
+  PluginPortInfo,
+  PluginTarget,
+  PortDirection,
+  PortType,
+  Position,
+  WriteOptions,
+} from './types';
 
 /** Runs a task after the pending device operations (see `Device`), so it never overlaps a load or a save. */
 export type Enqueue = <T>(task: () => Promise<T>) => Promise<T>;
@@ -45,16 +56,27 @@ export class Port {
 export interface InstanceOps {
   /** The current model entry of a plugin, or `undefined` when it is not in the pedalboard (any more). */
   live(instance: string): ModelPlugin | undefined;
-  remove(instance: string): Promise<void>;
-  setParam(instance: string, symbol: string, value: number): Promise<void>;
+  /** Whether the object is still the one that stands for its path (see {@link PluginInstance.alive}). */
+  isAlive(plugin: PluginInstance): boolean;
+  /** Subscribes to an event of one plugin; ends by itself when the plugin is gone. */
+  listen<K extends keyof StoreEvents>(
+    plugin: PluginInstance,
+    event: K,
+    handler: (payload: StoreEvents[K]) => void,
+    options?: ListenOptions,
+    once?: boolean,
+    extra?: (payload: StoreEvents[K]) => boolean,
+  ): Unsubscribe;
+  remove(instance: string, source?: unknown): Promise<void>;
+  setParam(instance: string, symbol: string, value: number, source?: unknown): Promise<void>;
   /** Sends `patch_set` with the already validated and encoded value. */
-  setPatch(instance: string, uri: string, typeChar: string, encoded: string): Promise<void>;
+  setPatch(instance: string, uri: string, typeChar: string, encoded: string, source?: unknown): Promise<void>;
   /** Sends `patch_get` and resolves with the raw text of the answer. */
-  refreshPatch(instance: string, uri: string, timeoutMs?: number): Promise<string>;
+  refreshPatch(instance: string, uri: string, timeoutMs?: number, source?: unknown): Promise<string>;
   isActive(instance: string): Promise<boolean>;
-  setActive(instance: string, active: boolean): Promise<void>;
-  toggle(instance: string): Promise<boolean>;
-  move(instance: string, position: Position): Promise<void>;
+  setActive(instance: string, active: boolean, source?: unknown): Promise<void>;
+  toggle(instance: string, source?: unknown): Promise<boolean>;
+  move(instance: string, position: Position, source?: unknown): Promise<void>;
 }
 
 /** Control ports the host drives itself: `param_set` on them is refused. */
@@ -115,14 +137,18 @@ export class Param {
    * Checked before anything is sent (the backend would close the socket on some bad messages): the value is a finite
    * number between `minimum` and `maximum`, the port is not driven by the host, and the plugin is still in the pedalboard.
    *
+   * The change is also announced to `param.on('change')` and `instance.on('param')` (with `origin: 'local'` and the `source` given),
+   * since the backend does not echo it.
+   *
    * WebSocket: `param_set <instance>/<symbol> <value>` (see `connectMainWebSocket`).
+   * @param options.source Marks the change as yours: its events carry it, and a subscription with `ignoreSource` skips them.
    * @throws {ModUiError} for an invalid value, a host-driven port, or a plugin that is not in the pedalboard.
    * @example
    * const gain = instance.params.get('gain')!;
    * await gain.setValue(gain.default);
-   * await gain.setValue(gain.maximum / 2);
+   * await gain.setValue(gain.maximum / 2, { source: mySlider });
    */
-  setValue(value: number): Promise<void> {
+  setValue(value: number, options: WriteOptions = {}): Promise<void> {
     if (typeof value !== 'number' || !isFinite(value)) {
       return Promise.reject(new ModUiError(`"${this.symbol}": expected a finite number, got ${String(value)}`));
     }
@@ -134,14 +160,40 @@ export class Param {
     if (HOST_DESIGNATIONS.includes(this.designation)) {
       return Promise.reject(new ModUiError(`"${this.symbol}" is driven by the host (${this.designation}) and cannot be set`));
     }
-    return this.ops.setParam(this.owner.instance, this.symbol, value);
+    return this.owner.rejectIfGone() ?? this.ops.setParam(this.owner.instance, this.symbol, value, options.source);
+  }
+
+  /**
+   * Calls `handler` each time the value changes, whoever changed it (this client, the classic UI, another client). Nothing is
+   * requested from the backend; the value is already in memory when the handler runs. The subscription ends by itself when the
+   * plugin is removed or the pedalboard is reloaded.
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = gain.on('change', ({ value }) => knob.setPosition(value), { ignoreSource: knob });
+   */
+  on(_event: 'change', handler: (event: ParamEvent) => void, options?: ListenOptions): Unsubscribe {
+    return this.listen(handler, options, false);
+  }
+
+  /** Like {@link Param.on}, but the handler runs once. */
+  once(_event: 'change', handler: (event: ParamEvent) => void, options?: ListenOptions): Unsubscribe {
+    return this.listen(handler, options, true);
+  }
+
+  private listen(handler: (event: ParamEvent) => void, options: ListenOptions | undefined, once: boolean): Unsubscribe {
+    return this.owner.listenTo('param', handler, options, once, (event) => event.param === this);
   }
 }
 
 /** The control inputs of a plugin instance (`instance.params`). */
 export class PluginParams {
   /** @internal Built by the client. */
-  constructor(private readonly items: Param[]) {}
+  constructor(private items: Param[]) {}
+
+  /** @internal Fills in the controls of a plugin whose description arrived after the object was built. */
+  replace(items: Param[]): void {
+    this.items = items;
+  }
 
   /**
    * Every control input, in the order of the plugin. Synchronous: the description is already known when the instance
@@ -185,37 +237,103 @@ export class PluginInstance {
   /** The patch parameters (strings, paths, booleans, ...): `patchParams.list()`, `patchParams.get(uri)`. */
   readonly patchParams: PluginPatchParams;
 
+  private description: PluginInfo | null = null;
+
   /** @internal Built by the client. */
-  constructor(
-    private readonly last: ModelPlugin,
-    /** Description of the plugin; `null` when the plugin is not installed. */
-    readonly info: PluginInfo | null,
-    private readonly ops: InstanceOps,
-  ) {
+  constructor(private readonly last: ModelPlugin, info: PluginInfo | null, private readonly ops: InstanceOps) {
     this.instance = last.instance;
     this.uri = last.uri;
-    const params: Param[] = [];
+    this.params = new PluginParams([]);
+    this.patchParams = new PluginPatchParams(this, ops);
     if (info) {
-      for (const type of PORT_TYPES) {
-        for (const direction of ['input', 'output'] as const) {
-          for (const port of info.ports[type]?.[direction] ?? []) {
-            this.ports[type][direction].push(
-              new Port(`${this.instance}/${port.symbol}`, port.symbol, port.name, type, direction, this),
-            );
-          }
-        }
-      }
-      for (const port of info.ports.control?.input ?? []) {
-        params.push(new Param(this, port, ops));
-      }
+      this.attach(info);
     }
-    this.params = new PluginParams(params);
-    this.patchParams = new PluginPatchParams(this, info?.parameters ?? [], ops);
   }
 
-  /** @internal The live state of this plugin (the last known one when it was removed). */
+  /**
+   * Description of the plugin (ports, parameters, presets, ...); `null` when it is not known: the plugin is not installed, or
+   * the request for it failed (`plugins.list()` and `plugins.get()` ask again). The object keeps its identity when it arrives.
+   */
+  get info(): PluginInfo | null {
+    return this.description;
+  }
+
+  /** @internal Gives the description to an instance that was built without it: fills `ports`, `params` and `patchParams`. */
+  attach(info: PluginInfo): void {
+    if (this.description) {
+      return;
+    }
+    this.description = info;
+    for (const type of PORT_TYPES) {
+      for (const direction of ['input', 'output'] as const) {
+        for (const port of info.ports[type]?.[direction] ?? []) {
+          this.ports[type][direction].push(
+            new Port(`${this.instance}/${port.symbol}`, port.symbol, port.name, type, direction, this),
+          );
+        }
+      }
+    }
+    this.params.replace((info.ports.control?.input ?? []).map((port) => new Param(this, port, this.ops)));
+    this.patchParams.fill(info.parameters ?? []);
+  }
+
+  /**
+   * Whether this object still stands for a plugin of the running pedalboard. It turns `false`, for good, when the plugin is
+   * removed, when the pedalboard is reset and when another one is loaded (the same path in the new pedalboard is a new object).
+   * A gone plugin keeps its last known state in its getters, and its operations throw.
+   */
+  get alive(): boolean {
+    return this.ops.isAlive(this);
+  }
+
+  /**
+   * Calls `handler` when something about this plugin changes, whoever caused it. Nothing is requested from the backend.
+   *
+   * | Event | When | Payload |
+   * |-------|------|---------|
+   * | `param` | a control port changed | `{ plugin, param, value, previous }` |
+   * | `active` | bypassed or switched on | `{ plugin, active }` |
+   * | `moved` | the block moved in the canvas | `{ plugin, x, y }` |
+   * | `patch` | a patch parameter changed | `{ plugin, uri, param, value }` |
+   * | `removed` | the plugin is gone (removed, reset, reloaded) | `{ plugin, reason }` |
+   *
+   * Every payload also has `origin` (`'local'` for a change made through this client, `'remote'` otherwise) and `source`.
+   * The subscription ends by itself after `removed`. No event is delivered while a pedalboard is loading.
+   * @param options `signal` (an `AbortSignal` that ends the subscription), `ignoreSource` (skips the changes made with that
+   *   `source`), `ignoreLocal` (skips every change made through this client).
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = instance.on('active', ({ active }) => led.classList.toggle('on', active));
+   * instance.on('removed', () => view.remove());
+   */
+  on<K extends keyof PluginEvents>(event: K, handler: (event: PluginEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.listenTo(event === 'removed' ? 'instance:removed' : event, handler as never, options, false);
+  }
+
+  /** Like {@link PluginInstance.on}, but the handler runs once. */
+  once<K extends keyof PluginEvents>(event: K, handler: (event: PluginEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.listenTo(event === 'removed' ? 'instance:removed' : event, handler as never, options, true);
+  }
+
+  /** @internal Subscribes to an event of the store about this plugin. */
+  listenTo<K extends keyof StoreEvents>(
+    event: K,
+    handler: (event: StoreEvents[K]) => void,
+    options: ListenOptions | undefined,
+    once: boolean,
+    extra?: (event: StoreEvents[K]) => boolean,
+  ): Unsubscribe {
+    return this.ops.listen(this, event, handler, options, once, extra);
+  }
+
+  /** @internal A rejected promise when this plugin is gone, `undefined` when it is still in the pedalboard. */
+  rejectIfGone(): Promise<never> | undefined {
+    return this.alive ? undefined : Promise.reject(new ModUiError(`There is no plugin "${this.instance}" in the running pedalboard`));
+  }
+
+  /** @internal The live state of this plugin (the last known one when it is gone). */
   liveModel(): ModelPlugin {
-    return this.ops.live(this.instance) ?? this.last;
+    return (this.alive ? this.ops.live(this.instance) : undefined) ?? this.last;
   }
 
   /** Horizontal position of the block in the canvas. */
@@ -244,57 +362,65 @@ export class PluginInstance {
    * if (await instance.isActive()) console.log('on');
    */
   isActive(): Promise<boolean> {
-    return this.ops.isActive(this.instance);
+    return this.rejectIfGone() ?? this.ops.isActive(this.instance);
   }
 
   /**
    * Turns the plugin on (`true`) or bypasses it (`false`). Like {@link Param.setValue}, the backend sends no confirmation to
    * the sender: the promise resolves once the message was sent.
    *
+   * The change is announced to `instance.on('active')` (`origin: 'local'`) when the state really changes.
+   *
    * WebSocket: `param_set <instance>/:bypass <0|1>` (`1` bypasses).
+   * @param options.source Marks the change as yours (see {@link Param.setValue}).
    * @throws {ModUiError} when the plugin is not in the pedalboard.
    * @example
    * await instance.setActive(false);   // bypass
    */
-  setActive(active: boolean): Promise<void> {
+  setActive(active: boolean, options: WriteOptions = {}): Promise<void> {
     if (typeof active !== 'boolean') {
       return Promise.reject(new ModUiError('Expected true (on) or false (bypassed)'));
     }
-    return this.ops.setActive(this.instance, active);
+    return this.rejectIfGone() ?? this.ops.setActive(this.instance, active, options.source);
   }
 
   /**
-   * Switches between on and bypassed and resolves with the new state (`true` = active).
+   * Switches between on and bypassed and resolves with the new state (`true` = active). Announced like {@link PluginInstance.setActive}.
+   * @param options.source Marks the change as yours (see {@link Param.setValue}).
    * @throws {ModUiError} when the plugin is not in the pedalboard.
    * @example
    * const active = await instance.toggle();
    */
-  toggle(): Promise<boolean> {
-    return this.ops.toggle(this.instance);
+  toggle(options: WriteOptions = {}): Promise<boolean> {
+    return this.rejectIfGone() ?? this.ops.toggle(this.instance, options.source);
   }
 
   /**
    * Moves the block in the canvas and resolves once the message was sent (no confirmation is sent to the sender). The
    * position is stored with the pedalboard at the next save, and `x` / `y` already show it.
    *
+   * Announced to `instance.on('moved')` (`origin: 'local'`) when the position really changes.
+   *
    * WebSocket: `plugin_pos <instance> <x> <y>`.
+   * @param options.source Marks the change as yours (see {@link Param.setValue}).
    * @throws {ModUiError} for coordinates that are not finite numbers, or a plugin that is not in the pedalboard.
    * @example
    * await instance.move({ x: 320, y: 140 });
    */
-  move(position: Position): Promise<void> {
+  move(position: Position, options: WriteOptions = {}): Promise<void> {
     if (!position || !isFinite(position.x) || !isFinite(position.y) || typeof position.x !== 'number' || typeof position.y !== 'number') {
       return Promise.reject(new ModUiError('Expected a position { x, y } with finite numbers'));
     }
-    return this.ops.move(this.instance, position);
+    return this.rejectIfGone() ?? this.ops.move(this.instance, position, options.source);
   }
 
   /**
    * Removes this plugin (and its connections) from the pedalboard. Same as `plugins.remove(instance)`.
+   * @param options.source Marks the change as yours (see {@link PedalboardPlugins.add}).
    * @throws {ModUiError} see {@link PedalboardPlugins.remove}.
    */
-  remove(): Promise<void> {
-    return this.ops.remove(this.instance);
+  remove(options: WriteOptions = {}): Promise<void> {
+    return this.rejectIfGone() ?? this.ops.remove(this.instance, options.source);
   }
 }
 
@@ -408,6 +534,9 @@ export function generateInstance(uri: string, used: { has(instance: string): boo
  * WebSocket frame. Everything runs through the `Device` queue.
  */
 export class PedalboardGraph {
+  /** The objects of the running pedalboard and their events. */
+  readonly store: PedalboardStore;
+
   constructor(
     private readonly http: HttpTransport,
     private readonly events: EventChannel,
@@ -415,13 +544,33 @@ export class PedalboardGraph {
     private readonly plugins: PluginsApi,
     private readonly enqueue: Enqueue,
     private readonly confirmTimeoutMs: number,
-  ) {}
+  ) {
+    this.store = new PedalboardStore(state, plugins, {
+      instance: (model, info) => new PluginInstance(model, info, this.ops),
+      hardwarePort: (port) =>
+        new Port(port.id, port.id.slice(port.id.lastIndexOf('/') + 1), port.title, port.type, port.direction, null),
+      connection: (from, to) => new PedalboardConnection(from, to),
+    });
+  }
+
+  /** @internal Tags the changes `match` accepts as made by this client until the returned function is called. */
+  expect(match: (change: GraphChange) => boolean, source: unknown): () => void {
+    return this.store.expect(match, source);
+  }
 
   // ---- reads --------------------------------------------------------------------------------------------------------
 
   /** Plugin instances of the running pedalboard. */
   listInstances(): Promise<PluginInstance[]> {
     return this.enqueue(async () => (await this.view()).instances);
+  }
+
+  /** One plugin instance, `undefined` when there is none with that path. */
+  getInstance(path: string): Promise<PluginInstance | undefined> {
+    return this.enqueue(async () => {
+      await this.view();
+      return this.store.instance(normalizeId(path));
+    });
   }
 
   /** Ports of the pedalboard itself, optionally of one type and direction: audio, MIDI, CV; sources first; by index. */
@@ -440,7 +589,7 @@ export class PedalboardGraph {
 
   // ---- writes -------------------------------------------------------------------------------------------------------
 
-  addPlugin(target: PluginTarget, position?: Position): Promise<PluginInstance> {
+  addPlugin(target: PluginTarget, position?: Position, options: WriteOptions = {}): Promise<PluginInstance> {
     return this.enqueue(async () => {
       const uri = typeof target === 'string' ? target : target && target.uri;
       if (typeof uri !== 'string' || uri === '') {
@@ -449,74 +598,98 @@ export class PedalboardGraph {
       const model = await this.state.ready();
       const instance = generateInstance(uri, model.plugins);
 
-      // The backend pushes "add" before it answers the HTTP request: wait first.
-      const added = this.events.waitFor('add', this.confirmTimeoutMs, (args) => args.split(' ')[0] === instance);
-      let info: PluginInfo | false;
+      // The backend pushes "add" before it answers the HTTP request, and the answer carries the description of the plugin:
+      // the store waits for it instead of asking again.
+      const arrival = this.plugins.expect(uri);
+      const release = this.store.expect((change) => change.type === 'plugin-added' && change.instance === instance, options.source);
       try {
-        info = await this.http.getJson<PluginInfo | false>(`/effect/add/${instance}`, {
-          uri,
-          x: position?.x ?? 0,
-          y: position?.y ?? 0,
-        });
-      } catch (error) {
-        added.cancel();
-        throw error;
-      }
-      if (!info) {
-        added.cancel();
-        throw new ModUiError(`The backend could not load the plugin "${uri}" (is it installed?)`);
-      }
-      this.plugins.remember(info);
-      await added.promise;
+        const added = this.events.waitFor('add', this.confirmTimeoutMs, (args) => args.split(' ')[0] === instance);
+        let info: PluginInfo | false;
+        try {
+          info = await this.http.getJson<PluginInfo | false>(`/effect/add/${instance}`, {
+            uri,
+            x: position?.x ?? 0,
+            y: position?.y ?? 0,
+          });
+          if (info) {
+            this.plugins.remember(info);
+          }
+        } catch (error) {
+          added.cancel();
+          throw error;
+        } finally {
+          arrival.done();
+        }
+        if (!info) {
+          added.cancel();
+          throw new ModUiError(`The backend could not load the plugin "${uri}" (is it installed?)`);
+        }
+        await added.promise;
+        await this.store.settled();
 
-      const created = model.plugins.get(instance);
-      if (!created) {
-        throw new ModUiError(`The plugin "${instance}" disappeared right after it was added`);
+        const created = this.store.instance(instance);
+        if (!created) {
+          throw new ModUiError(`The plugin "${instance}" disappeared right after it was added`);
+        }
+        return created;
+      } finally {
+        release();
       }
-      return this.instanceOf(created, info);
     });
   }
 
-  removePlugin(target: string | { readonly instance: string }): Promise<void> {
+  removePlugin(target: string | { readonly instance: string }, options: WriteOptions = {}): Promise<void> {
     return this.enqueue(async () => {
       const instance = normalizeId(typeof target === 'string' ? target : (target && target.instance) ?? '');
       const model = await this.state.ready();
       if (!model.plugins.has(instance)) {
         throw new ModUiError(`There is no plugin "${instance}" in the running pedalboard`);
       }
-      // The backend sends "disconnect" frames and then "remove" before it answers.
-      const removed = this.events.waitFor('remove', this.confirmTimeoutMs, (args) => args === instance);
-      let ok: boolean;
+      // The backend sends "disconnect" frames and then "remove" before it answers: all of them are caused by this call.
+      const ownedBy = (port: string) => port.startsWith(instance + '/');
+      const release = this.store.expect(
+        (change) =>
+          (change.type === 'plugin-removed' && change.instance === instance) ||
+          (change.type === 'connection-removed' && (ownedBy(change.from) || ownedBy(change.to))),
+        options.source,
+      );
       try {
-        ok = await this.http.getJson<boolean>(`/effect/remove/${instance}`);
-      } catch (error) {
-        removed.cancel();
-        throw error;
+        const removed = this.events.waitFor('remove', this.confirmTimeoutMs, (args) => args === instance);
+        let ok: boolean;
+        try {
+          ok = await this.http.getJson<boolean>(`/effect/remove/${instance}`);
+        } catch (error) {
+          removed.cancel();
+          throw error;
+        }
+        if (ok !== true) {
+          removed.cancel();
+          throw new ModUiError(`The backend could not remove the plugin "${instance}"`);
+        }
+        await removed.promise;
+      } finally {
+        release();
       }
-      if (ok !== true) {
-        removed.cancel();
-        throw new ModUiError(`The backend could not remove the plugin "${instance}"`);
-      }
-      await removed.promise;
     });
   }
 
   // The backend sends no confirmation to the socket that sent "param_set", "patch_set" or "plugin_pos" (only to the others), so these
-  // calls resolve once the message is sent, and update the model themselves.
+  // calls resolve once the message is sent, and apply it to the model themselves as the frame the others receive: the store reports
+  // it as a local change.
 
-  setParam(instance: string, symbol: string, value: number): Promise<void> {
+  setParam(instance: string, symbol: string, value: number, source?: unknown): Promise<void> {
     return this.enqueue(async () => {
-      const plugin = await this.requirePlugin(instance);
+      await this.requirePlugin(instance);
       this.events.send(`param_set ${instance}/${symbol} ${value}`);
-      plugin.values.set(symbol, value);
+      this.state.applyLocal('param_set', `${instance} ${symbol} ${value}`, source);
     });
   }
 
-  setPatch(instance: string, uri: string, typeChar: string, encoded: string): Promise<void> {
+  setPatch(instance: string, uri: string, typeChar: string, encoded: string, source?: unknown): Promise<void> {
     return this.enqueue(async () => {
-      const plugin = await this.requirePlugin(instance);
+      await this.requirePlugin(instance);
       this.events.send(`patch_set ${instance} ${uri} ${typeChar} ${encoded}`);
-      plugin.patches.set(uri, encoded);
+      this.state.applyLocal('patch_set', `${instance} 1 ${uri} ${typeChar} ${encoded}`, source);
     });
   }
 
@@ -524,56 +697,64 @@ export class PedalboardGraph {
    * `patch_get` is answered by a `patch_set` frame to every socket. The wait is registered before the request is sent and
    * the queue is left before waiting, so a slow or silent plugin does not block loads, saves and other calls.
    */
-  async refreshPatch(instance: string, uri: string, timeoutMs: number = this.confirmTimeoutMs): Promise<string> {
-    const answer = await this.enqueue(async () => {
-      await this.requirePlugin(instance);
-      const waiting = this.events.waitFor('patch_set', timeoutMs, (args) => {
-        const [id, , parameter] = args.split(' ');
-        return id === instance && parameter === uri;
+  async refreshPatch(instance: string, uri: string, timeoutMs: number = this.confirmTimeoutMs, source?: unknown): Promise<string> {
+    const release = this.store.expect((change) => change.type === 'patch' && change.instance === instance && change.uri === uri, source);
+    try {
+      const answer = await this.enqueue(async () => {
+        await this.requirePlugin(instance);
+        const waiting = this.events.waitFor('patch_set', timeoutMs, (args) => {
+          const [id, , parameter] = args.split(' ');
+          return id === instance && parameter === uri;
+        });
+        try {
+          this.events.send(`patch_get ${instance} ${uri}`);
+        } catch (error) {
+          waiting.cancel();
+          throw error;
+        }
+        return waiting;
       });
-      try {
-        this.events.send(`patch_get ${instance} ${uri}`);
-      } catch (error) {
-        waiting.cancel();
-        throw error;
-      }
-      return waiting;
-    });
-    return patchFrameValue(await answer.promise) ?? '';
+      return patchFrameValue(await answer.promise) ?? '';
+    } finally {
+      release();
+    }
   }
 
   isActive(instance: string): Promise<boolean> {
     return this.enqueue(async () => !(await this.requirePlugin(instance)).bypassed);
   }
 
-  setActive(instance: string, active: boolean): Promise<void> {
+  setActive(instance: string, active: boolean, source?: unknown): Promise<void> {
     return this.enqueue(async () => {
-      const plugin = await this.requirePlugin(instance);
-      this.events.send(`param_set ${instance}/:bypass ${active ? '0.0' : '1.0'}`);
-      plugin.bypassed = !active;
+      await this.requirePlugin(instance);
+      this.sendBypass(instance, active, source);
     });
   }
 
-  toggle(instance: string): Promise<boolean> {
+  toggle(instance: string, source?: unknown): Promise<boolean> {
     return this.enqueue(async () => {
       const plugin = await this.requirePlugin(instance);
       const active = plugin.bypassed; // bypassed now -> active after
-      this.events.send(`param_set ${instance}/:bypass ${active ? '0.0' : '1.0'}`);
-      plugin.bypassed = !active;
+      this.sendBypass(instance, active, source);
       return active;
     });
   }
 
-  move(instance: string, position: Position): Promise<void> {
+  private sendBypass(instance: string, active: boolean, source: unknown): void {
+    const value = active ? '0.0' : '1.0';
+    this.events.send(`param_set ${instance}/:bypass ${value}`);
+    this.state.applyLocal('param_set', `${instance} :bypass ${value}`, source);
+  }
+
+  move(instance: string, position: Position, source?: unknown): Promise<void> {
     return this.enqueue(async () => {
-      const plugin = await this.requirePlugin(instance);
+      await this.requirePlugin(instance);
       this.events.send(`plugin_pos ${instance} ${position.x} ${position.y}`);
-      plugin.x = position.x;
-      plugin.y = position.y;
+      this.state.applyLocal('plugin_pos', `${instance} ${position.x} ${position.y}`, source);
     });
   }
 
-  connect(from: Port | string, to: Port | string): Promise<PedalboardConnection> {
+  connect(from: Port | string, to: Port | string, options: WriteOptions = {}): Promise<PedalboardConnection> {
     return this.enqueue(async () => {
       const view = await this.view();
       const source = view.port(from);
@@ -585,24 +766,35 @@ export class PedalboardGraph {
         // The backend answers "true" and sends no frame for a connection that exists.
         return existing;
       }
-      const connected = this.events.waitFor('connect', this.confirmTimeoutMs, (args) => args === `${source.id} ${target.id}`);
-      let ok: boolean;
+      const release = this.store.expect(
+        (change) => change.type === 'connection-added' && change.from === source.id && change.to === target.id,
+        options.source,
+      );
       try {
-        ok = await this.http.getJson<boolean>(`/effect/connect/${source.id},${target.id}`);
-      } catch (error) {
-        connected.cancel();
-        throw error;
+        const connected = this.events.waitFor('connect', this.confirmTimeoutMs, (args) => args === `${source.id} ${target.id}`);
+        let ok: boolean;
+        try {
+          ok = await this.http.getJson<boolean>(`/effect/connect/${source.id},${target.id}`);
+        } catch (error) {
+          connected.cancel();
+          throw error;
+        }
+        if (ok !== true) {
+          connected.cancel();
+          throw new ModUiError(`The backend could not connect "${source.id}" to "${target.id}"`);
+        }
+        await connected.promise;
+      } finally {
+        release();
       }
-      if (ok !== true) {
-        connected.cancel();
-        throw new ModUiError(`The backend could not connect "${source.id}" to "${target.id}"`);
-      }
-      await connected.promise;
-      return new PedalboardConnection(source, target);
+      return this.store.connection(source, target);
     });
   }
 
-  disconnect(connection: PedalboardConnection | { readonly from: Port | string; readonly to: Port | string }): Promise<void> {
+  disconnect(
+    connection: PedalboardConnection | { readonly from: Port | string; readonly to: Port | string },
+    options: WriteOptions = {},
+  ): Promise<void> {
     return this.enqueue(async () => {
       const model = await this.state.ready();
       const from = normalizeId(typeof connection.from === 'string' ? connection.from : connection.from.id);
@@ -611,19 +803,27 @@ export class PedalboardGraph {
       if (!model.hasConnection(from, to)) {
         throw new ModUiError(`"${from}" is not connected to "${to}"`);
       }
-      const disconnected = this.events.waitFor('disconnect', this.confirmTimeoutMs, (args) => args === `${from} ${to}`);
-      let ok: boolean;
+      const release = this.store.expect(
+        (change) => change.type === 'connection-removed' && change.from === from && change.to === to,
+        options.source,
+      );
       try {
-        ok = await this.http.getJson<boolean>(`/effect/disconnect/${from},${to}`);
-      } catch (error) {
-        disconnected.cancel();
-        throw error;
+        const disconnected = this.events.waitFor('disconnect', this.confirmTimeoutMs, (args) => args === `${from} ${to}`);
+        let ok: boolean;
+        try {
+          ok = await this.http.getJson<boolean>(`/effect/disconnect/${from},${to}`);
+        } catch (error) {
+          disconnected.cancel();
+          throw error;
+        }
+        if (ok !== true) {
+          disconnected.cancel();
+          throw new ModUiError(`The backend could not disconnect "${from}" from "${to}"`);
+        }
+        await disconnected.promise;
+      } finally {
+        release();
       }
-      if (ok !== true) {
-        disconnected.cancel();
-        throw new ModUiError(`The backend could not disconnect "${from}" from "${to}"`);
-      }
-      await disconnected.promise;
     });
   }
 
@@ -631,19 +831,17 @@ export class PedalboardGraph {
 
   private readonly ops: InstanceOps = {
     live: (instance) => this.state.peek().plugins.get(instance),
-    remove: (instance) => this.removePlugin(instance),
-    setParam: (instance, symbol, value) => this.setParam(instance, symbol, value),
-    setPatch: (instance, uri, typeChar, encoded) => this.setPatch(instance, uri, typeChar, encoded),
-    refreshPatch: (instance, uri, timeoutMs) => this.refreshPatch(instance, uri, timeoutMs),
+    isAlive: (plugin) => this.store.isAlive(plugin),
+    listen: (plugin, event, handler, options, once, extra) => this.store.listen(plugin, event, handler, options, once, extra),
+    remove: (instance, source) => this.removePlugin(instance, { source }),
+    setParam: (instance, symbol, value, source) => this.setParam(instance, symbol, value, source),
+    setPatch: (instance, uri, typeChar, encoded, source) => this.setPatch(instance, uri, typeChar, encoded, source),
+    refreshPatch: (instance, uri, timeoutMs, source) => this.refreshPatch(instance, uri, timeoutMs, source),
     isActive: (instance) => this.isActive(instance),
-    setActive: (instance, active) => this.setActive(instance, active),
-    toggle: (instance) => this.toggle(instance),
-    move: (instance, position) => this.move(instance, position),
+    setActive: (instance, active, source) => this.setActive(instance, active, source),
+    toggle: (instance, source) => this.toggle(instance, source),
+    move: (instance, position, source) => this.move(instance, position, source),
   };
-
-  private instanceOf(model: ModelPlugin, info: PluginInfo | null): PluginInstance {
-    return new PluginInstance(model, info, this.ops);
-  }
 
   /** The model entry of a plugin. The backend raises (and closes the socket) for an unknown instance, so check first. */
   private async requirePlugin(instance: string): Promise<ModelPlugin> {
@@ -654,15 +852,24 @@ export class PedalboardGraph {
     return plugin;
   }
 
-  /** Builds the objects for the current model. Must run inside the queue. */
+  /**
+   * The objects for the current model, in the order of the model. Must run inside the queue. The objects are the store's, so
+   * they are the same ones on every call; only a plugin that has no description yet asks the backend again.
+   */
   private async view(): Promise<GraphView> {
     const model: GraphModel = await this.state.ready();
-    const infos = await this.plugins.infosOf(Array.from(model.plugins.values()).map((plugin) => plugin.uri));
+    await this.store.fillMissing();
 
-    const instances = Array.from(model.plugins.values()).map((plugin) => this.instanceOf(plugin, infos.get(plugin.uri) ?? null));
+    const instances: PluginInstance[] = [];
+    for (const path of model.plugins.keys()) {
+      const instance = this.store.instance(path);
+      if (instance) {
+        instances.push(instance);
+      }
+    }
     const pedalboardPorts = Array.from(model.hardware.values())
       .sort((a, b) => PORT_TYPES.indexOf(a.type) - PORT_TYPES.indexOf(b.type) || DIRECTION_ORDER.indexOf(a.direction) - DIRECTION_ORDER.indexOf(b.direction) || a.index - b.index)
-      .map((port) => new Port(port.id, port.id.slice(port.id.lastIndexOf('/') + 1), port.title, port.type, port.direction, null));
+      .map((port) => this.store.hardwarePort(port));
 
     const ports = new Map<string, Port>();
     for (const port of pedalboardPorts) {
@@ -688,7 +895,7 @@ export class PedalboardGraph {
       const source = ports.get(from);
       const target = ports.get(to);
       if (source && target) {
-        connections.push(new PedalboardConnection(source, target));
+        connections.push(this.store.connection(source, target));
       }
     }
     return { instances, pedalboardPorts, connections, port: find };

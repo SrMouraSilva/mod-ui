@@ -7,9 +7,11 @@
  * @module
  */
 
+import type { ListenOptions, Unsubscribe } from './emitter';
 import { ModUiError } from './errors';
+import type { PatchParamEvent, PatchEvent } from './pedalboard-events';
 import type { InstanceOps, PluginInstance } from './pedalboard-graph';
-import type { PatchParamType, PatchValue, PluginParameterInfo } from './types';
+import type { PatchParamType, PatchValue, PluginParameterInfo, WriteOptions } from './types';
 
 interface TypeSpec {
   /** Type character of the WebSocket frames. */
@@ -149,6 +151,7 @@ export class PatchParam {
    * WebSocket: `patch_get <instance> <uri>`, answered by `patch_set <instance> <writable> <uri> <type> <value>` (see
    * `connectMainWebSocket`).
    * @param options.timeoutMs How long to wait for the plugin, in ms. Defaults to {@link ModUiClientOptions.graphTimeoutMs}.
+   * @param options.source Marks the change this answer may cause as yours (see {@link PatchParam.setValue}).
    * @throws {ModUiError} when the parameter is not `readable` or the plugin is not in the pedalboard (the backend would close
    * the socket on `patch_get` of an unknown instance).
    * @throws {ModUiTimeoutError} when the plugin does not answer in time.
@@ -156,11 +159,12 @@ export class PatchParam {
    * const label = instance.patchParams.get('http://example.org/plugin#label')!;
    * console.log(await label.refresh());
    */
-  async refresh(options: { timeoutMs?: number } = {}): Promise<PatchValue | undefined> {
+  async refresh(options: { timeoutMs?: number; source?: unknown } = {}): Promise<PatchValue | undefined> {
     if (!this.readable) {
       throw new ModUiError(`"${this.uri}" is not readable`);
     }
-    const raw = await this.ops.refreshPatch(this.owner.instance, this.uri, options.timeoutMs);
+    await this.owner.rejectIfGone();
+    const raw = await this.ops.refreshPatch(this.owner.instance, this.uri, options.timeoutMs, options.source);
     return parseValue(this.type, raw);
   }
 
@@ -176,19 +180,43 @@ export class PatchParam {
    * `minimum`..`maximum` when known); a non-empty string without control characters for `string`; the same for `path`, with
    * an extension from `supportedExtensions` when the plugin lists them; a non-empty string without whitespace for `uri`.
    *
+   * The change is also announced to `patchParam.on('change')` and `instance.on('patch')` (`origin: 'local'`), since the
+   * backend does not echo it.
+   *
    * WebSocket: `patch_set <instance> <uri> <type> <value>` (see `connectMainWebSocket`). Only `"` is escaped on the way to
    * mod-host, so a backslash in a string reaches the plugin as it is.
+   * @param options.source Marks the change as yours: its events carry it, and a subscription with `ignoreSource` skips them.
    * @throws {ModUiError} for a value that does not fit, a parameter that is not writable, or a plugin that is not in the pedalboard.
    * @example
    * await instance.patchParams.get('http://example.org/plugin#label')!.setValue('Verse');
    */
-  setValue(value: PatchValue): Promise<void> {
+  setValue(value: PatchValue, options: WriteOptions = {}): Promise<void> {
     try {
       this.validate(value);
     } catch (error) {
       return Promise.reject(error);
     }
-    return this.ops.setPatch(this.owner.instance, this.uri, TYPES[this.type].char, encodeValue(this.type, value));
+    return (
+      this.owner.rejectIfGone() ??
+      this.ops.setPatch(this.owner.instance, this.uri, TYPES[this.type].char, encodeValue(this.type, value), options.source)
+    );
+  }
+
+  /**
+   * Calls `handler` each time the value changes, whoever changed it (this client, the classic UI, another client, the plugin
+   * itself). Nothing is requested from the backend. The subscription ends by itself when the plugin is removed or the pedalboard
+   * is reloaded.
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = label.on('change', ({ value }) => (input.value = String(value)), { ignoreSource: input });
+   */
+  on(_event: 'change', handler: (event: PatchParamEvent) => void, options?: ListenOptions): Unsubscribe {
+    return this.owner.listenTo('patch', handler as (event: PatchEvent) => void, options, false, (e) => e.uri === this.uri);
+  }
+
+  /** Like {@link PatchParam.on}, but the handler runs once. */
+  once(_event: 'change', handler: (event: PatchParamEvent) => void, options?: ListenOptions): Unsubscribe {
+    return this.owner.listenTo('patch', handler as (event: PatchEvent) => void, options, true, (e) => e.uri === this.uri);
   }
 
   private validate(value: PatchValue): void {
@@ -242,11 +270,14 @@ export class PluginPatchParams {
   private readonly items: PatchParam[] = [];
 
   /** @internal Built by the client. */
-  constructor(owner: PluginInstance, parameters: PluginParameterInfo[], ops: InstanceOps) {
+  constructor(private readonly owner: PluginInstance, private readonly ops: InstanceOps) {}
+
+  /** @internal Reads the parameters of the plugin description; called once, when the description is known. */
+  fill(parameters: PluginParameterInfo[]): void {
     for (const info of parameters) {
       const type = typeOfAtom(info.type);
       if (type !== undefined && info.uri) {
-        this.items.push(new PatchParam(owner, info, type, ops));
+        this.items.push(new PatchParam(this.owner, info, type, this.ops));
       }
     }
   }

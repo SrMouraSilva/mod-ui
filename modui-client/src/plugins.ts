@@ -53,6 +53,8 @@ export class Plugin {
  */
 export class PluginsApi {
   private readonly infos = new Map<string, PluginInfo>();
+  /** Descriptions that are about to arrive from another request (a plugin being added), by URI. */
+  private readonly arriving = new Map<string, Promise<void>>();
 
   /** @internal Use `client.device.plugins`. */
   constructor(private readonly http: HttpTransport) {}
@@ -93,6 +95,8 @@ export class PluginsApi {
    * Backend: `POST /effect/bulk/` (operationId `getPluginsBulk`).
    */
   async infosOf(uris: string[]): Promise<Map<string, PluginInfo>> {
+    const arrivals = uris.filter((uri) => !this.infos.has(uri)).map((uri) => this.arriving.get(uri));
+    await Promise.all(arrivals);
     const missing = uris.filter((uri, index) => !this.infos.has(uri) && uris.indexOf(uri) === index);
     if (missing.length > 0) {
       const found = await this.http.postJson<Record<string, PluginInfo>>('/effect/bulk/', missing);
@@ -111,5 +115,32 @@ export class PluginsApi {
       }
     }
     return result;
+  }
+
+  /** The description of a plugin when it is already known, without a request. */
+  peek(uri: string): PluginInfo | undefined {
+    return this.infos.get(uri);
+  }
+
+  /**
+   * Announces that the description of `uri` is about to arrive from another request (`GET /effect/add/...` returns it), so
+   * that {@link PluginsApi.infosOf} waits for it instead of asking the backend again. Call `done()` when the request ended,
+   * after {@link PluginsApi.remember} when it succeeded.
+   * @internal
+   */
+  expect(uri: string): { done(): void } {
+    let finish!: () => void;
+    const arrival = new Promise<void>((resolve) => {
+      finish = resolve;
+    });
+    this.arriving.set(uri, arrival);
+    return {
+      done: () => {
+        if (this.arriving.get(uri) === arrival) {
+          this.arriving.delete(uri);
+        }
+        finish();
+      },
+    };
   }
 }

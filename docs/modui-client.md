@@ -216,7 +216,56 @@ await currentPedalboard.plugins.remove('/graph/Gain_1');  // by path; the leadin
 
 Removing a plugin also removes its connections.
 
-### 1.12 Listen to raw WebSocket messages
+### 1.12 React to changes
+
+A frontend should update itself when the pedalboard changes, whoever changes it (this client, the classic UI, the HMI,
+another client). The client keeps the whole state in memory and tells you what changed; **no event makes a request**
+(a knob drag is dozens of frames and all of them are memory only).
+
+```js
+const pedalboard = client.device.currentPedalboard;
+
+// the pedalboard: plugins, connections, ports, loading
+pedalboard.on('plugin:added',       ({ plugin }) => view.add(plugin));        // a complete PluginInstance
+pedalboard.on('plugin:removed',      ({ plugin }) => view.remove(plugin));
+pedalboard.on('connection:added',    ({ from, to }) => view.wire(from, to));    // port ids
+pedalboard.on('loading',             () => view.showSpinner());
+pedalboard.on('loaded',              async () => view.render(await pedalboard.plugins.list()));
+
+// one plugin and one control (the objects are the same ones every time: key your views by them)
+const plugin = await pedalboard.plugins.get('/graph/Gain');
+plugin.on('active', ({ active }) => led.classList.toggle('on', active));
+plugin.on('moved', ({ x, y }) => block.move(x, y));
+plugin.on('removed', () => view.remove(plugin));
+plugin.params.get('gain').on('change', ({ value, previous }) => knob.set(value));
+```
+
+Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of events):
+
+- **Render from events, not from the promise of a write.** `setValue()`, `setActive()`, `move()`, `plugins.add()`, ... also
+  emit their event (`origin: 'local'`), so the screen has one path for every cause. The backend never echoes `param_set`,
+  `patch_set` and `plugin_pos` to the sender, which is why the client emits those itself.
+- **Ignore your own changes with `source`.** Pass `{ source }` (a `Symbol`, or the component) to a write, and
+  `{ ignoreSource: source }` to the subscription of the control that made it: it does not hear about its own gesture and still
+  hears every other change. `{ ignoreLocal: true }` skips everything this client did. Every event has `origin` and `source`.
+  ```js
+  const mine = Symbol('gain knob');
+  param.on('change', ({ value }) => knob.set(value), { ignoreSource: mine });   // the knob follows the others
+  knob.onDrag((value) => param.setValue(value, { source: mine }));              // and does not fight the user's hand
+  ```
+- **A load is one `loading` and one `loaded`.** Between them nothing else is delivered (a load is hundreds of frames), the
+  plugins of the old pedalboard are gone (`plugin.alive === false`, their `removed` fires with `reason: 'reloaded'`), and
+  the new ones are built once, with their descriptions, before `loaded`. Read the state again on `loaded`. `device.reset()` and
+  `remove :all` deliver `cleared` alone.
+- **Order and state.** Events come in the order of the WebSocket frames, after the state is updated: inside a handler the
+  getters (`param.value`, `plugin.x`, `list()`) already show the new state. A handler that throws does not stop the others
+  (the error is rethrown asynchronously, so the console shows it). `on()` returns the unsubscribe function; options also take an
+  `AbortSignal` (`signal`), and there is `once()`.
+- A `plugin:added` for a plugin whose description is unknown waits for one `POST /effect/bulk/`; the events behind it wait
+  too, so the order is kept. If that request fails you get an `error` event (`context: 'plugin-description'`) and the plugin
+  exists with `info === null`; `plugins.list()` / `plugins.get()` try again and fill it in place.
+
+### 1.13 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -229,7 +278,7 @@ await client.connect();
 off();
 ```
 
-### 1.13 Notes
+### 1.14 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -241,7 +290,9 @@ off();
 - `list()` is asynchronous because no endpoint lists the running plugins or connections: the client builds them
   from the WebSocket (the state replay plus live frames), so changes made by the classic UI or by other clients show up too.
 - `x`, `y`, `Param.value` and `isActive()` read the live state, so a `PluginInstance` you already hold follows changes made
-  by the classic UI or other clients. List again to learn about plugins that were added or removed.
+  by the classic UI or other clients. `list()` and `get()` return the same objects every time (see 1.12 for the events that
+  tell you about plugins that were added or removed). An object stops standing for a plugin (`alive === false`) when the plugin
+  is removed, the pedalboard is reset or another one is loaded; it keeps its last state and its operations throw.
 - The instance name is always generated (like the classic UI does).
 - Errors are `ModUiError` (invalid pair, unknown port or plugin, refused by the backend), `ModUiTimeoutError`
   (the confirming frame never came; `graphTimeoutMs`, default 10 s) and `ModUiHttpError` (non-2xx).
@@ -319,7 +370,10 @@ modui-client/
 │   ├── pedalboard-connections.ts  # PedalboardConnections, PedalboardPorts, PedalboardPortGroup (currentPedalboard.connections / .ports)
 │   ├── pedalboard-graph.ts        # PluginInstance, Port, PedalboardConnection + the internal engine
 │   ├── patch-params.ts            # PatchParam, PluginPatchParams (instance.patchParams)
-│   ├── graph-state.ts   # internal: WebSocket-fed model of the running graph
+│   ├── graph-state.ts   # internal: WebSocket-fed model of the running graph, and what each frame changed (GraphChange)
+│   ├── pedalboard-store.ts   # internal: the plugin objects of the running pedalboard + the events about them
+│   ├── pedalboard-events.ts  # event payloads and maps (PedalboardEvents, PluginEvents, ...)
+│   ├── emitter.ts       # internal: typed Emitter (ordered, isolated), ListenOptions, Origin
 │   ├── events.ts        # EventChannel, MessageHandler, Waiting
 │   ├── http.ts          # HttpTransport (internal)
 │   ├── errors.ts        # ModUiError, ModUiHttpError, ModUiTimeoutError
@@ -334,6 +388,9 @@ modui-client/
     ├── current-pedalboard.test.ts
     ├── plugins.test.ts
     ├── pedalboard-graph.test.ts
+    ├── patch-params.test.ts
+    ├── emitter.test.ts
+    ├── graph-events.test.ts
     └── events.test.ts
 ```
 
@@ -352,6 +409,9 @@ flowchart TD
   pconn["pedalboard-connections.ts"]
   pgraph["pedalboard-graph.ts"]
   gstate["graph-state.ts"]
+  store["pedalboard-store.ts"]
+  pevents["pedalboard-events.ts"]
+  emitter["emitter.ts"]
   events["events.ts"]
   http["http.ts"]
   errors["errors.ts"]
@@ -365,7 +425,8 @@ flowchart TD
   pedalboards --> http & images
   images --> http & errors
   plugins --> errors
-  pgraph --> errors
+  pgraph --> errors & store
+  store --> emitter
   gstate --> errors
   events --> errors
   http --> errors
@@ -373,7 +434,9 @@ flowchart TD
   current -.-> pgraph
   pplugins -.-> pgraph
   pconn -.-> pgraph
-  pgraph -.-> http & events & gstate & plugins
+  pgraph -.-> http & events & gstate & plugins & pevents
+  store -.-> gstate & plugins & pgraph & pevents
+  pevents -.-> emitter & pgraph
   gstate -.-> events
   plugins -.-> http
   client -.-> runtime
@@ -383,7 +446,7 @@ flowchart TD
   pedalboards -.-> types
 ```
 
-Dotted arrows are type-only imports. There are no cycles; `types.ts` and `runtime.ts` import nothing.
+Dotted arrows are type-only imports; they can go both ways (the store and the graph know each other's types). There are no runtime cycles; `types.ts` and `runtime.ts` import nothing.
 
 ---
 
@@ -457,6 +520,8 @@ classDiagram
     +get() Promise~PedalboardReference | null~
     +save(newTitle?: string) Promise~PedalboardReference~
     +saveAs(suggestedTitle: string) Promise~PedalboardReference~
+    +on(event, handler, options?) Unsubscribe
+    +once(event, handler, options?) Unsubscribe
   }
 
   class PluginsApi {
@@ -470,8 +535,9 @@ classDiagram
   }
   class PedalboardPlugins {
     +list() Promise~PluginInstance[]~
-    +add(plugin: PluginTarget, position?: Position) Promise~PluginInstance~
-    +remove(instance) Promise~void~
+    +get(instance: string) Promise~PluginInstance | undefined~
+    +add(plugin: PluginTarget, position?: Position, options?: WriteOptions) Promise~PluginInstance~
+    +remove(instance, options?: WriteOptions) Promise~void~
   }
   class PedalboardConnections {
     +list() Promise~PedalboardConnection[]~
@@ -494,15 +560,18 @@ classDiagram
     +x: number
     +y: number
     +info: PluginInfo | null
+    +alive: boolean
     +ports: PortGroups
     +params: PluginParams
     +patchParams: PluginPatchParams
     +port(symbol) Port | undefined
     +isActive() Promise~boolean~
-    +setActive(active: boolean) Promise~void~
-    +toggle() Promise~boolean~
-    +move(position: Position) Promise~void~
-    +remove() Promise~void~
+    +setActive(active: boolean, options?: WriteOptions) Promise~void~
+    +toggle(options?: WriteOptions) Promise~boolean~
+    +move(position: Position, options?: WriteOptions) Promise~void~
+    +remove(options?: WriteOptions) Promise~void~
+    +on(event, handler, options?) Unsubscribe
+    +once(event, handler, options?) Unsubscribe
   }
   class PluginParams {
     +list() Param[]
@@ -525,7 +594,8 @@ classDiagram
     +supportedExtensions: string[]
     +value: PatchValue
     +refresh(options) Promise~PatchValue~
-    +setValue(value: PatchValue) Promise~void~
+    +setValue(value: PatchValue, options?: WriteOptions) Promise~void~
+    +on(event: change, handler, options?) Unsubscribe
   }
   class Param {
     +symbol: string
@@ -536,7 +606,8 @@ classDiagram
     +designation: string
     +properties: string[]
     +value: number
-    +setValue(value: number) Promise~void~
+    +setValue(value: number, options?: WriteOptions) Promise~void~
+    +on(event: change, handler, options?) Unsubscribe
   }
   class Port {
     +id: string
@@ -554,9 +625,23 @@ classDiagram
   class PedalboardGraph {
     <<internal>>
   }
+  class PedalboardStore {
+    <<internal>>
+    +bus: Emitter
+    +instance(path) PluginInstance | undefined
+    +settled() Promise~void~
+    +expect(match, source) release
+  }
+  class Emitter {
+    <<internal>>
+    +on(event, handler, options?) Unsubscribe
+    +once(event, handler, options?) Unsubscribe
+    +emit(event, payload)
+  }
   class GraphState {
     <<internal>>
     +ready() Promise~GraphModel~
+    +applyLocal(command, args, source)
   }
 
   class EventChannel {
@@ -625,10 +710,16 @@ classDiagram
   PedalboardConnections --> PedalboardGraph
   PedalboardPorts --> PedalboardGraph
   PedalboardGraph --> GraphState : reads
+  PedalboardGraph *-- PedalboardStore : store
+  PedalboardStore --> GraphState : changes(), settled()
+  PedalboardStore *-- Emitter : bus
+  PedalboardStore ..> PluginInstance : keeps one per plugin
+  CurrentPedalboard --> PedalboardStore : on(), once()
+  PluginInstance --> PedalboardStore : on(), alive
   PedalboardGraph --> EventChannel : waits for add, remove, connect, disconnect
   PedalboardGraph --> PluginsApi : plugin descriptions
-  PedalboardGraph ..> PluginInstance : creates
-  PedalboardGraph ..> PedalboardConnection : creates
+  PedalboardGraph ..> PluginInstance : creates, through the store
+  PedalboardGraph ..> PedalboardConnection : creates, through the store
   PluginInstance *-- "*" Port : ports.audio.input, .audio.output, .midi.*, .cv.*
   PluginInstance *-- PluginParams : params
   PluginParams *-- "*" Param : list(), get(symbol)
@@ -1016,6 +1107,53 @@ stateDiagram-v2
   Idle --> Connecting: connect() again (reconnect)
 ```
 
+### 5.8 Events: from a frame to a subscriber
+
+`GraphModel.apply()` returns a list of `GraphChange` (it returns nothing for a frame that changes nothing: a repeated value,
+a connection that exists). `GraphState` hands the list to the `PedalboardStore`, which handles the changes **in order** and
+emits on one `Emitter`. Changes this client makes itself take the same path: the operation sends its message and then calls
+`applyLocal()` with the frame the others would receive, tagged with the `source`; operations confirmed by a frame
+(`add`, `remove`, `connect`, `disconnect`, `load`, `reset`) register an *expectation* before the request, so the frame that
+confirms them is tagged `'local'` as well.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant B as mod-ui backend
+  participant E as EventChannel
+  participant S as GraphState / GraphModel
+  participant T as PedalboardStore
+  participant P as PluginsApi
+  participant A as Application
+
+  B-->>E: param_set /graph/Gain gain 6.5
+  E->>S: handler(param_set)
+  S->>S: model.apply() -> [param change]
+  S->>T: changes([param])
+  T->>T: handle now (nothing waiting)
+  T-->>A: instance.on('param') / param.on('change') (memory only)
+
+  B-->>E: add /graph/Midi <uri> ...   (description unknown)
+  E->>S: model.apply() -> [plugin-added]
+  S->>T: changes([plugin-added])
+  T->>P: infosOf([uri])  (one POST /effect/bulk/)
+  B-->>E: plugin_pos /graph/Midi 7 8
+  S->>T: changes([moved])  (queued behind the description)
+  P-->>T: PluginInfo
+  T-->>A: plugin:added (complete PluginInstance)
+  T-->>A: instance.on('moved')
+
+  B-->>E: loading_start ... frames ... loading_end
+  T-->>A: loading (the old plugins are gone: alive = false)
+  Note over T: granular events are not delivered
+  T->>P: infosOf(uris not known)
+  T-->>A: loaded (plugins built, read the state again)
+```
+
+The `Emitter` delivers in order and never nested (an event caused by a handler is queued), isolates handlers (an error is
+rethrown with `queueMicrotask`) and applies `ignoreSource` / `ignoreLocal` / `signal`. Per-plugin subscriptions are filters
+on the same emitter, dropped after the plugin's `removed` event.
+
 ---
 
 ## 6. Design rules
@@ -1094,7 +1232,9 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - `currentPedalboard.get()` / `save()` rely on `GET /pedalboard/current`, added together with this API; they do not
   work against older mod-ui servers.
 - `currentPedalboard.save()` / `saveAs()` wait for the thumbnail regeneration, which can take a few seconds on a device (the renderer runs at low priority); a failure of that wait is ignored.
-- Plugins and connections come from the WebSocket, not from an endpoint. After an own socket reconnects, pedalboard ports that disappeared in between stay in the model until the backend announces them again.
+- Plugins and connections come from the WebSocket, not from an endpoint. After an own socket reconnects, pedalboard ports that disappeared in between stay in the model until the backend announces them again (automatic reconnection and a clean model after it are planned: `docs/plans/2026-10-modui-client-events.md`, phase 2).
+- `origin: 'local'` is best effort: a change is local when this client had a matching request in flight when the frame arrived. A pedalboard load or reset by someone else at the same moment cannot be told apart (same as the note on `device.load()`).
+- Events are delivered for the changes the model knows (plugins, connections, hardware ports, control values, bypass, position, patch parameters, loading). Meters (`output_set`), transport, statistics, presets, snapshots and addressings are not events yet (planned, phases 3 and 4).
 - `setValue()`, `setActive()`, `toggle()` and `move()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
 - `PatchParam.setValue()` cannot confirm anything either (the sender of `patch_set` gets no frame). Only `"` is escaped on the way to mod-host, so a backslash in a string reaches the plugin as it is. Empty strings are refused by the client. Only parameters the host tracks (atom types Bool, Int, Long, Float, Double, String, Path, URI, with ranges) report values; vectors are not supported. Whether `refresh()` gets an answer depends on the plugin.
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.

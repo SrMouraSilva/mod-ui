@@ -8,7 +8,7 @@
  */
 
 import type { PedalboardConnection, PedalboardGraph, Port } from './pedalboard-graph';
-import type { PortType } from './types';
+import type { PortType, WriteOptions } from './types';
 
 /**
  * The connections of the running pedalboard (`client.device.currentPedalboard.connections`).
@@ -55,12 +55,13 @@ export class PedalboardConnections {
    * Backend: `GET /effect/connect/{from},{to}` (operationId `connectPorts`).
    * @param from The source: an output {@link Port} or its id.
    * @param to The sink: an input {@link Port} or its id.
+   * @param options.source Marks the change as yours: `connection:added` carries it, and `{ ignoreSource }` skips it.
    * @throws {ModUiError} for an invalid pair, an unknown port, or when the backend refuses.
    * @example
    * const connection = await connections.connect('/graph/capture_1', '/graph/Gain/in');
    */
-  connect(from: Port | string, to: Port | string): Promise<PedalboardConnection> {
-    return this.graph.connect(from, to);
+  connect(from: Port | string, to: Port | string, options?: WriteOptions): Promise<PedalboardConnection> {
+    return this.graph.connect(from, to, options);
   }
 
   /**
@@ -68,12 +69,13 @@ export class PedalboardConnections {
    *
    * Backend: `GET /effect/disconnect/{from},{to}` (operationId `disconnectPorts`). The backend answers `true` and
    * announces the removal even when nothing was connected, so the client checks that the connection exists first.
+   * @param options.source Marks the change as yours (see {@link PedalboardConnections.connect}).
    * @throws {ModUiError} when the connection does not exist.
    * @example
    * await client.device.currentPedalboard.connections.disconnect(connection);
    */
-  disconnect(connection: PedalboardConnection): Promise<void> {
-    return this.graph.disconnect(connection);
+  disconnect(connection: PedalboardConnection, options?: WriteOptions): Promise<void> {
+    return this.graph.disconnect(connection, options);
   }
 }
 

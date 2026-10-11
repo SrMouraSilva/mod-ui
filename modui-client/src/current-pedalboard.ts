@@ -6,10 +6,12 @@
  * @module
  */
 
+import type { ListenOptions, Unsubscribe } from './emitter';
 import { ModUiError } from './errors';
 import type { HttpTransport } from './http';
 import { waitForPendingImages } from './pedalboard-images';
 import { PedalboardConnections, PedalboardPorts } from './pedalboard-connections';
+import type { PedalboardEvents } from './pedalboard-events';
 import type { Enqueue, PedalboardGraph } from './pedalboard-graph';
 import { PedalboardPlugins } from './pedalboard-plugins';
 import { sameBundle } from './pedalboards';
@@ -48,7 +50,7 @@ export class CurrentPedalboard {
     private readonly http: HttpTransport,
     private readonly pedalboards: PedalboardsApi,
     private readonly enqueue: Enqueue,
-    graph: PedalboardGraph,
+    private readonly graph: PedalboardGraph,
   ) {
     this.plugins = new PedalboardPlugins(graph);
     this.connections = new PedalboardConnections(graph);
@@ -133,6 +135,56 @@ export class CurrentPedalboard {
       return Promise.reject(blankTitleError());
     }
     return this.enqueue(() => this.persist(suggestedTitle, true));
+  }
+
+  /**
+   * Calls `handler` when the running pedalboard changes, whoever causes it (this client, the classic UI, the HMI, another
+   * client). The client keeps the whole state in memory, so no event makes a request.
+   *
+   * | Event | When | Payload |
+   * |-------|------|---------|
+   * | `plugin:added` | a plugin appeared | `{ plugin }` (a complete {@link PluginInstance}) |
+   * | `plugin:removed` | a plugin was removed | `{ plugin, reason }` (`plugin.alive` is `false`) |
+   * | `connection:added`, `connection:removed` | a connection changed | `{ from, to }` (port ids) |
+   * | `port:added`, `port:removed` | a port of the pedalboard itself changed | `{ id, ... }` |
+   * | `loading` | a pedalboard starts loading | `{ empty, modified }` |
+   * | `loaded` | the pedalboard is complete (also once after the first connection) | `{ snapshotId }` |
+   * | `cleared` | the pedalboard was emptied | `{}` |
+   * | `error` | a background request failed (a plugin description) | `{ error, context }` |
+   *
+   * Every payload except `error` also has `origin` (`'local'` when this client caused the change, `'remote'` otherwise) and
+   * `source` (what you passed in the `source` option of the call that caused it).
+   *
+   * Rules:
+   * - Events are delivered in the order of the WebSocket frames, after the state is updated, so a handler reads the new state.
+   * - Between `loading` and `loaded` nothing else is delivered (a load is hundreds of frames): show a loading state, and read
+   *   `plugins.list()`, `connections.list()` and `ports.list()` again on `loaded`. `cleared` also stands for every removal.
+   * - A handler that throws does not affect the others; the error is rethrown asynchronously (visible in the console).
+   * - Render from events, not from the promise of a write: local writes emit their event too, so one path serves every cause.
+   *   To keep a control from reacting to the user's own gesture, pass `{ source }` to the write and `{ ignoreSource }` here.
+   *
+   * @param options `signal` (an `AbortSignal` that ends the subscription), `ignoreSource`, `ignoreLocal`.
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));
+   * client.device.currentPedalboard.on('loaded', async () => view.render(await pedalboard.plugins.list()));
+   * client.device.currentPedalboard.on('connection:added', ({ from, to }) => view.wire(from, to), { ignoreLocal: true });
+   */
+  on<K extends keyof PedalboardEvents>(
+    event: K,
+    handler: (event: PedalboardEvents[K]) => void,
+    options?: ListenOptions,
+  ): Unsubscribe {
+    return this.graph.store.bus.on(event, handler, options);
+  }
+
+  /** Like {@link CurrentPedalboard.on}, but the handler runs once. */
+  once<K extends keyof PedalboardEvents>(
+    event: K,
+    handler: (event: PedalboardEvents[K]) => void,
+    options?: ListenOptions,
+  ): Unsubscribe {
+    return this.graph.store.bus.once(event, handler, options);
   }
 
   // ------------------------------------------------------------------------------------------------------------------

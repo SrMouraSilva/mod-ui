@@ -111,13 +111,21 @@ describe('PatchParam.value', () => {
     expect(param(instance, labelUri).value).toBe('Hello big world');
   });
 
-  it('is cleared when the pedalboard is reloaded and replayed', async () => {
-    const { instance, socket } = await device();
+  it('is cleared when the pedalboard is reloaded and replayed: the plugin of the new pedalboard is a new object', async () => {
+    const { client, instance, socket } = await device();
     socket.emit('loading_start 0 0');
     socket.emit(addFrame);
-    expect(param(instance, labelUri).value).toBeUndefined();
     socket.emit(`patch_set ${instanceId} 1 ${labelUri} s Again`);
-    expect(param(instance, labelUri).value).toBe('Again');
+    socket.emit('loading_end 0');
+
+    expect(instance.alive).toBe(false);
+    expect(param(instance, labelUri).value).toBe('Hello big world'); // the gone object keeps its last state
+    const [reloaded] = await client.device.currentPedalboard.plugins.list();
+    expect(reloaded).not.toBe(instance);
+    expect(param(reloaded, labelUri).value).toBe('Again');
+    socket.emit(`patch_set ${instanceId} 1 ${labelUri} s Later`);
+    expect(param(reloaded, labelUri).value).toBe('Later');
+    expect(param(instance, labelUri).value).toBe('Hello big world');
   });
 });
 

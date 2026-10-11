@@ -166,8 +166,20 @@ export interface LoadResult {
   snapshotId: number;
 }
 
+/**
+ * Options of the calls that change the running pedalboard (`setValue`, `setActive`, `move`, `plugins.add`, `connections.connect`, ...).
+ */
+export interface WriteOptions {
+  /**
+   * Marks the change as yours. The events it causes carry this value in `source` (with `origin: 'local'`), and a subscription made
+   * with `{ ignoreSource: value }` does not receive them: a component can ignore its own changes and still hear every other one.
+   * Any value works; a `Symbol` or the component itself is typical.
+   */
+  source?: unknown;
+}
+
 /** Per-call options of {@link Device.load} and {@link Device.loadDefault}. */
-export interface LoadOptions {
+export interface LoadOptions extends WriteOptions {
   /** Maximum time to wait for the WebSocket `loading_end`, in ms. Defaults to {@link ModUiClientOptions.loadTimeoutMs}. */
   timeoutMs?: number;
 }
