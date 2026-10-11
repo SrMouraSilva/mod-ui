@@ -15,6 +15,8 @@ import { PedalboardConnections, PedalboardPorts } from './pedalboard-connections
 import type { PedalboardEvents } from './pedalboard-events';
 import type { Enqueue, PedalboardGraph } from './pedalboard-graph';
 import { PedalboardPlugins } from './pedalboard-plugins';
+import { PedalboardSnapshots } from './pedalboard-snapshots';
+import type { EventChannel } from './events';
 import { sameBundle } from './pedalboards';
 import type { PedalboardReference, PedalboardsApi } from './pedalboards';
 import type { CurrentPedalboardState, SavePedalboardResponse } from './types';
@@ -45,6 +47,11 @@ export class CurrentPedalboard {
   readonly connections: PedalboardConnections;
   /** The inputs and outputs of the pedalboard itself, to connect plugins to. */
   readonly ports: PedalboardPorts;
+  /**
+   * The snapshots of the pedalboard (saved sets of plugin values): list, save, load, rename, remove. Not to be confused with
+   * {@link CurrentPedalboard.getSnapshot}, the immutable state for UI frameworks.
+   */
+  readonly snapshots: PedalboardSnapshots;
 
   /** @internal Use `client.device.currentPedalboard`. */
   constructor(
@@ -52,10 +59,12 @@ export class CurrentPedalboard {
     private readonly pedalboards: PedalboardsApi,
     private readonly enqueue: Enqueue,
     private readonly graph: PedalboardGraph,
+    events: EventChannel,
   ) {
     this.plugins = new PedalboardPlugins(graph);
     this.connections = new PedalboardConnections(graph);
     this.ports = new PedalboardPorts(graph);
+    this.snapshots = new PedalboardSnapshots(http, events, enqueue, graph);
   }
 
   /**
@@ -183,6 +192,8 @@ export class CurrentPedalboard {
    * The state of the pedalboard as one immutable, JSON-serializable object (plugins with their values, connections, the pedalboard's
    * own ports, `loading` / `ready`). Synchronous, and the **same object until something changes**; what did not change keeps its
    * identity, so frameworks skip it. Meant for `useSyncExternalStore`-style bindings; see {@link CurrentPedalboard.subscribe}.
+   *
+   * Not to be confused with {@link CurrentPedalboard.snapshots}, the pedalboard's saved sets of plugin values.
    *
    * It is an arrow property, so it can be passed around without `this`: `useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot)`.
    * It is empty and `ready: false` until the first state replay ends, and during a load.

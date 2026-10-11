@@ -286,3 +286,47 @@ export type PortType = 'audio' | 'midi' | 'cv';
 
 /** Direction of a port, seen from the graph: an `output` is a signal source, an `input` a sink. */
 export type PortDirection = 'input' | 'output';
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Snapshots and banks
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** `GET /snapshot/list`: snapshot index (a JSON string key) to name. */
+export type SnapshotListResponse = Record<string, string>;
+
+/** `GET /snapshot/saveas` answer. */
+export interface SnapshotSaveAsResponse {
+  ok: boolean;
+  /** Index of the new snapshot; `null` when it could not be created. */
+  id: number | null;
+  /** Final name (made unique). */
+  title: string;
+}
+
+/** `GET /snapshot/rename` answer. */
+export interface SnapshotRenameResponse {
+  ok: boolean;
+  /** Final name (made unique). */
+  title: string;
+}
+
+/** A bank as `GET /banks` returns it (schema `Bank`): the stored pedalboards are replaced by the full library summaries. */
+export interface BankSummary {
+  title: string;
+  pedalboards: PedalboardSummary[];
+  /** Other properties stored with the bank are kept untouched. */
+  [extra: string]: unknown;
+}
+
+/** A pedalboard entry of a bank as `POST /banks/save` stores it (schema `BankInput`). */
+export interface BankPedalboardInput {
+  bundle: string;
+  title: string;
+}
+
+/** A bank as `POST /banks/save` stores it (schema `BankInput`). */
+export interface BankInput {
+  title: string;
+  pedalboards: BankPedalboardInput[];
+  [extra: string]: unknown;
+}

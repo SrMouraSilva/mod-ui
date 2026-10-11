@@ -62,7 +62,7 @@ export class Device {
     const enqueue = <T>(task: () => Promise<T>) => this.enqueue(task);
     const state = new GraphState(events, graph.openSnapshotChannel);
     this.graph = new PedalboardGraph(http, events, state, plugins, enqueue, graph.confirmTimeoutMs, graph.schedule);
-    this.currentPedalboard = new CurrentPedalboard(http, pedalboards, enqueue, this.graph);
+    this.currentPedalboard = new CurrentPedalboard(http, pedalboards, enqueue, this.graph, events);
   }
 
   /**

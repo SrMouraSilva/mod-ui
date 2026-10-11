@@ -12,7 +12,8 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
 
-Current scope: **pedalboards** (list, info, copy, remove, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports) plus raw WebSocket access.
+Current scope: **pedalboards** (list, info, copy, remove, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, remove, reorder, add / remove / move pedalboards) plus raw WebSocket access.
+Plan of the last two: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md).
 
 ---
 
@@ -332,7 +333,50 @@ plugin.preset;      // URI of the plugin's current preset, or null; plugin.on('p
 kept while the connection is down (they are the last known: `client.state` says whether they are current). Meters (`output_set`)
 and addressings are not covered.
 
-### 1.15 Listen to raw WebSocket messages
+### 1.15 Snapshots of the pedalboard
+
+A *snapshot* is a saved set of plugin values (control ports, bypass, patch parameters, presets) that you switch between while playing.
+Not to be confused with `getSnapshot()` (the immutable state for UI frameworks) or `device.on('snapshot')` (the raw report).
+
+```js
+const { snapshots } = client.device.currentPedalboard;
+const all = await snapshots.list();                 // Snapshot[]: index, name, isCurrent, alive (the same objects while the name exists)
+await snapshots.load(1);                            // or all[1].load(); resolves after the backend applied it
+const solo = await snapshots.saveAs('Solo');        // captures the live values, becomes current; "Solo (2)" if taken
+await snapshots.save();                             // overwrite the current one (rejects when there is none)
+await solo.rename('Lead');                          // resolves with the final name
+await solo.remove();                                // the later ones move up; the last snapshot cannot be removed
+
+snapshots.currentIndex;                             // sync, valid as soon as the pedalboard loaded; snapshots.current is the object once list() ran
+snapshots.on('current', ({ snapshot, index }) => label.textContent = snapshot?.name ?? '');
+snapshots.on('list', ({ snapshots }) => menu.render(snapshots));
+await snapshots.load(2, { source: pedal });         // the value events it causes are origin: 'local' with that source
+```
+
+The index is a position: removing a snapshot renumbers the later ones (`snapshot.index` follows). The names are read only by `list()`
+(no event makes a request); changes made by another client to the list are not announced, so call `list()` again. See 5.9.
+
+### 1.16 Banks
+
+A bank is an ordered list of pedalboards, used by the hardware to navigate them. Only the user's banks exist here.
+
+```js
+const banks = await client.banks.list();             // Bank[]: title, index, pedalboards (PedalboardReference[])
+const live = await client.banks.create('Live set', [mine[0], mine[1]]);
+await live.add(mine[2], { at: 0 });                  // factory pedalboards are refused; { copyFactory: true } copies them first
+await live.movePedalboard(0, 2);
+await live.removePedalboard(mine[1]);                // or by position
+await live.rename('Gig');
+await client.banks.move(live, 0);                    // order of the banks
+await client.device.load(live.pedalboards[0]);       // a bank is a plain collection: nothing "loads" it
+await live.remove();
+```
+
+Every change reads the banks from the device, edits that copy and writes the whole list back (one client never interleaves its own
+calls; another tab or the HMI writing at the same moment wins or loses, last write). A `Bank` is a value: read again to see others'
+changes. Reading cleans the banks on the device (missing and broken pedalboards are dropped for good). See 5.10.
+
+### 1.17 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -345,7 +389,7 @@ await client.connect();
 off();
 ```
 
-### 1.16 Notes
+### 1.18 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -365,7 +409,7 @@ off();
   (the confirming frame never came; `graphTimeoutMs`, default 10 s) and `ModUiHttpError` (non-2xx).
 
 Compared with [PedalPi PluginsManager](https://github.com/PedalPi/PluginsManager#example), on which this walk-through
-is modelled: there are no banks (the library is a flat list of pedalboards), no `ModHost.connect()` (mod-ui already owns
+is modelled: banks are plain values edited through read-modify-write calls (no observable `BanksManager`), no `ModHost.connect()` (mod-ui already owns
 the connection to mod-host), and the plugin builder is `client.device.plugins` (the catalogue) plus
 `currentPedalboard.plugins.add()`. Operations are asynchronous because the backend confirms them over the network.
 The per-operation comparison is in [`docs/modui-client/implementation-progress.md`](modui-client/implementation-progress.md).
@@ -437,6 +481,8 @@ modui-client/
 │   ├── pedalboard-connections.ts  # PedalboardConnections, PedalboardPorts, PedalboardPortGroup (currentPedalboard.connections / .ports)
 │   ├── pedalboard-graph.ts        # PluginInstance, Port, PedalboardConnection + the internal engine
 │   ├── patch-params.ts            # PatchParam, PluginPatchParams (instance.patchParams)
+│   ├── pedalboard-snapshots.ts    # Snapshot, PedalboardSnapshots (currentPedalboard.snapshots)
+│   ├── banks.ts         # Bank, BanksApi (client.banks)
 │   ├── graph-state.ts   # internal: WebSocket-fed model of the running graph, and what each frame changed (GraphChange)
 │   ├── pedalboard-store.ts   # internal: the plugin objects of the running pedalboard + the events about them
 │   ├── pedalboard-events.ts  # event payloads and maps (PedalboardEvents, PluginEvents, ...)
@@ -458,6 +504,8 @@ modui-client/
     ├── plugins.test.ts
     ├── pedalboard-graph.test.ts
     ├── patch-params.test.ts
+    ├── pedalboard-snapshots.test.ts
+    ├── banks.test.ts
     ├── emitter.test.ts
     ├── graph-events.test.ts
     ├── connection-state.test.ts
@@ -480,6 +528,8 @@ flowchart TD
   pplugins["pedalboard-plugins.ts"]
   pconn["pedalboard-connections.ts"]
   pgraph["pedalboard-graph.ts"]
+  psnaps["pedalboard-snapshots.ts"]
+  banks["banks.ts"]
   gstate["graph-state.ts"]
   store["pedalboard-store.ts"]
   pevents["pedalboard-events.ts"]
@@ -492,10 +542,12 @@ flowchart TD
   runtime["runtime.ts"]
   types["types.ts"]
 
-  index --> client & device & current & pedalboards & images & plugins & pplugins & pconn & pgraph & events & errors
-  client --> device & pedalboards & plugins & events & http & errors
+  index --> client & device & current & pedalboards & images & plugins & pplugins & pconn & pgraph & psnaps & banks & events & errors
+  client --> device & pedalboards & banks & plugins & events & http & errors
   device --> current & gstate & pgraph & events & http & pedalboards & errors
-  current --> pplugins & pconn & http & pedalboards & errors
+  current --> pplugins & pconn & psnaps & http & pedalboards & errors
+  psnaps --> emitter & errors
+  banks --> pedalboards & errors
   pedalboards --> http & images
   images --> http & errors
   plugins --> errors
@@ -511,6 +563,8 @@ flowchart TD
   current -.-> pgraph
   pplugins -.-> pgraph
   pconn -.-> pgraph
+  psnaps -.-> pgraph & http & events & gstate
+  banks -.-> http & types
   pgraph -.-> http & events & gstate & plugins & pevents
   store -.-> gstate & plugins & pgraph & pevents
   snap -.-> gstate
@@ -540,6 +594,7 @@ classDiagram
     +baseUrl: string
     +device: Device
     +pedalboards: PedalboardsApi
+    +banks: BanksApi
     +events: EventChannel
     +state: ConnectionState
     +constructor(options?: ModUiClientOptions)
@@ -552,6 +607,48 @@ classDiagram
   class PedalboardsApi {
     -http: HttpTransport
     +list() Promise~PedalboardReference[]~
+  }
+
+  class BanksApi {
+    +list() Promise~Bank[]~
+    +get(title: string) Promise~Bank | undefined~
+    +create(title: string, pedalboards?: PedalboardReference[]) Promise~Bank~
+    +move(bank: Bank | string, toIndex: number) Promise~Bank[]~
+    +save(banks: Bank | BankData[]) Promise~void~
+  }
+
+  class Bank {
+    +title: string
+    +index: number
+    +pedalboards: PedalboardReference[]
+    +rename(title: string) Promise~void~
+    +remove() Promise~void~
+    +add(pedalboard: PedalboardReference, options?: AddToBankOptions) Promise~void~
+    +removePedalboard(pedalboard: number | PedalboardReference) Promise~void~
+    +movePedalboard(from: number, to: number) Promise~void~
+    +setPedalboards(pedalboards: PedalboardReference[]) Promise~void~
+  }
+
+  class PedalboardSnapshots {
+    +currentIndex: number | null
+    +current: Snapshot | null
+    +list() Promise~Snapshot[]~
+    +get(index: number) Promise~Snapshot | undefined~
+    +save() Promise~void~
+    +saveAs(name: string, options?: WriteOptions) Promise~Snapshot~
+    +load(target: Snapshot | number, options?: WriteOptions) Promise~void~
+    +on(event: current | list, handler, options?) Unsubscribe
+    +once(event: current | list, handler, options?) Unsubscribe
+  }
+
+  class Snapshot {
+    +index: number
+    +name: string
+    +isCurrent: boolean
+    +alive: boolean
+    +load(options?: WriteOptions) Promise~void~
+    +rename(name: string, options?: WriteOptions) Promise~string~
+    +remove(options?: WriteOptions) Promise~void~
   }
 
   class PedalboardReference {
@@ -847,6 +944,16 @@ classDiagram
   ModUiClient ..> ModUiClientOptions : configured by
   ModUiClient ..> HttpTransport : creates
   PedalboardsApi --> HttpTransport
+  ModUiClient *-- BanksApi : banks
+  BanksApi --> HttpTransport
+  BanksApi --> PedalboardsApi : builds the references
+  BanksApi ..> Bank : creates
+  Bank --> BanksApi : edits through it
+  Bank o-- PedalboardReference : pedalboards
+  CurrentPedalboard *-- PedalboardSnapshots : snapshots
+  PedalboardSnapshots --> HttpTransport
+  PedalboardSnapshots --> PedalboardGraph : sync(), expect(), store events
+  PedalboardSnapshots ..> Snapshot : creates, one per name
   PedalboardsApi ..> PedalboardReference : creates
   PedalboardReference --> HttpTransport
   PedalboardReference *-- PedalboardImages : images
@@ -1288,12 +1395,75 @@ The `Emitter` delivers in order and never nested (an event caused by a handler i
 rethrown with `queueMicrotask`) and applies `ignoreSource` / `ignoreLocal` / `signal`. Per-plugin subscriptions are filters
 on the same emitter, dropped after the plugin's `removed` event.
 
+### 5.9 Snapshots (`currentPedalboard.snapshots`)
+
+The list of names is read by `list()` only; everything else keeps it up to date from what the client itself writes and from the
+device's reports. The backend identifies a snapshot by position and sends **one** frame about them, `pedal_snapshot`, only when a
+snapshot is *loaded*; `saveas` and `remove` change the current index silently, so the client applies the backend's own rules locally.
+`load` holds an *expectation* for the value changes (`param`, `patch`, `active`, `preset`) while its request is in flight, so the
+events of the values it sets are `'local'` with the caller's `source`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Application
+  participant S as PedalboardSnapshots
+  participant Q as Device queue
+  participant H as HTTP
+  participant B as mod-ui backend
+  participant T as PedalboardStore
+
+  A->>S: snapshots.load(2, { source })
+  S->>Q: enqueue
+  Q->>S: run (after any running load / save)
+  S->>T: expect(param | patch | active | preset, source)
+  S->>H: GET /snapshot/load?id=2
+  B-->>S: pedal_snapshot 2 Lead (frame, tagged local)
+  B-->>T: param_set / patch_set / preset (values, tagged local)
+  T-->>A: instance.on('param' ...) origin local, source
+  B-->>H: true (after everything was applied)
+  S->>T: release the expectation
+  S-->>A: on('current') { index: 2 }, then the promise resolves
+
+  Note over A,B: a pedalboard load (loading / loaded events) retires every Snapshot object and sets currentIndex from loading_end
+  A->>S: snapshots.list()
+  S->>H: GET /snapshot/list
+  S->>S: reconcile by name (keeps objects, retires missing ones)
+  S-->>A: Snapshot[] and, only if something differs, on('list')
+```
+
+### 5.10 Banks (`client.banks`, `bank.add(...)`)
+
+The backend stores one list of banks and `POST /banks/save` replaces it. Each editing method therefore reads the list again, edits
+that fresh copy and writes it back, inside a queue private to the client, and then updates the `Bank` object it was called on.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Application
+  participant K as Bank
+  participant P as BanksApi (queue)
+  participant B as mod-ui backend
+
+  A->>K: bank.add(factoryPedalboard, { copyFactory: true })
+  K->>B: GET /pedalboard/info/, GET /pedalboard/factorycopy/, GET /pedalboard/list
+  B-->>K: the copy (a user pedalboard)
+  K->>P: edit(bank, change)
+  P->>B: GET /banks (also cleans missing / broken pedalboards)
+  B-->>P: banks with full pedalboard summaries
+  P->>P: find the bank by title (case-insensitive); apply change to the fresh copy
+  P->>B: POST /banks/save  [{ title, pedalboards: [{ bundle, title }] }, ...]
+  B-->>P: true
+  P->>K: update title, index and pedalboards
+  K-->>A: promise resolves
+```
+
 ---
 
 ## 6. Design rules
 
 - **Classes per feature area**, reachable from `ModUiClient` (`client.pedalboards`, `client.device`,
-  `client.events`). New areas (snapshots, banks, ...) follow the same shape.
+  `client.events`, `client.banks`). New areas follow the same shape.
 - **All HTTP goes through `HttpTransport`**: `fetch` with `cache: 'no-store'`, JSON decoding, non-2xx →
   `ModUiHttpError`. Use `getJson` for `GET` and `postForm` for form posts; add a method there if a new body
   type is needed (e.g. JSON or binary).
@@ -1326,13 +1496,13 @@ flowchart LR
   DOC --> V[npm test, npm run build,<br/>redocly lint]
 ```
 
-Checklist for a new area (example: snapshots):
+Checklist for a new area (example: banks, `src/banks.ts`):
 
 1. Wire types in `src/types.ts`, copied from the matching schemas in `docs/openapi.yml`.
-2. A class in its own module (`src/snapshots.ts`) taking `HttpTransport` (and `EventChannel` if it waits for
+2. A class in its own module (`src/banks.ts`) taking `HttpTransport` (and `EventChannel` if it waits for
    WebSocket confirmations) in its constructor.
-3. Wire it in `ModUiClient` (`client.snapshots`), export it from `src/index.ts` and add it to `window.ModUi`.
-4. A test file `test/snapshots.test.ts` using the helpers: `makeClient(routes)` fakes HTTP routes as
+3. Wire it in `ModUiClient` (`client.banks`), export it from `src/index.ts` and add it to `window.ModUi`.
+4. A test file `test/banks.test.ts` using the helpers: `makeClient(routes)` fakes HTTP routes as
    `"METHOD /path"` → JSON, `connected(client)` opens the fake socket and plays the initial replay, and
    `socket.emit('...')` pushes server messages.
 5. Update this guide (diagrams included), the README section and the plan.
@@ -1375,5 +1545,7 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.
 - `connections.disconnect()` checks the model first because the backend answers `true` and announces `disconnect` even when nothing was connected. A connection made by another client a moment ago is known as soon as its `connect` frame arrives.
 - Connections to plugins that are not installed are left out of `connections.list()` (their ports are unknown).
+- Snapshots are identified by position, and the backend sends no frame for `saveas`, `rename` or `remove`: other clients' changes to the list are found only by calling `list()` again, and a rename made elsewhere looks like "removed + added" (the objects are matched by name). Removing a snapshot **before** the current one leaves the backend's current index unchanged (it then points at the next snapshot); `currentIndex` mirrors that number. Nothing reads the content of a snapshot, and when the snapshot selector is addressed to a hardware actuator the classic UI refuses to add, delete or load snapshots while the client cannot see addressings and does not refuse. `GET /snapshot/name` is not used because it answers `Default` for any index. `snapshots.load()` tags the value events of every client with `'local'` while its request is in flight.
+- Banks: only user banks exist for the web (factory banks are the HMI's). `client.banks.list()` is not read-only on the device: pedalboards that are missing or broken are dropped from the banks for good. Every edit rewrites the whole list, so two writers at the same moment are last-write-wins; a bank is found by its title (unique ignoring case). Properties of a bank pedalboard entry other than `bundle` and `title` are not preserved (the read replaces them with the library summary). Whether an HMI that is already running sees a bank saved from the web was not verified on a device.
 - `reference.copy()` cannot choose the title of the copy and refuses titles with quotes, `/`, `&`, `\`, `*`, `[` or control characters, because of how the backend renames the copy.
 - A thumbnail URL is a snapshot: after another client regenerates the images, call `status()` (or `generate()`) on a reference to learn the new creation time, otherwise the URL may still hit the browser's one-year cache.

@@ -273,8 +273,11 @@ const GRAPH_COMMANDS = [
 export interface ChangeSink {
   /** The changes one frame produced, in order. `local` is set for a change this client made itself (no frame came for it). */
   changes(changes: GraphChange[], local?: { source: unknown }): void;
-  /** The model was replaced by a snapshot read through a second socket: everything has to be rebuilt. */
-  reset(): void;
+  /**
+   * The model was replaced by a state read through a second socket: everything has to be rebuilt.
+   * @param snapshotId The current snapshot of the pedalboard, from the `loading_end` of that read.
+   */
+  reset(snapshotId: number): void;
   /** A new socket of the client starts a state replay: the model was emptied, everything is rebuilt as the replay arrives. */
   restart(): void;
   /** Resolves when everything that is still being prepared (plugin descriptions) is done. */
@@ -366,8 +369,13 @@ export class GraphState {
       );
     }
     const fresh = new GraphModel();
+    let snapshotId = 0;
     channel.on('*', (args, command) => {
-      fresh.apply(command, args);
+      for (const change of fresh.apply(command, args)) {
+        if (change.type === 'loaded') {
+          snapshotId = change.snapshotId;
+        }
+      }
     });
     this.buffer = [];
     try {
@@ -381,7 +389,7 @@ export class GraphState {
     this.model = fresh;
     const pending = this.buffer;
     this.buffer = null;
-    this.sink?.reset();
+    this.sink?.reset(snapshotId);
     for (const [command, args] of pending) {
       this.sink?.changes(fresh.apply(command, args));
     }

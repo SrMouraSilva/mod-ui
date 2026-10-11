@@ -179,6 +179,11 @@ export class PedalboardsApi {
    */
   async list(): Promise<PedalboardReference[]> {
     const summaries = await this.http.getJson<PedalboardSummary[]>('/pedalboard/list');
-    return summaries.map((summary) => new PedalboardReference(summary, this.http, () => this.list()));
+    return summaries.map((summary) => this.reference(summary));
+  }
+
+  /** @internal Builds the entry for a summary the backend returned (the banks carry them). */
+  reference(summary: PedalboardSummary): PedalboardReference {
+    return new PedalboardReference(summary, this.http, () => this.list());
   }
 }

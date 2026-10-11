@@ -194,9 +194,9 @@ export class PedalboardStore implements ChangeSink {
     }
   }
 
-  /** The model was replaced by a snapshot: the same as a pedalboard load that is already complete. */
-  reset(): void {
-    this.changes([{ type: 'loading', empty: false, modified: false }, { type: 'loaded', snapshotId: 0 }]);
+  /** The model was replaced by a state read through a second socket: the same as a pedalboard load that is already complete. */
+  reset(snapshotId = 0): void {
+    this.changes([{ type: 'loading', empty: false, modified: false }, { type: 'loaded', snapshotId }]);
   }
 
   /**

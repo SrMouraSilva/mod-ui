@@ -292,3 +292,74 @@ export async function connectedWith(client: ModUiClient, frames: string[]): Prom
   await connecting;
   return socket;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Snapshots and banks
+// ---------------------------------------------------------------------------------------------------------------------
+
+/**
+ * Opens the client's own socket and plays a replay of a pedalboard whose current snapshot is `snapshotId`, with a plugin so that
+ * snapshot loads have something to change.
+ */
+export async function connectedAt(client: ModUiClient, snapshotId: number, frames: string[] = []): Promise<FakeWebSocket> {
+  const connecting = client.connect();
+  const socket = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+  socket.open();
+  socket.emit('loading_start 0 0');
+  for (const frame of frames) socket.emit(frame);
+  socket.emit(`loading_end ${snapshotId}`);
+  await connecting;
+  return socket;
+}
+
+/**
+ * The snapshot endpoints with the rules of `mod/host.py`: unique names (`Solo (2)`), `remove` renumbers and refuses the last one,
+ * the current index follows `saveas` / `remove` like the backend does (and is not corrected after an earlier removal).
+ */
+export function fakeSnapshotBackend(names: string[], current = 0) {
+  const state = { names: [...names], current, loads: [] as number[], saved: 0, onLoad: undefined as undefined | ((id: number) => void) };
+  const unique = (name: string): string => {
+    if (!state.names.includes(name)) return name;
+    let n = 2;
+    const base = name.replace(/ \(\d+\)$/, '');
+    while (state.names.includes(`${base} (${n})`)) n++;
+    return `${base} (${n})`;
+  };
+  const idOf = (call: Call) => parseInt(new URL(call.url).searchParams.get('id') ?? '', 10);
+  const arg = (call: Call, key: string) => new URL(call.url).searchParams.get(key) ?? '';
+  const routes = {
+    'GET /snapshot/list': () => Object.assign({}, ...state.names.map((name, i) => ({ [String(i)]: name }))),
+    'POST /snapshot/save': () => {
+      if (state.current < 0 || state.current >= state.names.length) return false;
+      state.saved++;
+      return true;
+    },
+    'GET /snapshot/saveas': (call: Call) => {
+      state.names.push(unique(arg(call, 'title')));
+      state.current = state.names.length - 1;
+      return { ok: true, id: state.current, title: state.names[state.current] };
+    },
+    'GET /snapshot/rename': (call: Call) => {
+      const id = idOf(call);
+      if (!(id >= 0 && id < state.names.length)) return { ok: false, title: arg(call, 'title') };
+      if (state.names[id] !== arg(call, 'title')) state.names[id] = unique(arg(call, 'title'));
+      return { ok: true, title: state.names[id] };
+    },
+    'GET /snapshot/remove': (call: Call) => {
+      const id = idOf(call);
+      if (!(id >= 0 && id < state.names.length) || state.names.length === 1) return false;
+      state.names.splice(id, 1);
+      if (state.current === id) state.current = -1;
+      return true;
+    },
+    'GET /snapshot/load': (call: Call) => {
+      const id = idOf(call);
+      if (!(id >= 0 && id < state.names.length)) return false;
+      state.current = id;
+      state.loads.push(id);
+      state.onLoad?.(id);
+      return true;
+    },
+  };
+  return { state, routes };
+}

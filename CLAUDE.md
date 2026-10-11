@@ -23,6 +23,9 @@ mod-ui is the web interface of MOD audio devices.
   (`currentPedalboard.getSnapshot()` / `subscribe()`, batched per animation frame) and the device's own reports
   (`device.on('stats' | 'sysStats' | 'transport' | 'bufferSize' | 'trueBypass' | 'snapshot')`, `instance.preset`)
   (`docs/plans/2026-10-modui-client-events.md`, phases 1 to 4; meters and addressings are not covered).
+  Also the running pedalboard's snapshots (`currentPedalboard.snapshots`: list/get/save/saveAs/load, `Snapshot.rename/remove/load`, `current`,
+  `currentIndex`, `on('current' | 'list')`) and the user banks (`client.banks`: list/get/create/move/save, `Bank.rename/remove/add/
+  removePedalboard/movePedalboard/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -76,7 +79,7 @@ own for the client's sake.
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
   `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
@@ -111,6 +114,9 @@ own for the client's sake.
   registers `store.expect(...)` before the request so the frame is tagged `'local'`. Events never make HTTP requests (only a new
   plugin's description does, once per URI). Events are delivered in frame order, never nested, and a throwing handler is rethrown
   asynchronously. Every write takes `{ source }` (`WriteOptions`).
+- Snapshots and banks: `PedalboardSnapshots` keeps the names only from `list()` and from its own writes (applying the backend's rules for
+  the current index) plus the `pedal_snapshot` report; no event makes a request. `Snapshot` objects are told apart by name. Bank edits
+  are read-modify-write of the whole list inside a queue private to `BanksApi`; a `Bank` is a value that updates itself after its own write.
 - Every public symbol has TSDoc in English: what it does, which backend calls it makes (with the OpenAPI
   `operationId`), errors thrown, and an `@example`. Write it for both developers and AI tools.
 

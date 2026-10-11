@@ -6,6 +6,7 @@
  * @module
  */
 
+import { BanksApi } from './banks';
 import { Emitter, type ListenOptions, type Unsubscribe } from './emitter';
 import { Device } from './device';
 import { ModUiError } from './errors';
@@ -84,6 +85,8 @@ export class ModUiClient {
   readonly device: Device;
   /** The pedalboard library. */
   readonly pedalboards: PedalboardsApi;
+  /** The banks: ordered collections of pedalboards. */
+  readonly banks: BanksApi;
   /** Main WebSocket: raw subscriptions and waits. */
   readonly events: EventChannel;
 
@@ -109,6 +112,7 @@ export class ModUiClient {
     const reconnect = options.reconnect === true ? {} : options.reconnect || undefined;
     this.events = new EventChannel(wsUrl, factory, options.webSocket, connectTimeoutMs, reconnect);
     this.pedalboards = new PedalboardsApi(http);
+    this.banks = new BanksApi(http, this.pedalboards);
     this.device = new Device(http, this.events, this.pedalboards, new PluginsApi(http), options.loadTimeoutMs ?? 60000, {
       confirmTimeoutMs: options.graphTimeoutMs ?? 10000,
       schedule: () => options.schedule ?? defaultSchedule,

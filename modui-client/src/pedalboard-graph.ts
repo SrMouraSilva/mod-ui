@@ -571,6 +571,11 @@ export class PedalboardGraph {
 
   // ---- reads --------------------------------------------------------------------------------------------------------
 
+  /** Connects the socket and waits until the model is in sync (what every read does first). Call it from inside the queue. */
+  async sync(): Promise<void> {
+    await this.state.ready();
+  }
+
   /** Plugin instances of the running pedalboard. */
   listInstances(): Promise<PluginInstance[]> {
     return this.enqueue(async () => (await this.view()).instances);

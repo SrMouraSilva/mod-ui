@@ -431,7 +431,7 @@ paths:
         | `plugin_pos` | `<instance> <x:int> <y:int>` | Another client moved a plugin (never echoed to the sender). |
         | `preset` | `<instance> <presetUri>` or `null` | Current preset of a plugin; `null` means none. |
         | `size` | `<width:int> <height:int>` | Pedalboard canvas size at full zoom. (The bundled UI ignores it.) |
-        | `pedal_snapshot` | `<index:int> <name...>` | Current snapshot changed. Name is the rest of the frame. |
+        | `pedal_snapshot` | `<index:int> <name...>` | A snapshot was **loaded** (HTTP `loadSnapshot`, HMI, MIDI program change). Name is the rest of the frame. It is the only frame about snapshots: `saveSnapshotAs`, `removeSnapshot` and `renameSnapshot` change the current snapshot or the list without sending anything, and `loading_end <snapshotId>` carries the current index after a pedalboard load. |
 
         ## Pedalboard loading bracket
 
@@ -1891,6 +1891,10 @@ paths:
       tags: [Snapshots]
       operationId: saveSnapshot
       summary: Overwrite the current snapshot with the live state
+      description: >-
+        Answers `false` (not an HTTP error) when the pedalboard has no current snapshot (index `-1`, see `removeSnapshot`) or
+        the index is invalid. A titled pedalboard rewrites `snapshots.json` in its bundle at once; an untitled one keeps the
+        snapshots in memory. No WebSocket frame is sent.
       responses:
         "200":
           $ref: '#/components/responses/BooleanResult'
@@ -1899,6 +1903,9 @@ paths:
       tags: [Snapshots]
       operationId: saveSnapshotAs
       summary: Create a new snapshot from the live state
+      description: >-
+        The new snapshot is appended and **becomes the current one**, with no WebSocket frame (`pedal_snapshot` is sent only by
+        `loadSnapshot`). The title is made unique among the snapshots of the pedalboard (`Solo` becomes `Solo (2)`).
       parameters:
         - name: title
           in: query
@@ -1923,6 +1930,9 @@ paths:
       tags: [Snapshots]
       operationId: renameSnapshot
       summary: Rename a snapshot
+      description: >-
+        `ok: false` for an unknown index. The title is made unique like in `saveSnapshotAs`; renaming to the current name
+        answers `ok: true`. No WebSocket frame is sent, so other clients only learn of it by listing again.
       parameters:
         - $ref: '#/components/parameters/SnapshotId'
         - name: title
@@ -1947,6 +1957,12 @@ paths:
       tags: [Snapshots]
       operationId: removeSnapshot
       summary: Delete a snapshot
+      description: >-
+        Answers `false` for an unknown index **and for the last remaining snapshot**. The snapshots after it move up by one (the
+        index is a position). The pedalboard's current index becomes `-1` when the removed snapshot was the current one, and
+        otherwise **stays unchanged although the positions shifted**, so removing a snapshot before the current one leaves it
+        pointing at the next snapshot. No WebSocket frame is sent, and the hardware addressing of the snapshot selector is not
+        updated (the HMI's own delete does).
       parameters:
         - $ref: '#/components/parameters/SnapshotId'
       responses:
@@ -1959,6 +1975,10 @@ paths:
       tags: [Snapshots]
       operationId: listSnapshots
       summary: Snapshot names of the loaded pedalboard
+      description: >-
+        The only way to read the snapshots; no endpoint returns their content (bypass, port values, patch parameters and
+        presets of each plugin). Names are unique inside a pedalboard. The list changes without any WebSocket frame when
+        another client adds, renames or removes a snapshot.
       responses:
         "200":
           description: Map of snapshot index to name (deleted indices are omitted). Keys are JSON strings.
@@ -1974,7 +1994,9 @@ paths:
       tags: [Snapshots]
       operationId: getSnapshotName
       summary: Name of one snapshot
-      description: Falls back to `Default` when the index is unknown.
+      description: >-
+        Falls back to `Default` when the index is unknown, so `ok` is `true` for any index: it cannot be used to check that a
+        snapshot exists (use `listSnapshots`).
       parameters:
         - $ref: '#/components/parameters/SnapshotId'
       responses:
@@ -1997,7 +2019,9 @@ paths:
       summary: Apply a snapshot
       description: >-
         Interrupts any snapshot/preset load in progress. Sockets receive `param_set`, `preset`, `patch_set`, `pedal_snapshot` and
-        connection frames while it is applied.
+        connection frames while it is applied. The answer comes **after** the snapshot is completely applied (the
+        `pedal_snapshot` frame is sent before it) and is `false` for an invalid index or when another load interrupted this one.
+        The loaded snapshot becomes the current one.
       parameters:
         - $ref: '#/components/parameters/SnapshotId'
       responses:
@@ -2015,8 +2039,11 @@ paths:
       operationId: listBanks
       summary: User banks with full pedalboard info
       description: >-
-        Pedalboards that no longer exist or are broken (missing plugins) are silently dropped, and the cleaned list is saved.
-        Also available as `/banks/`.
+        **Not read-only**: pedalboards that no longer exist or are broken (missing plugins) are dropped from the banks, duplicate
+        bank titles are renamed (`Rock (2)`), and the cleaned list is saved. A pedalboard that is only temporarily broken is
+        therefore lost from its bank. Only the **user** banks are returned (the factory banks are read by the HMI only). Entries
+        of a bank whose bundle is not in the pedalboard library are left out of the answer. Banks have no id: a bank is its
+        position and its title. Also available as `/banks/`.
       responses:
         "200":
           description: Banks.
@@ -2031,7 +2058,10 @@ paths:
       tags: [Banks]
       operationId: saveBanks
       summary: Replace all user banks
-      description: Also available as `/banks/save/`. Body is the JSON document, sent with any content type.
+      description: >-
+        **Replaces every user bank** with the body; banks that are left out are deleted. Nothing is validated (unknown bundles
+        are accepted and cleaned at the next `listBanks`), and two writers race with last-write-wins. Also available as
+        `/banks/save/`. Body is the JSON document, sent with any content type.
       requestBody:
         required: true
         content:

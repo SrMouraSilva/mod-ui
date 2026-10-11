@@ -35,6 +35,8 @@
  * | `plugins.ts` | {@link PluginsApi} (`client.device.plugins`), {@link Plugin} — installed plugins |
  * | `pedalboard-plugins.ts` | {@link PedalboardPlugins} (`currentPedalboard.plugins`) — list / add / remove |
  * | `pedalboard-connections.ts` | {@link PedalboardConnections} (`currentPedalboard.connections`), {@link PedalboardPorts} (`currentPedalboard.ports.list()`, `.audio.input()` …) |
+ * | `pedalboard-snapshots.ts` | {@link PedalboardSnapshots} (`currentPedalboard.snapshots`), {@link Snapshot} — saved sets of plugin values |
+ * | `banks.ts` | {@link BanksApi} (`client.banks`), {@link Bank} — ordered collections of pedalboards |
  * | `pedalboard-graph.ts` | {@link PluginInstance}, {@link Port}, {@link PedalboardConnection}, and the internal engine |
  * | `patch-params.ts` | {@link PatchParam}, {@link PluginPatchParams} (`instance.patchParams`) — strings, paths, booleans, ... |
  * | `graph-state.ts` | internal WebSocket-fed model of the running graph |
@@ -53,6 +55,7 @@
  * @module
  */
 
+import { Bank, BanksApi } from './banks';
 import { ModUiClient } from './client';
 import { CurrentPedalboard } from './current-pedalboard';
 import { Device } from './device';
@@ -63,9 +66,12 @@ import { PedalboardConnections, PedalboardPortGroup, PedalboardPorts } from './p
 import { Param, PedalboardConnection, PluginInstance, PluginParams, Port } from './pedalboard-graph';
 import { PatchParam, PluginPatchParams } from './patch-params';
 import { PedalboardPlugins } from './pedalboard-plugins';
+import { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
 import { PedalboardReference, PedalboardsApi } from './pedalboards';
 import { Plugin, PluginsApi } from './plugins';
 
+export { Bank, BanksApi } from './banks';
+export type { AddToBankOptions, BankData } from './banks';
 export { ModUiClient } from './client';
 export type { ClientEvents, ModUiClientOptions } from './client';
 export { CurrentPedalboard } from './current-pedalboard';
@@ -91,6 +97,8 @@ export { Param, PedalboardConnection, PluginInstance, PluginParams, Port } from 
 export type { PortGroups, PortsByDirection } from './pedalboard-graph';
 export { PatchParam, PluginPatchParams } from './patch-params';
 export { PedalboardPlugins } from './pedalboard-plugins';
+export { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
+export type { SnapshotCurrentEvent, SnapshotEvents, SnapshotListEvent } from './pedalboard-snapshots';
 export { PedalboardReference, PedalboardsApi } from './pedalboards';
 export { Plugin, PluginsApi } from './plugins';
 export type { FetchLike, WebSocketFactory, WebSocketLike } from './runtime';
@@ -107,6 +115,8 @@ if (typeof window !== 'undefined') {
     ModUiTimeoutError,
     PedalboardReference,
     PedalboardsApi,
+    BanksApi,
+    Bank,
     PedalboardImages,
     ImageStatus,
     Device,
@@ -120,6 +130,8 @@ if (typeof window !== 'undefined') {
     PatchParam,
     PluginPatchParams,
     PedalboardPlugins,
+    PedalboardSnapshots,
+    Snapshot,
     PedalboardConnection,
     PedalboardConnections,
     PedalboardPorts,
