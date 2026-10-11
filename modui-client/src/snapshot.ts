@@ -108,6 +108,10 @@ export class SnapshotStore {
     ports: EMPTY,
   });
   private readonly cache = new Map<string, PluginSnapshot>();
+  private readonly connectionCache = new Map<string, ConnectionSnapshot>();
+  private readonly portCache = new Map<string, PortSnapshot>();
+  /** The snapshot the subscribers were last told about. */
+  private notified: PedalboardSnapshot = this.snapshot;
   private readonly dirty = new Set<string>();
   private pluginsDirty = false;
   private connectionsDirty = false;
@@ -195,11 +199,19 @@ export class SnapshotStore {
     this.schedule()(() => {
       this.scheduled = false;
       this.rebuild();
-      this.emitter.emit('changed', {});
+      // `getSnapshot()` may have rebuilt it already: what counts is what the subscribers were last told, and a change that cancelled
+      // itself (a bypass switched off and on again before the tick) is not news.
+      if (this.snapshot !== this.notified) {
+        this.notified = this.snapshot;
+        this.emitter.emit('changed', {});
+      }
     });
   }
 
-  /** Rebuilds what is out of date; the previous objects are reused for the rest. */
+  /**
+   * Rebuilds what is out of date. Every object that ends up with the same content as before is the previous object (and a list
+   * whose items are all the same is the same array), so a change that cancels itself publishes nothing.
+   */
   private rebuild(): void {
     const stale = this.pluginsDirty || this.connectionsDirty || this.portsDirty || this.flagsDirty;
     if (!stale) {
@@ -222,7 +234,8 @@ export class SnapshotStore {
           alive.add(plugin.instance);
           let item = this.cache.get(plugin.instance);
           if (!item || this.dirty.has(plugin.instance)) {
-            item = this.pluginSnapshot(plugin, item);
+            const next = this.pluginSnapshot(plugin, item);
+            item = item && samePlugin(item, next) ? item : next;
             this.cache.set(plugin.instance, item);
           }
           built.push(item);
@@ -232,24 +245,61 @@ export class SnapshotStore {
             this.cache.delete(instance);
           }
         }
-        plugins = Object.freeze(built);
+        plugins = sameItems(previous.plugins, built) ? previous.plugins : Object.freeze(built);
       }
       if (this.connectionsDirty) {
-        connections = Object.freeze(model.connections.map(({ from, to }) => Object.freeze({ from, to })));
+        const built: ConnectionSnapshot[] = [];
+        const used = new Set<string>();
+        for (const { from, to } of model.connections) {
+          const key = `${from},${to}`;
+          used.add(key);
+          let item = this.connectionCache.get(key);
+          if (!item) {
+            item = Object.freeze({ from, to });
+            this.connectionCache.set(key, item);
+          }
+          built.push(item);
+        }
+        this.prune(this.connectionCache, used);
+        connections = sameItems(previous.connections, built) ? previous.connections : Object.freeze(built);
       }
       if (this.portsDirty) {
-        ports = Object.freeze(
-          Array.from(model.hardware.values())
-            .sort((a, b) => PORT_TYPES.indexOf(a.type) - PORT_TYPES.indexOf(b.type) || DIRECTION_ORDER.indexOf(a.direction) - DIRECTION_ORDER.indexOf(b.direction) || a.index - b.index)
-            .map(({ id, type, direction, title, index }) => Object.freeze({ id, type, direction, title, index })),
+        const built: PortSnapshot[] = [];
+        const used = new Set<string>();
+        const sorted = Array.from(model.hardware.values()).sort(
+          (a, b) =>
+            PORT_TYPES.indexOf(a.type) - PORT_TYPES.indexOf(b.type) ||
+            DIRECTION_ORDER.indexOf(a.direction) - DIRECTION_ORDER.indexOf(b.direction) ||
+            a.index - b.index,
         );
+        for (const { id, type, direction, title, index } of sorted) {
+          used.add(id);
+          let item = this.portCache.get(id);
+          if (!item || item.type !== type || item.direction !== direction || item.title !== title || item.index !== index) {
+            item = Object.freeze({ id, type, direction, title, index });
+            this.portCache.set(id, item);
+          }
+          built.push(item);
+        }
+        this.prune(this.portCache, used);
+        ports = sameItems(previous.ports, built) ? previous.ports : Object.freeze(built);
       }
     }
+
     this.pluginsDirty = false;
     this.connectionsDirty = false;
     this.portsDirty = false;
     this.flagsDirty = false;
     this.dirty.clear();
+    if (
+      plugins === previous.plugins &&
+      connections === previous.connections &&
+      ports === previous.ports &&
+      this.ready === previous.ready &&
+      this.loading === previous.loading
+    ) {
+      return; // nothing that a subscriber can see changed
+    }
     this.snapshot = Object.freeze({
       version: previous.version + 1,
       ready: this.ready,
@@ -258,6 +308,14 @@ export class SnapshotStore {
       connections,
       ports,
     });
+  }
+
+  private prune<T>(cache: Map<string, T>, used: Set<string>): void {
+    for (const key of Array.from(cache.keys())) {
+      if (!used.has(key)) {
+        cache.delete(key);
+      }
+    }
   }
 
   /** A new snapshot of a plugin, reusing the maps that did not change. */
@@ -273,6 +331,22 @@ export class SnapshotStore {
       patches: previous && sameMap(previous.patches, plugin.patches) ? previous.patches : record(plugin.patches),
     });
   }
+}
+
+function samePlugin(a: PluginSnapshot, b: PluginSnapshot): boolean {
+  return (
+    a.uri === b.uri &&
+    a.x === b.x &&
+    a.y === b.y &&
+    a.active === b.active &&
+    a.preset === b.preset &&
+    a.values === b.values &&
+    a.patches === b.patches
+  );
+}
+
+function sameItems<T>(a: ReadonlyArray<T>, b: ReadonlyArray<T>): boolean {
+  return a.length === b.length && a.every((item, i) => item === b[i]);
 }
 
 function sameMap<T>(snapshot: Readonly<Record<string, T>>, map: Map<string, T>): boolean {

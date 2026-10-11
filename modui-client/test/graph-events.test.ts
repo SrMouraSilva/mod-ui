@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { ModUiError, PluginInstance, type CurrentPedalboard, type PedalboardEvents } from '../src';
+import { ModUiError, ModUiTimeoutError, PluginInstance, type CurrentPedalboard, type PedalboardEvents } from '../src';
 import {
   FakeWebSocket,
   connected,
@@ -762,3 +762,135 @@ describe('handlers', () => {
     expect(handler).toHaveBeenCalledTimes(1);
   });
 });
+
+describe('a description request that never answers', () => {
+  it('does not hold the events or the calls for good: an "error" event, plugins without a description, the line moves on', async () => {
+    const never = new Promise<unknown>(() => undefined);
+    const { client } = makeClient(routes({ 'POST /effect/bulk/': () => never }), { graphTimeoutMs: 30 });
+    const current = client.device.currentPedalboard;
+    const log = record(current);
+
+    const socket = await connectedWith(client, [gainFrame('/graph/Gain')]);
+    const [gain] = await current.plugins.list(); // would wait for ever without the time limit
+
+    expect(gain.info).toBeNull();
+    const timeouts = log.filter(([name]) => name === 'error');
+    expect(timeouts.length).toBeGreaterThan(0);
+    expect(timeouts[0][1].error).toBeInstanceOf(ModUiTimeoutError);
+    expect(timeouts[0][1]).toMatchObject({ context: 'plugin-description' });
+    expect(names(log)).toContain('loaded');
+
+    // later events are not stuck behind it
+    const changes: number[] = [];
+    gain.params.list(); // no description: no controls
+    current.on('connection:added', () => changes.push(1));
+    socket.emit('connect /graph/capture_1 /graph/Gain/in');
+    expect(changes).toEqual([1]);
+  });
+
+  it('a plugin that appears later is announced after the time limit, and the events behind it follow', async () => {
+    const never = new Promise<unknown>(() => undefined);
+    const { client } = makeClient(
+      routes({
+        // the description of Gain is known from the start; the one of the MIDI plugin never comes
+        'POST /effect/bulk/': (call: { body?: string }) => ((JSON.parse(call.body!) as string[]).includes(midiUri) ? never : bulk(call)),
+      }),
+      { graphTimeoutMs: 30 },
+    );
+    const current = client.device.currentPedalboard;
+    const socket = await connectedWith(client, [...hardwareFrames, gainFrame('/graph/Gain')]);
+    await current.plugins.list();
+    const log = record(current);
+
+    socket.emit(midiFrame('/graph/Midi'));
+    socket.emit('connect /graph/Gain/out /graph/Midi/midi_in');
+    expect(names(log)).toEqual([]); // waiting for the description, in order
+    await new Promise((resolve) => setTimeout(resolve, 80));
+
+    expect([...names(log)].sort()).toEqual(['connection:added', 'error', 'plugin:added']);
+    expect(names(log).indexOf('plugin:added')).toBeLessThan(names(log).indexOf('connection:added'));
+    const added = log.find(([name]) => name === 'plugin:added')![1].plugin;
+    expect(added.info).toBeNull();
+    expect(log.some(([name, e]) => name === 'error' && e.error instanceof ModUiTimeoutError)).toBe(true);
+  });
+});
+
+describe('PatchParam.refresh(): which changes are "local"', () => {
+  it('a patch_set from someone else while the call waits behind a load is "remote"; the answer is "local"', async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => (release = resolve));
+    const { client } = makeClient(routes({ 'GET /reset': async () => (await gate, true) }));
+    const socket = await connectedWith(client, [`add /graph/Patcher ${patchUri} 1.0 2.0 0 1.0.0.0 0`]);
+    const [patcher] = await client.device.currentPedalboard.plugins.list();
+    const label = patcher.patchParams.get(labelUri)!;
+    const seen: Array<[unknown, string, unknown]> = [];
+    label.on('change', ({ value, origin, source }) => seen.push([value, origin, source]));
+
+    const resetting = client.device.reset(); // holds the queue
+    const refreshing = label.refresh({ source: 'me', timeoutMs: 1000 }); // waits behind it
+    await flush();
+    socket.emit(`patch_set /graph/Patcher 1 ${labelUri} s FromTheHmi`);
+    release();
+    await resetting;
+    await flush();
+    expect(socket.sent).toContain(`patch_get /graph/Patcher ${labelUri}`);
+    socket.emit(`patch_set /graph/Patcher 1 ${labelUri} s Answer`);
+    await expect(refreshing).resolves.toBe('Answer');
+
+    expect(seen).toEqual([
+      ['FromTheHmi', 'remote', undefined],
+      ['Answer', 'local', 'me'],
+    ]);
+  });
+});
+
+describe('what the store keeps', () => {
+  const bus = (current: CurrentPedalboard) =>
+    (current as unknown as { graph: { store: { bus: { listenerCount(): number }; cacheSizes(): { ports: number; connections: number } } } }).graph.store;
+
+  it('subscriptions that ended (once() that fired, an aborted signal) are not kept while the plugin lives', async () => {
+    const { socket, current, gain } = await wired();
+    const store = bus(current);
+    const baseline = store.bus.listenerCount();
+    const param = gain.params.get('gain')!;
+
+    for (let i = 0; i < 50; i++) param.once('change', () => undefined);
+    const controllers = Array.from({ length: 50 }, () => new AbortController());
+    controllers.forEach((c) => gain.on('param', () => undefined, { signal: c.signal }));
+    expect(store.bus.listenerCount()).toBe(baseline + 100);
+
+    socket.emit('param_set /graph/Gain gain 1.0'); // fires the once() ones
+    controllers.forEach((c) => c.abort());
+
+    expect(store.bus.listenerCount()).toBe(baseline);
+  });
+
+  it('the death of a plugin ends all its subscriptions at once', async () => {
+    const { socket, current, gain } = await wired();
+    const store = bus(current);
+    const baseline = store.bus.listenerCount();
+    gain.on('param', () => undefined);
+    gain.params.get('gain')!.on('change', () => undefined);
+    gain.on('removed', () => undefined);
+    gain.once('moved', () => undefined);
+
+    socket.emit('remove /graph/Gain');
+
+    expect(store.bus.listenerCount()).toBe(baseline);
+  });
+
+  it('the objects of ports and connections that are gone are forgotten', async () => {
+    const { socket, current } = await wired();
+    await current.connections.list();
+    expect(bus(current).cacheSizes()).toEqual({ ports: 6, connections: 2 });
+
+    socket.emit('disconnect /graph/capture_1 /graph/Gain/in');
+    socket.emit('remove /graph/Gain');
+    socket.emit('remove_hw_port /graph/capture_2');
+    await current.connections.list();
+    await current.ports.list();
+
+    expect(bus(current).cacheSizes()).toEqual({ ports: 5, connections: 0 });
+  });
+});
+

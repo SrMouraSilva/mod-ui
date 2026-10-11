@@ -280,8 +280,10 @@ Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of
   hidden tab is not notified until it is shown) and a microtask elsewhere; pass `schedule` in the options to change it
   (`new ModUiClient({ schedule: (callback) => setTimeout(callback, 16) })`).
 - A `plugin:added` for a plugin whose description is unknown waits for one `POST /effect/bulk/`; the events behind it wait
-  too, so the order is kept. If that request fails you get an `error` event (`context: 'plugin-description'`) and the plugin
-  exists with `info === null`; `plugins.list()` / `plugins.get()` try again and fill it in place.
+  too, so the order is kept. The wait is limited to `graphTimeoutMs` (10 s by default): if the request fails or does not answer
+  you get an `error` event (`context: 'plugin-description'`) and the plugin exists with `info === null`; `plugins.list()` /
+  `plugins.get()` try again and fill it in place. Subscriptions of a plugin (`instance.on`, `param.on`, `once`, with or without
+  `signal`) are released when they end or when the plugin dies; nothing is kept per subscription while the plugin lives.
 
 ### 1.13 Connection state and reconnection
 
@@ -299,9 +301,11 @@ client.on('error', ({ error, context }) => console.warn(context, error));   // b
   lost connection the state is `reconnecting`; the client waits `minDelayMs`, opens a new socket and waits for the state replay,
   doubling the wait after each failed attempt (up to `maxDelayMs`, with `±jitter`), until it works or you call `client.close()`.
   The first `connect()` is not retried: if it fails (`ModUiTimeoutError`) the state is `closed` and you decide.
-- When the connection is back the client reads the pedalboard again: `currentPedalboard.on('loaded')` fires, the plugin objects
-  of before are gone (`alive === false`) and the pedalboard's own ports are the ones the device announces now (what vanished
-  while you were away does not stay). Render again from `loaded`, as after a load. Raw `events.on()` handlers keep working.
+- While the connection is down the last known state stays as it was (plugins, `getSnapshot()`, values). When the connection is back
+  the client reads the pedalboard again as soon as the device starts its replay: `currentPedalboard.on('loading')` then `'loaded'`
+  fire, the plugin objects of before are gone (`alive === false`) and the pedalboard's own ports are the ones the device announces
+  now (what vanished while you were away does not stay). Render again from `loaded`, as after a load. Raw `events.on()` handlers keep
+  working. Invalid or `undefined` options of `reconnect` fall back to their defaults.
 - A call made while reconnecting (`plugins.list()`, `device.load()`, ...) waits for the connection, for at most `connectTimeoutMs`
   (`ModUiTimeoutError`). Calls that were waiting for a frame at the moment of the loss fail with `ModUiError('WebSocket closed')`;
   nothing is retried for you, as a write may have reached the backend.
@@ -1225,9 +1229,12 @@ stateDiagram-v2
   reconnecting --> closed: close() (reason manual)
 ```
 
-Every new own socket (the first, and each reconnection) first empties the `GraphModel` (plugins, connections **and** the
-pedalboard's own ports) and starts the same bracket as a load: one `loading`, the replay, one `loaded`. Waiters of the lost
-socket are rejected; `connect()` during `reconnecting` joins the attempt in progress.
+When the state replay of a new own socket begins (its **first frame**, not the moment the socket is created) the `GraphModel` is
+emptied (plugins, connections **and** the pedalboard's own ports) and the same bracket as a load starts: one `loading` (with the
+values of the `loading_start` frame), the replay, one `loaded`. So an attempt that fails before the backend answers changes nothing
+of what the application shows: during an outage the last known state stays, with `client.state === 'reconnecting'` telling it is
+stale. Waiters of the lost socket are rejected; `connect()` during `reconnecting` joins the attempt in progress. `close()` ends
+every attempt, including one that is still being awaited: a `close()` followed at once by `connect()` starts a clean new attempt.
 
 ### 5.8 Events: from a frame to a subscriber
 

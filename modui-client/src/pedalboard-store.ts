@@ -11,6 +11,7 @@
  */
 
 import { Emitter, type EventMeta, type ListenOptions, type Unsubscribe } from './emitter';
+import { ModUiTimeoutError } from './errors';
 import type { ChangeSink, GraphChange, GraphState, ModelHardwarePort, ModelPlugin } from './graph-state';
 import type { PluginsApi } from './plugins';
 import { SnapshotStore, type Schedule } from './snapshot';
@@ -48,19 +49,21 @@ export class PedalboardStore implements ChangeSink {
   readonly snapshots: SnapshotStore;
 
   private readonly instances = new Map<string, PluginInstance>();
-  private readonly listeners = new Map<PluginInstance, Set<Unsubscribe>>();
   private readonly expectations = new Set<Expectation>();
   private readonly hardwarePorts = new Map<string, Port>();
   private readonly connectionObjects = new Map<string, PedalboardConnection>();
   /** The work in progress, when a change is waiting for a plugin description; `null` when idle. */
   private gate: Promise<void> | null = null;
   private loading = false;
+  /** A `loading` event was delivered for the bracket in progress (a replay that has not seen `loading_start` has none yet). */
+  private loadingAnnounced = false;
 
   constructor(
     private readonly state: GraphState,
     private readonly plugins: PluginsApi,
     private readonly factory: ObjectFactory,
     schedule: () => Schedule,
+    private readonly descriptionTimeoutMs: number,
   ) {
     this.snapshots = new SnapshotStore(() => state.peek(), schedule);
     state.setSink(this);
@@ -114,6 +117,25 @@ export class PedalboardStore implements ChangeSink {
     return port;
   }
 
+  /** Forgets the objects of ports and connections that are not in the pedalboard any more (the ids and keys given are the ones that are). */
+  retain(portIds: Set<string>, connectionKeys: Set<string>): void {
+    for (const id of Array.from(this.hardwarePorts.keys())) {
+      if (!portIds.has(id)) {
+        this.hardwarePorts.delete(id);
+      }
+    }
+    for (const key of Array.from(this.connectionObjects.keys())) {
+      if (!connectionKeys.has(key)) {
+        this.connectionObjects.delete(key);
+      }
+    }
+  }
+
+  /** @internal How many objects the caches hold (for tests). */
+  cacheSizes(): { ports: number; connections: number } {
+    return { ports: this.hardwarePorts.size, connections: this.connectionObjects.size };
+  }
+
   /** The object of a connection, the same one while its ports are the same objects. */
   connection(from: Port, to: Port): PedalboardConnection {
     const key = `${from.id},${to.id}`;
@@ -159,17 +181,8 @@ export class PedalboardStore implements ChangeSink {
     }
     const filter = (payload: StoreEvents[K]) =>
       (payload as unknown as { plugin: PluginInstance }).plugin === plugin && (!extra || extra(payload));
-    const off = once ? this.bus.once(event, handler, options, filter) : this.bus.on(event, handler, options, filter);
-    let offs = this.listeners.get(plugin);
-    if (!offs) {
-      offs = new Set();
-      this.listeners.set(plugin, offs);
-    }
-    offs.add(off);
-    return () => {
-      off();
-      offs!.delete(off);
-    };
+    // The plugin is the scope: its death ends all its subscriptions at once, and nothing is kept per subscription meanwhile.
+    return once ? this.bus.once(event, handler, options, filter, plugin) : this.bus.on(event, handler, options, filter, plugin);
   }
 
   // ---- ChangeSink ---------------------------------------------------------------------------------------------------
@@ -186,9 +199,17 @@ export class PedalboardStore implements ChangeSink {
     this.changes([{ type: 'loading', empty: false, modified: false }, { type: 'loaded', snapshotId: 0 }]);
   }
 
-  /** A new socket starts the state replay: the same as the start of a load (the replay ends with `loaded`). */
+  /**
+   * A new socket starts the state replay: the same as the start of a load (the replay ends with `loaded`). The `loading` event itself
+   * is left to the `loading_start` frame that begins the replay, which knows `empty` and `modified`.
+   */
   restart(): void {
-    this.changes([{ type: 'loading', empty: false, modified: false }]);
+    this.run(() => {
+      this.loading = true;
+      this.loadingAnnounced = false;
+      this.snapshots.note({ type: 'loading', empty: false, modified: false });
+      this.killAll('reloaded', { origin: 'remote' });
+    });
   }
 
   // ---- handling -----------------------------------------------------------------------------------------------------
@@ -241,9 +262,10 @@ export class PedalboardStore implements ChangeSink {
     }
     switch (change.type) {
       case 'loading':
-        // A new socket announces the start of its replay itself and the replay brings `loading_start` again: one `loading` is enough.
-        if (!this.loading) {
+        // One `loading` per bracket: a replay that restart() prepared has not announced it yet.
+        if (!this.loadingAnnounced) {
           this.bus.emit('loading', { empty: change.empty, modified: change.modified, ...meta });
+          this.loadingAnnounced = true;
         }
         this.loading = true;
         this.killAll('reloaded', meta);
@@ -360,6 +382,11 @@ export class PedalboardStore implements ChangeSink {
         }
       }
       this.loading = false;
+      if (!this.loadingAnnounced) {
+        // a replay without `loading_start`: keep `loading` and `loaded` in pairs
+        this.bus.emit('loading', { empty: false, modified: false, ...meta });
+      }
+      this.loadingAnnounced = false;
       this.snapshots.note({ type: 'loaded', snapshotId });
       this.bus.emit('loaded', { snapshotId, ...meta });
     };
@@ -373,12 +400,25 @@ export class PedalboardStore implements ChangeSink {
     return this.fetch(missing).then(finish);
   }
 
-  /** Reads descriptions. A failure is reported as an `error` event, not thrown: the plugins exist without a description. */
+  /**
+   * Reads descriptions, for at most `descriptionTimeoutMs`. A failure or a timeout is reported as an `error` event, not thrown: the
+   * plugins exist without a description, and what is queued behind this read is not held for good (a request that never ends would
+   * otherwise stop every later event and every call that waits for the store).
+   */
   private async fetch(uris: string[]): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
-      await this.plugins.infosOf(uris);
+      const timeout = new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new ModUiTimeoutError(`No description of the plugins within ${this.descriptionTimeoutMs} ms`)),
+          this.descriptionTimeoutMs,
+        );
+      });
+      await Promise.race([this.plugins.infosOf(uris), timeout]);
     } catch (error) {
       this.bus.emit('error', { error: error instanceof Error ? error : new Error(String(error)), context: 'plugin-description' });
+    } finally {
+      clearTimeout(timer);
     }
   }
 
@@ -395,12 +435,7 @@ export class PedalboardStore implements ChangeSink {
       this.bus.emit('plugin:removed', { plugin, reason, ...meta });
     }
     this.bus.emit('instance:removed', { plugin, reason, ...meta });
-    this.bus.defer(() => {
-      for (const off of Array.from(this.listeners.get(plugin) ?? [])) {
-        off();
-      }
-      this.listeners.delete(plugin);
-    });
+    this.bus.defer(() => this.bus.dropScope(plugin));
   }
 }
 

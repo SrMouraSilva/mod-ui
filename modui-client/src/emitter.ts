@@ -43,6 +43,10 @@ interface Listener {
   options: ListenOptions;
   filter?: (payload: any) => boolean;
   once: boolean;
+  /** Group the subscription belongs to: {@link Emitter.dropScope} ends the whole group. */
+  scope?: unknown;
+  /** Releases what the subscription holds outside the emitter (the `abort` listener on its signal). */
+  dispose?: () => void;
 }
 
 /**
@@ -62,6 +66,7 @@ export class Emitter<M extends { [K in keyof M]: object }> {
   /**
    * Subscribes to an event.
    * @param filter Internal: delivers only the payloads it accepts.
+   * @param scope Internal: a group the subscription belongs to, ended by {@link Emitter.dropScope}.
    * @returns A function that removes the subscription.
    */
   on<K extends keyof M>(
@@ -69,8 +74,9 @@ export class Emitter<M extends { [K in keyof M]: object }> {
     handler: (payload: M[K]) => void,
     options: ListenOptions = {},
     filter?: (payload: M[K]) => boolean,
+    scope?: unknown,
   ): Unsubscribe {
-    return this.add(event, { handler, options, filter, once: false });
+    return this.add(event, { handler, options, filter, once: false, scope });
   }
 
   /** Like {@link Emitter.on}, but the handler runs at most once. */
@@ -79,8 +85,33 @@ export class Emitter<M extends { [K in keyof M]: object }> {
     handler: (payload: M[K]) => void,
     options: ListenOptions = {},
     filter?: (payload: M[K]) => boolean,
+    scope?: unknown,
   ): Unsubscribe {
-    return this.add(event, { handler, options, filter, once: true });
+    return this.add(event, { handler, options, filter, once: true, scope });
+  }
+
+  /** Ends every subscription made with this `scope`, whatever its event. */
+  dropScope(scope: unknown): void {
+    for (const set of this.listeners.values()) {
+      for (const listener of Array.from(set)) {
+        if (listener.scope === scope) {
+          set.delete(listener);
+          listener.dispose?.();
+        }
+      }
+    }
+  }
+
+  /** How many subscriptions are active (of one event, or of all). */
+  listenerCount(event?: keyof M): number {
+    if (event !== undefined) {
+      return this.listeners.get(event)?.size ?? 0;
+    }
+    let total = 0;
+    for (const set of this.listeners.values()) {
+      total += set.size;
+    }
+    return total;
   }
 
   /** Delivers `payload` to the subscribers of `event` (queued if a delivery is running). */
@@ -105,9 +136,10 @@ export class Emitter<M extends { [K in keyof M]: object }> {
     }
     set.add(listener);
     const onAbort = () => off();
+    listener.dispose = () => signal?.removeEventListener('abort', onAbort);
     const off = () => {
       set!.delete(listener);
-      signal?.removeEventListener('abort', onAbort);
+      listener.dispose!();
     };
     signal?.addEventListener('abort', onAbort, { once: true });
     return off;
@@ -155,6 +187,7 @@ export class Emitter<M extends { [K in keyof M]: object }> {
       }
       if (listener.once) {
         set.delete(listener);
+        listener.dispose?.();
       }
       try {
         listener.handler(payload);

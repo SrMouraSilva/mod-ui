@@ -57,6 +57,20 @@ export interface ReconnectOptions {
 
 const RECONNECT_DEFAULTS: Required<ReconnectOptions> = { minDelayMs: 500, maxDelayMs: 10000, factor: 2, jitter: 0.2 };
 
+/** Fills the options in: a missing, `undefined` or invalid value (not a finite number in range) is replaced by the default. */
+function resolveReconnect(options: ReconnectOptions): Required<ReconnectOptions> {
+  const pick = (value: number | undefined, fallback: number, min: number, max = Infinity): number =>
+    typeof value === 'number' && isFinite(value) && value >= min && value <= max ? value : fallback;
+  const d = RECONNECT_DEFAULTS;
+  const minDelayMs = pick(options.minDelayMs, d.minDelayMs, 0);
+  return {
+    minDelayMs,
+    maxDelayMs: Math.max(minDelayMs, pick(options.maxDelayMs, d.maxDelayMs, 0)),
+    factor: pick(options.factor, d.factor, 1),
+    jitter: pick(options.jitter, d.jitter, 0, 1),
+  };
+}
+
 /** Someone waiting in `connect()` for a reconnection that is under way. */
 interface Joiner {
   resolve(): void;
@@ -109,7 +123,11 @@ export class EventChannel {
   private readonly owned: boolean;
   private readonly policy: Required<ReconnectOptions> | null;
   private readonly states = new Emitter<{ state: StateEvent }>();
-  private readonly newSocketListeners = new Set<() => void>();
+  private readonly replayListeners = new Set<() => void>();
+  /** A new own socket was opened and its state replay has not started: the first frame starts it. */
+  private replayPending = false;
+  /** Counts the connection attempts and `close()` calls, so that the result of an abandoned attempt can be told apart and ignored. */
+  private generation = 0;
   private current: ConnectionState = 'idle';
   private backendStopped = false;
   private attempt = 0;
@@ -131,7 +149,7 @@ export class EventChannel {
     reconnect?: ReconnectOptions,
   ) {
     this.owned = shared === undefined;
-    this.policy = reconnect ? { ...RECONNECT_DEFAULTS, ...reconnect } : null;
+    this.policy = reconnect ? resolveReconnect(reconnect) : null;
   }
 
   /** State of the connection; see {@link ConnectionState}. */
@@ -150,11 +168,15 @@ export class EventChannel {
     return this.states.on('state', handler, options);
   }
 
-  /** @internal Calls `listener` each time the channel opens a new socket of its own, before any frame arrives (the state replay follows). */
-  onNewSocket(listener: () => void): Unsubscribe {
-    this.newSocketListeners.add(listener);
+  /**
+   * @internal Calls `listener` when a socket of the channel's own starts its state replay: when its first frame arrives, before any
+   * handler sees it. (Not when the socket is created: an attempt that fails before the backend answers must not disturb what the
+   * application shows.)
+   */
+  onReplayStart(listener: () => void): Unsubscribe {
+    this.replayListeners.add(listener);
     return () => {
-      this.newSocketListeners.delete(listener);
+      this.replayListeners.delete(listener);
     };
   }
 
@@ -185,15 +207,21 @@ export class EventChannel {
       return this.joinReconnection();
     }
     if (!this.connecting) {
+      const generation = ++this.generation;
       this.setState('connecting');
       this.connecting = (this.owned ? this.openOwnSocket() : this.attachSharedSocket()).then(
         () => {
-          this.synced = true;
-          this.setState('open');
+          if (generation === this.generation) {
+            this.synced = true;
+            this.setState('open');
+          }
         },
         (error) => {
-          this.connecting = null;
-          this.setState('closed', error instanceof ModUiTimeoutError ? 'timeout' : 'closed', error);
+          // An attempt that `close()` abandoned reports its failure to its caller only: the channel may be in another attempt by now.
+          if (generation === this.generation) {
+            this.connecting = null;
+            this.setState('closed', error instanceof ModUiTimeoutError ? 'timeout' : 'closed', error);
+          }
           throw error;
         },
       );
@@ -262,6 +290,7 @@ export class EventChannel {
    */
   close(): void {
     const socket = this.socket;
+    this.generation++;
     this.cancelRetry();
     this.detach();
     this.failWaiters(new ModUiError('Client closed'));
@@ -281,16 +310,17 @@ export class EventChannel {
       return Promise.reject(new ModUiError('No WebSocket implementation available; pass options.WebSocket'));
     }
     const socket = new this.factory(this.url);
-    for (const listener of Array.from(this.newSocketListeners)) {
-      listener();
-    }
+    this.replayPending = true;
     this.attach(socket);
     // The initial state replay always ends with "loading_end".
     const replay = this.waitFor('loading_end', this.connectTimeoutMs);
     return replay.promise.then(
       () => undefined,
       (error) => {
-        this.detach();
+        // Only if this attempt still owns the channel: after `close()` and a new `connect()` the socket in use is another one.
+        if (this.socket === socket) {
+          this.detach();
+        }
         socket.close();
         throw error;
       },
@@ -299,6 +329,7 @@ export class EventChannel {
 
   private attachSharedSocket(): Promise<void> {
     const socket = this.shared!;
+    const generation = this.generation;
     this.attach(socket);
     if (socket.readyState === WS_OPEN) {
       return Promise.resolve();
@@ -310,7 +341,9 @@ export class EventChannel {
     return new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => {
         socket.removeEventListener('open', onOpen);
-        this.detach();
+        if (generation === this.generation) {
+          this.detach();
+        }
         reject(new ModUiTimeoutError(`Shared WebSocket not open within ${this.connectTimeoutMs} ms`));
       }, this.connectTimeoutMs);
       const onOpen = () => {
@@ -345,6 +378,13 @@ export class EventChannel {
     const space = event.data.indexOf(' ');
     const command = space < 0 ? event.data : event.data.slice(0, space);
     const args = space < 0 ? '' : event.data.slice(space + 1);
+
+    if (this.owned && this.replayPending) {
+      this.replayPending = false;
+      for (const listener of Array.from(this.replayListeners)) {
+        listener();
+      }
+    }
 
     if (this.owned) {
       if (command === 'ping') {
@@ -409,7 +449,10 @@ export class EventChannel {
   private startReconnecting(reason: StateReason): void {
     this.attempt = 0;
     this.setState('reconnecting', reason);
-    this.scheduleAttempt();
+    // A handler of the state event may have closed the client right away.
+    if (this.current === 'reconnecting') {
+      this.scheduleAttempt();
+    }
   }
 
   /** Waits `min(max, min * factor^attempt)`, randomised by `±jitter`, then tries once. */
@@ -419,13 +462,19 @@ export class EventChannel {
     const delay = Math.max(0, base * (1 + jitter * (Math.random() * 2 - 1)));
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;
-      this.tryReconnect();
+      if (this.current === 'reconnecting') {
+        this.tryReconnect();
+      }
     }, delay);
   }
 
   private tryReconnect(): void {
+    const generation = ++this.generation;
     this.connecting = this.openOwnSocket().then(
       () => {
+        if (generation !== this.generation) {
+          return;
+        }
         this.synced = true;
         this.attempt = 0;
         this.setState('open');
@@ -436,6 +485,9 @@ export class EventChannel {
         }
       },
       () => {
+        if (generation !== this.generation) {
+          return; // `close()` (or another attempt) took over
+        }
         this.connecting = null;
         if (this.current === 'reconnecting') {
           this.attempt++;

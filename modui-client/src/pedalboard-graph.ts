@@ -561,7 +561,7 @@ export class PedalboardGraph {
       hardwarePort: (port) =>
         new Port(port.id, port.id.slice(port.id.lastIndexOf('/') + 1), port.title, port.type, port.direction, null),
       connection: (from, to) => new PedalboardConnection(from, to),
-    }, schedule);
+    }, schedule, confirmTimeoutMs);
   }
 
   /** @internal Tags the changes `match` accepts as made by this client until the returned function is called. */
@@ -709,10 +709,13 @@ export class PedalboardGraph {
    * the queue is left before waiting, so a slow or silent plugin does not block loads, saves and other calls.
    */
   async refreshPatch(instance: string, uri: string, timeoutMs: number = this.confirmTimeoutMs, source?: unknown): Promise<string> {
-    const release = this.store.expect((change) => change.type === 'patch' && change.instance === instance && change.uri === uri, source);
+    // The expectation lives from the moment the request is sent (inside the queue) to the answer: a patch_set that another client
+    // sends while this call waits behind a load is not ours.
+    let release: () => void = () => undefined;
     try {
       const answer = await this.enqueue(async () => {
         await this.requirePlugin(instance);
+        release = this.store.expect((change) => change.type === 'patch' && change.instance === instance && change.uri === uri, source);
         const waiting = this.events.waitFor('patch_set', timeoutMs, (args) => {
           const [id, , parameter] = args.split(' ');
           return id === instance && parameter === uri;
@@ -909,6 +912,11 @@ export class PedalboardGraph {
         connections.push(this.store.connection(source, target));
       }
     }
+    // The caches keep only what is in the pedalboard now (ports and connections of removed plugins would hold the dead plugins).
+    this.store.retain(
+      new Set(pedalboardPorts.map((port) => port.id)),
+      new Set(connections.map((connection) => connection.id)),
+    );
     return { instances, pedalboardPorts, connections, port: find };
   }
 }

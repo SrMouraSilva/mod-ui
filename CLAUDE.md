@@ -97,9 +97,10 @@ own for the client's sake.
 - A socket opened by the client answers `ping` (`pong`) and `data_ready <n>` (echo). A socket shared through
   `options.webSocket` is only listened to.
 - Connection: `EventChannel` owns the state machine (`idle`, `connecting`, `open`, `reconnecting`, `closed`) and the optional
-  reconnection (own socket only, opt-in). Each new own socket empties `GraphModel` (`clear()`, hardware ports included) through
-  `events.onNewSocket()` and the replay rebuilds it and ends with `loaded`; the first `connect()` is never retried, a shared socket
-  is never reopened. Timers and `Math.random` are used directly, so tests use `vi.useFakeTimers()`.
+  reconnection (own socket only, opt-in). When a new own socket's replay begins (its first frame: `events.onReplayStart()`, not the
+  socket creation) `GraphModel` is emptied (`clear()`, hardware ports included) and the replay rebuilds it and ends with `loaded`; the
+  first `connect()` is never retried, a shared socket is never reopened. Abandoned attempts are told apart with `generation`, which
+  `close()` and every new attempt increase: always check it before a late handler touches the channel. Timers and `Math.random` are used directly, so tests use `vi.useFakeTimers()`.
 - Snapshots: `SnapshotStore` (`snapshot.ts`) is fed by `PedalboardStore.handle()` with `note(change)` and rebuilds only what is out of date when
   `getSnapshot()` is called; it keeps untouched plugin objects and lists (structural sharing). Listeners are notified through
   `ModUiClientOptions.schedule` (default `requestAnimationFrame`, else a microtask), looked up when used so tests can stub it. `DeviceState`

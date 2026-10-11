@@ -169,4 +169,45 @@ describe('Emitter', () => {
     emitter.emit('a', { n: 1 });
     expect(log).toEqual(['handler', 'deferred', 'b']);
   });
+
+  it('once() with a signal does not leave its abort listener on the signal after it fired', () => {
+    const emitter = new Emitter<Events>();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    emitter.once('a', () => undefined, { signal: controller.signal });
+    emitter.emit('a', { n: 1 });
+    expect(remove).toHaveBeenCalledWith('abort', expect.any(Function));
+    expect(emitter.listenerCount('a')).toBe(0);
+  });
+
+  it('an unsubscribe (and an abort) release the abort listener too', () => {
+    const emitter = new Emitter<Events>();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    emitter.on('a', () => undefined, { signal: controller.signal })();
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(emitter.listenerCount()).toBe(0);
+  });
+
+  it('dropScope() ends every subscription of the scope, of any event, and leaves the others', () => {
+    const emitter = new Emitter<Events>();
+    const scope = {};
+    const kept = vi.fn();
+    const dropped = vi.fn();
+    const controller = new AbortController();
+    const remove = vi.spyOn(controller.signal, 'removeEventListener');
+    emitter.on('a', dropped, { signal: controller.signal }, undefined, scope);
+    emitter.once('b', dropped, {}, undefined, scope);
+    emitter.on('a', kept, {}, undefined, {});
+    expect(emitter.listenerCount()).toBe(3);
+
+    emitter.dropScope(scope);
+
+    expect(emitter.listenerCount()).toBe(1);
+    expect(remove).toHaveBeenCalled();
+    emitter.emit('a', { n: 1 });
+    emitter.emit('b', { text: 'x' });
+    expect(dropped).not.toHaveBeenCalled();
+    expect(kept).toHaveBeenCalledTimes(1);
+  });
 });

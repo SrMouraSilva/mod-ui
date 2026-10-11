@@ -310,9 +310,10 @@ export class GraphState {
         }
       });
     }
-    // A new own socket (the first one, or a reconnection) receives the whole state again: start from nothing, so that what
-    // disappeared while the client was away (plugins, pedalboard ports) does not stay.
-    events.onNewSocket(() => {
+    // A new own socket (the first one, or a reconnection) starts a replay of the whole state: start from nothing, so that what
+    // disappeared while the client was away (plugins, pedalboard ports) does not stay. It is done when the replay really begins (its
+    // first frame), not when the socket is created: an attempt that fails keeps what the application shows.
+    events.onReplayStart(() => {
       this.model.clear();
       this.sink?.restart();
     });

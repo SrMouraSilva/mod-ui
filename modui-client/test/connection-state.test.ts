@@ -436,6 +436,145 @@ describe('the state after a reconnection', () => {
   });
 });
 
+describe('races and edge cases of the connection', () => {
+  const policy = { minDelayMs: 100, maxDelayMs: 1000, factor: 2, jitter: 0 };
+
+  it('close() followed by connect() at once: the old attempt cannot disturb the new one', async () => {
+    const { client } = makeClient(routes());
+    const seen = watch(client);
+
+    const first = client.connect();
+    const abandoned = expect(first).rejects.toThrow('Client closed');
+    latest().open(); // the first socket is open but its replay never came
+    client.close();
+    const second = client.connect(); // a React effect that is cleaned up and run again
+    const socket = latest();
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    await abandoned; // the rejection of the old attempt is handled now (a microtask later)
+
+    socket.replay();
+    await second;
+
+    expect(client.state).toBe('open');
+    expect(client.events.connected).toBe(true);
+    expect(FakeWebSocket.instances).toHaveLength(2); // nothing opened a third socket
+    const stats = vi.fn();
+    client.events.on('stats', stats);
+    socket.emit('stats 9.0 1');
+    expect(stats).toHaveBeenCalled(); // the listeners of the new socket were not taken away
+    expect(seen.pairs()).toEqual([
+      ['connecting', undefined],
+      ['closed', 'manual'],
+      ['connecting', undefined],
+      ['open', undefined],
+    ]);
+  });
+
+  it('a state handler that closes the client when it starts reconnecting stops the reconnection', async () => {
+    const { client } = makeClient(routes(), { reconnect: policy });
+    const first = await connected(client);
+    client.on('state', ({ state }) => {
+      if (state === 'reconnecting') client.close();
+    });
+
+    first.close();
+    await tick(10000);
+
+    expect(client.state).toBe('closed');
+    expect(FakeWebSocket.instances).toHaveLength(1);
+  });
+
+  it('an option that is undefined or invalid falls back to its default (no NaN delay, no tight loop)', async () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.5);
+    const { client } = makeClient(routes(), {
+      reconnect: { minDelayMs: undefined, maxDelayMs: undefined, factor: NaN, jitter: undefined },
+    });
+    const first = await connected(client);
+    first.close();
+    await tick(499);
+    expect(FakeWebSocket.instances).toHaveLength(1);
+    await tick(1);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    latest().open();
+    latest().close(); // the second attempt waits 500 * 2 (the default factor)
+    await tick(999);
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    await tick(1);
+    expect(FakeWebSocket.instances).toHaveLength(3);
+  });
+
+  it('a failed attempt does not touch what the application shows: the state is replaced when the replay starts', async () => {
+    const { client } = makeClient(routes(), { reconnect: policy });
+    const board = client.device.currentPedalboard;
+    const first = await connectedWith(client, [...hardwareFrames, gainFrame('/graph/Gain')]);
+    const [gain] = await board.plugins.list();
+    await tick();
+    const loading = vi.fn();
+    board.on('loading', loading);
+
+    first.close();
+    await tick(100);
+    latest().open(); // the backend accepted the socket but sent nothing
+    latest().close();
+    await tick();
+
+    expect(gain.alive).toBe(true);
+    expect(board.getSnapshot()).toMatchObject({ ready: true, loading: false });
+    expect(board.getSnapshot().plugins).toHaveLength(1);
+    expect(board.getSnapshot().ports).toHaveLength(6); // (list() would wait for the reconnection: read the snapshot)
+    expect(loading).not.toHaveBeenCalled();
+
+    await tick(200);
+    latest().open();
+    latest().emit('stats 1.0 0'); // the replay begins
+    expect(gain.alive).toBe(false);
+    expect(board.getSnapshot()).toMatchObject({ ready: false, loading: true, plugins: [] });
+  });
+
+  it('"loading" carries the values of the loading_start frame of the replay', async () => {
+    const { client } = makeClient(routes(), { reconnect: policy });
+    const board = client.device.currentPedalboard;
+    const first = await connectedWith(client, [gainFrame('/graph/Gain')]);
+    await board.plugins.list();
+    await tick();
+    const events: unknown[] = [];
+    board.on('loading', (e) => events.push([e.empty, e.modified]));
+    board.on('loaded', () => events.push('loaded'));
+
+    first.close();
+    await tick(100);
+    const next = latest();
+    next.open();
+    next.emit('stats 1.0 0');
+    next.emit('loading_start 1 1');
+    next.emit('loading_end 0');
+    await tick();
+
+    expect(events).toEqual([[true, true], 'loaded']);
+  });
+
+  it('a replay without loading_start still delivers "loading" before "loaded"', async () => {
+    const { client } = makeClient(routes(), { reconnect: policy });
+    const board = client.device.currentPedalboard;
+    const first = await connectedWith(client, [gainFrame('/graph/Gain')]);
+    await board.plugins.list();
+    await tick();
+    const events: string[] = [];
+    board.on('loading', () => events.push('loading'));
+    board.on('loaded', () => events.push('loaded'));
+
+    first.close();
+    await tick(100);
+    latest().open();
+    latest().emit('stats 1.0 0');
+    latest().emit('loading_end 0');
+    await tick();
+
+    expect(events).toEqual(['loading', 'loaded']);
+  });
+});
+
 describe('client.on("error")', () => {
   it('forwards the failures of the background requests (the same as currentPedalboard.on("error"))', async () => {
     const { client } = makeClient({ 'POST /effect/bulk/': () => new Response('nope', { status: 500 }) });

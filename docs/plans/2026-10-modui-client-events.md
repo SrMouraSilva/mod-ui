@@ -199,7 +199,7 @@ const client = new ModUiClient({ reconnect: { minDelayMs: 500, maxDelayMs: 10_00
 - **Reconnect is opt-in** (`reconnect` option, default off, to keep today's behaviour and tests). Own sockets only. Each attempt
   opens a new socket and waits for the replay.
 - **Model correctness after a reconnect**: `GraphModel` gets `reset()` (plugins, connections **and** hardware ports); `GraphState`
-  calls it when a new own socket opens, so vanished ports no longer stay. Then `loaded` fires. This removes the limitation listed
+  calls it when the replay of a new own socket begins (revised after the review: first frame, not socket creation), so vanished ports no longer stay. Then `loaded` fires. This removes the limitation listed
   in `docs/modui-client.md`.
 - Pending operations at the moment of the close keep failing with `ModUiError('WebSocket closed')` (unchanged). Queued ones wait
   for the next connection or fail with `ModUiTimeoutError` as today.
@@ -395,15 +395,16 @@ Differences from the design above, to keep the plan honest:
   `alive === false`); read `plugins.list()` again on `loaded`. One test of `patch-params.test.ts` documented the old behaviour and was changed.
 
 ## Implementation notes: phase 2 (2026-10-10)
-- Files: `src/events.ts` (`ConnectionState`, `StateReason`, `StateEvent`, `ReconnectOptions`; state machine, `onState`, `onNewSocket`,
+- Files: `src/events.ts` (`ConnectionState`, `StateReason`, `StateEvent`, `ReconnectOptions`; state machine, `onState`, `onReplayStart`,
   retry timer, `connect()` joining a reconnection), `src/client.ts` (`reconnect` option, `state`, `on`, `once`, `ClientEvents`,
   forwarding of `error`), `src/graph-state.ts` (`GraphModel.clear()`, restart on each new own socket, `ChangeSink.restart()`),
   `src/pedalboard-store.ts` (`restart()`, one `loading` per bracket). Tests: `test/connection-state.test.ts` (22, fake timers).
 - Delay of attempt `n`: `min(maxDelayMs, minDelayMs * factor^n) * (1 + jitter * (2r - 1))`, `r = Math.random()`. It never gives up; `close()`
   stops it. Only a connection that was `open` and got lost is retried; the first `connect()` is not (it rejects, the state is `closed`).
-- Every new own socket, the first included, calls `GraphModel.clear()` and the store's `restart()` (a `loading`); the real replay's own
-  `loading_start` does not produce a second `loading`. So the pedalboard's own ports and plugins that vanished do not stay, the objects
-  of before die with `reason: 'reloaded'`, and `loaded` fires when the replay ends.
+- When the replay of a new own socket begins (first frame), `GraphModel.clear()` and the store's `restart()` run; `restart()` only marks
+  the bracket (the `loading` event comes from the replay's own `loading_start`, with its real `empty` / `modified`). So the pedalboard's
+  own ports and plugins that vanished do not stay, the objects of before die with `reason: 'reloaded'`, and `loaded` fires when the replay
+  ends. (First written as "when the socket is created"; changed after the review below.)
 - `stop` only sets the reason: the state changes at the close that follows it (the backend closes the sockets right after).
 - `connect()` while `reconnecting` joins the attempts and fails with `ModUiTimeoutError` after `connectTimeoutMs`; the attempts continue.
   `close()` rejects such callers with `ModUiError('Client closed')`.
@@ -441,6 +442,28 @@ Phase 4 (device state, presets)
   pedalboard `size` frame, the async iterator, and any write for transport / true bypass / buffer size (their endpoints are in the
   "recommended" list of `docs/modui-client/implementation-progress.md`, with the event already in place for their confirmation).
 
+## Review of 2026-10-10 and its fixes
+A code review of phases 1 to 4 found ten problems; all are fixed, each with a regression test (checked to fail without the fix for the
+first, the time limit and the refresh expectation).
+1. `close()` followed by `connect()` at once: the rejection handler of the abandoned attempt detached the socket of the new one. Fixed with a
+   `generation` counter (`close()` and each attempt increase it; late handlers of an older generation touch nothing) and by detaching only the
+   socket the attempt owns.
+2. A `state` handler that called `close()` on `reconnecting` did not stop the retry: `startReconnecting()` and the retry timer now check the state.
+3. The `loading` event of a reconnection had invented `empty` / `modified`: `restart()` no longer emits it; the replay's `loading_start` does, and a
+   replay without one gets a `loading` just before `loaded` (they stay in pairs).
+4. The read of a plugin description had no time limit and could hold every later event and call: it is limited to `graphTimeoutMs`
+   (`error` event with `ModUiTimeoutError`, plugin with `info === null`).
+5. A reconnection attempt wiped the model, the plugin objects and the snapshot when the socket was created: it now happens when the replay begins
+   (`onReplayStart`), so an outage keeps the last known state. This changes the design above (Phase 2 text revised).
+6. `PatchParam.refresh({ source })` registered its expectation before entering the queue: it is now registered when the request is sent.
+7. `ConnectionSnapshot` / `PortSnapshot` objects lost their identity on every rebuild, and a change that cancelled itself published a new
+   snapshot: all objects are cached by content, arrays with identical items are reused, and a snapshot with nothing new is not published or
+   notified (what counts is what the subscribers were last told).
+8. `reconnect` options that are `undefined`, `NaN` or out of range now fall back to their defaults (no `NaN` delay).
+9. Subscriptions leaked: the store kept one entry per subscription and `once()` left its `abort` listener on the signal. The `Emitter` now has
+   scopes (`dropScope`) and releases the `abort` listener when a subscription ends, whichever way.
+10. The caches of port and connection objects only grew: `PedalboardStore.retain()` prunes them at every read of the graph.
+
 ## Revisions
 - **2026-10-08** — First draft, from the analysis of what `modui-client` offers for proactive updates.
 - **2026-10-08** — Open question 1 decided by the author: events carry objects, the client keeps the full state (new
@@ -454,3 +477,5 @@ Phase 4 (device state, presets)
   plugin, `Param` and `PatchParam`, `source` on writes); implementation notes and differences added.
 - **2026-10-10** — Phase 2 implemented (connection state, opt-in reconnection, clean model after a reconnection, `client.on`); implementation notes added.
 - **2026-10-10** — Phases 3 and 4 implemented (snapshots with batched notifications, device state, plugin presets); notes added. All planned phases are done.
+- **2026-10-10** — Code review of phases 1 to 4: ten problems fixed with regression tests; Phase 2 design changed (the model is replaced when the replay
+  begins, not when the socket is created).

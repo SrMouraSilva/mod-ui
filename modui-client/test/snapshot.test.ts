@@ -200,6 +200,54 @@ describe('getSnapshot()', () => {
   });
 });
 
+describe('identity of what did not change', () => {
+  it('connections and ports that did not change are the same objects when another one is added or removed', async () => {
+    const { pedalboard, socket } = await device();
+    const before = pedalboard.getSnapshot();
+
+    socket.emit('connect /graph/capture_2 /graph/Gain_1/in');
+    const connected = pedalboard.getSnapshot();
+    expect(connected.connections).toHaveLength(3);
+    connected.connections.slice(0, 2).forEach((item, i) => expect(item).toBe(before.connections[i]));
+
+    socket.emit('add_hw_port /graph/capture_3 audio 0 Capture_3 3');
+    const ported = pedalboard.getSnapshot();
+    before.ports.forEach((port) => expect(ported.ports.find((p) => p.id === port.id)).toBe(port));
+    socket.emit('remove_hw_port /graph/capture_3');
+    const removed = pedalboard.getSnapshot();
+    expect(removed.ports).toHaveLength(6);
+    removed.ports.forEach((port, i) => expect(port).toBe(before.ports[i]));
+    expect(removed.ports).toEqual(before.ports);
+  });
+
+  it('a change that cancels itself before the tick publishes nothing: same snapshot, no notification', async () => {
+    const { pedalboard, socket, tick } = await device();
+    const before = pedalboard.getSnapshot();
+    const listener = vi.fn();
+    pedalboard.subscribe(listener);
+
+    socket.emit('param_set /graph/Gain :bypass 1.0');
+    socket.emit('param_set /graph/Gain :bypass 0.0'); // back to what it was
+    tick();
+
+    expect(pedalboard.getSnapshot()).toBe(before);
+    expect(pedalboard.getSnapshot().plugins[0]).toBe(before.plugins[0]);
+    expect(listener).not.toHaveBeenCalled();
+  });
+
+  it('still notifies when getSnapshot() already rebuilt the change before the tick', async () => {
+    const { pedalboard, socket, tick } = await device();
+    const listener = vi.fn();
+    pedalboard.subscribe(listener);
+
+    socket.emit('param_set /graph/Gain gain 1.0');
+    pedalboard.getSnapshot(); // a render read it in between
+    tick();
+
+    expect(listener).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('subscribe()', () => {
   it('notifies once per tick, however many changes happened, and getSnapshot() then has the last state', async () => {
     const { pedalboard, socket, tick, pending } = await device();
