@@ -265,7 +265,33 @@ Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of
   too, so the order is kept. If that request fails you get an `error` event (`context: 'plugin-description'`) and the plugin
   exists with `info === null`; `plugins.list()` / `plugins.get()` try again and fill it in place.
 
-### 1.13 Listen to raw WebSocket messages
+### 1.13 Connection state and reconnection
+
+```js
+const client = new ModUiClient({ reconnect: true });   // or { minDelayMs: 500, maxDelayMs: 10000, factor: 2, jitter: 0.2 }
+
+client.state;   // 'idle' | 'connecting' | 'open' | 'reconnecting' | 'closed'
+client.on('state', ({ state, previous, reason, error }) => {
+  banner.hidden = state === 'open';                    // reason: 'closed' | 'backend-stopped' | 'timeout' | 'manual'
+});
+client.on('error', ({ error, context }) => console.warn(context, error));   // background failures (a plugin description)
+```
+
+- Reconnection is **off by default**; `reconnect: true` (or the options) turns it on for the socket the client opened. After a
+  lost connection the state is `reconnecting`; the client waits `minDelayMs`, opens a new socket and waits for the state replay,
+  doubling the wait after each failed attempt (up to `maxDelayMs`, with `±jitter`), until it works or you call `client.close()`.
+  The first `connect()` is not retried: if it fails (`ModUiTimeoutError`) the state is `closed` and you decide.
+- When the connection is back the client reads the pedalboard again: `currentPedalboard.on('loaded')` fires, the plugin objects
+  of before are gone (`alive === false`) and the pedalboard's own ports are the ones the device announces now (what vanished
+  while you were away does not stay). Render again from `loaded`, as after a load. Raw `events.on()` handlers keep working.
+- A call made while reconnecting (`plugins.list()`, `device.load()`, ...) waits for the connection, for at most `connectTimeoutMs`
+  (`ModUiTimeoutError`). Calls that were waiting for a frame at the moment of the loss fail with `ModUiError('WebSocket closed')`;
+  nothing is retried for you, as a write may have reached the backend.
+- The `stop` frame (audio host restarted) is the reason `'backend-stopped'` of the close that follows it.
+- A socket you pass as `webSocket` (the classic UI's `window.ws`) is never reopened by the client: when it closes the state is
+  `closed`, and whoever owns the socket creates a new `ModUiClient` with the new one.
+
+### 1.14 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -278,7 +304,7 @@ await client.connect();
 off();
 ```
 
-### 1.14 Notes
+### 1.15 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -374,7 +400,7 @@ modui-client/
 │   ├── pedalboard-store.ts   # internal: the plugin objects of the running pedalboard + the events about them
 │   ├── pedalboard-events.ts  # event payloads and maps (PedalboardEvents, PluginEvents, ...)
 │   ├── emitter.ts       # internal: typed Emitter (ordered, isolated), ListenOptions, Origin
-│   ├── events.ts        # EventChannel, MessageHandler, Waiting
+│   ├── events.ts        # EventChannel (connection state, reconnection), MessageHandler, Waiting, ConnectionState, StateEvent, ReconnectOptions
 │   ├── http.ts          # HttpTransport (internal)
 │   ├── errors.ts        # ModUiError, ModUiHttpError, ModUiTimeoutError
 │   ├── types.ts         # wire types (mirror docs/openapi.yml schemas) + LoadOptions/LoadResult
@@ -391,6 +417,7 @@ modui-client/
     ├── patch-params.test.ts
     ├── emitter.test.ts
     ├── graph-events.test.ts
+    ├── connection-state.test.ts
     └── events.test.ts
 ```
 
@@ -461,9 +488,12 @@ classDiagram
     +device: Device
     +pedalboards: PedalboardsApi
     +events: EventChannel
+    +state: ConnectionState
     +constructor(options?: ModUiClientOptions)
     +connect() Promise~void~
     +close() void
+    +on(event: state | error, handler, options?) Unsubscribe
+    +once(event: state | error, handler, options?) Unsubscribe
   }
 
   class PedalboardsApi {
@@ -645,6 +675,8 @@ classDiagram
   }
 
   class EventChannel {
+    +state: ConnectionState
+    +onState(handler, options?) Unsubscribe
     -socket: WebSocketLike
     -owned: boolean
     -handlers: Map
@@ -694,6 +726,7 @@ classDiagram
     +loadTimeoutMs?: number
     +connectTimeoutMs?: number
     +graphTimeoutMs?: number
+    +reconnect?: boolean | ReconnectOptions
   }
 
   ModUiClient *-- PedalboardsApi
@@ -1095,17 +1128,28 @@ sequenceDiagram
 
 ### 5.7 EventChannel lifecycle
 
+`client.state` (`EventChannel.state`) and the `state` event follow this machine. `reconnecting` exists only for an own socket
+with the `reconnect` option; a shared socket that closes ends in `closed`.
+
 ```mermaid
 stateDiagram-v2
-  [*] --> Idle
-  Idle --> Connecting: connect()
-  Connecting --> Synced: own socket gets first loading_end / shared socket is open
-  Connecting --> Idle: timeout or error (ModUiTimeoutError)
-  Synced --> Idle: socket close event (pending waits rejected)
-  Synced --> Idle: close() (own socket is closed, shared one is left open)
-  Synced --> Synced: messages dispatched to on() handlers and waitFor() waiters
-  Idle --> Connecting: connect() again (reconnect)
+  [*] --> idle
+  idle --> connecting: connect()
+  closed --> connecting: connect() again
+  connecting --> open: own socket gets the first loading_end / shared socket is open
+  connecting --> closed: timeout, or the socket closes first (error)
+  open --> open: messages dispatched to on() handlers and waitFor() waiters
+  open --> reconnecting: socket lost, reconnect on, own socket (reason closed / backend-stopped)
+  open --> closed: socket lost, reconnect off or shared socket (reason closed / backend-stopped)
+  reconnecting --> reconnecting: attempt failed, wait min(max, min * factor^n) +-jitter
+  reconnecting --> open: new socket got the first loading_end (model rebuilt, "loaded" fires)
+  open --> closed: close() (reason manual)
+  reconnecting --> closed: close() (reason manual)
 ```
+
+Every new own socket (the first, and each reconnection) first empties the `GraphModel` (plugins, connections **and** the
+pedalboard's own ports) and starts the same bracket as a load: one `loading`, the replay, one `loaded`. Waiters of the lost
+socket are rejected; `connect()` during `reconnecting` joins the attempt in progress.
 
 ### 5.8 Events: from a frame to a subscriber
 
@@ -1232,9 +1276,10 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - `currentPedalboard.get()` / `save()` rely on `GET /pedalboard/current`, added together with this API; they do not
   work against older mod-ui servers.
 - `currentPedalboard.save()` / `saveAs()` wait for the thumbnail regeneration, which can take a few seconds on a device (the renderer runs at low priority); a failure of that wait is ignored.
-- Plugins and connections come from the WebSocket, not from an endpoint. After an own socket reconnects, pedalboard ports that disappeared in between stay in the model until the backend announces them again (automatic reconnection and a clean model after it are planned: `docs/plans/2026-10-modui-client-events.md`, phase 2).
+- Plugins and connections come from the WebSocket, not from an endpoint. Every new own socket (first connection or reconnection) starts from an empty model and rebuilds it from the state replay, so nothing that vanished in between stays. A socket shared through `options.webSocket` is never reopened by the client.
+- The first `connect()` is not retried by `reconnect` (it rejects and the state is `closed`); only a connection that was `open` and got lost is. Reconnection never gives up by itself: call `client.close()`. Calls that were waiting for a frame when the connection was lost fail with `ModUiError('WebSocket closed')` and are not retried (a write may have reached the backend).
 - `origin: 'local'` is best effort: a change is local when this client had a matching request in flight when the frame arrived. A pedalboard load or reset by someone else at the same moment cannot be told apart (same as the note on `device.load()`).
-- Events are delivered for the changes the model knows (plugins, connections, hardware ports, control values, bypass, position, patch parameters, loading). Meters (`output_set`), transport, statistics, presets, snapshots and addressings are not events yet (planned, phases 3 and 4).
+- Events are delivered for the changes the model knows (plugins, connections, hardware ports, control values, bypass, position, patch parameters, loading). Meters (`output_set`), transport, statistics, presets, snapshots and addressings are not events yet (planned, phase 4); a one-notification-per-frame snapshot for UI frameworks is phase 3.
 - `setValue()`, `setActive()`, `toggle()` and `move()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
 - `PatchParam.setValue()` cannot confirm anything either (the sender of `patch_set` gets no frame). Only `"` is escaped on the way to mod-host, so a backslash in a string reaches the plugin as it is. Empty strings are refused by the client. Only parameters the host tracks (atom types Bool, Int, Long, Float, Double, String, Path, URI, with ranges) report values; vectors are not supported. Whether `refresh()` gets an answer depends on the plugin.
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.

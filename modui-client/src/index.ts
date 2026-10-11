@@ -62,13 +62,13 @@ import { PedalboardReference, PedalboardsApi } from './pedalboards';
 import { Plugin, PluginsApi } from './plugins';
 
 export { ModUiClient } from './client';
-export type { ModUiClientOptions } from './client';
+export type { ClientEvents, ModUiClientOptions } from './client';
 export { CurrentPedalboard } from './current-pedalboard';
 export { Device } from './device';
 export { ModUiError, ModUiHttpError, ModUiTimeoutError } from './errors';
 export type { EventMeta, ListenOptions, Origin, Unsubscribe } from './emitter';
 export { EventChannel } from './events';
-export type { MessageHandler, Waiting } from './events';
+export type { ConnectionState, MessageHandler, ReconnectOptions, StateEvent, StateReason, Waiting } from './events';
 export type * from './pedalboard-events';
 export { ImageStatus, PedalboardImages } from './pedalboard-images';
 export { PedalboardConnections, PedalboardPortGroup, PedalboardPorts } from './pedalboard-connections';

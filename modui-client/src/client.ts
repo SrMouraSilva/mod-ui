@@ -6,10 +6,12 @@
  * @module
  */
 
+import { Emitter, type ListenOptions, type Unsubscribe } from './emitter';
 import { Device } from './device';
 import { ModUiError } from './errors';
-import { EventChannel } from './events';
+import { EventChannel, type ConnectionState, type ReconnectOptions, type StateEvent } from './events';
 import { HttpTransport } from './http';
+import type { ErrorEvent } from './pedalboard-events';
 import { PedalboardsApi } from './pedalboards';
 import { PluginsApi } from './plugins';
 import type { FetchLike, WebSocketFactory, WebSocketLike } from './runtime';
@@ -39,6 +41,20 @@ export interface ModUiClientOptions {
    * (`add`, `remove`, `connect`, `disconnect`), in ms. Default: 10000.
    */
   graphTimeoutMs?: number;
+  /**
+   * Reconnect by itself when the connection is lost (own socket only: the owner of a shared `webSocket` decides what to do).
+   * `true` uses the defaults (first retry after 500 ms, doubling up to 10 s, ±20 % jitter); pass {@link ReconnectOptions} to tune it.
+   * Default: off. See {@link ModUiClient.state}.
+   */
+  reconnect?: boolean | ReconnectOptions;
+}
+
+/** Events of {@link ModUiClient.on}. */
+export interface ClientEvents {
+  /** The connection state changed. */
+  state: StateEvent;
+  /** A background request failed (today: the description of a plugin that appeared). Same as `currentPedalboard.on('error')`. */
+  error: ErrorEvent;
 }
 
 /**
@@ -64,6 +80,8 @@ export class ModUiClient {
   /** Main WebSocket: raw subscriptions and waits. */
   readonly events: EventChannel;
 
+  private readonly emitter = new Emitter<ClientEvents>();
+
   constructor(options: ModUiClientOptions = {}) {
     const origin = options.baseUrl ?? (typeof location !== 'undefined' ? location.origin : undefined);
     if (!origin) {
@@ -81,13 +99,52 @@ export class ModUiClient {
     const http = new HttpTransport(this.baseUrl, fetchImpl);
     const wsUrl = this.baseUrl.replace(/^http/, 'ws') + '/websocket';
     const connectTimeoutMs = options.connectTimeoutMs ?? 30000;
-    this.events = new EventChannel(wsUrl, factory, options.webSocket, connectTimeoutMs);
+    const reconnect = options.reconnect === true ? {} : options.reconnect || undefined;
+    this.events = new EventChannel(wsUrl, factory, options.webSocket, connectTimeoutMs, reconnect);
     this.pedalboards = new PedalboardsApi(http);
     this.device = new Device(http, this.events, this.pedalboards, new PluginsApi(http), options.loadTimeoutMs ?? 60000, {
       confirmTimeoutMs: options.graphTimeoutMs ?? 10000,
       // Used when the socket is shared: its state replay has passed, so a short-lived own socket reads a new one.
       openSnapshotChannel: () => (factory ? new EventChannel(wsUrl, factory, undefined, connectTimeoutMs) : null),
     });
+    this.events.onState((event) => this.emitter.emit('state', event));
+    this.device.currentPedalboard.on('error', (event) => this.emitter.emit('error', event));
+  }
+
+  /**
+   * State of the connection to the backend: `'idle'` (nothing asked yet), `'connecting'`, `'open'`, `'reconnecting'` (lost, trying
+   * again: see the `reconnect` option) or `'closed'`. Follow it with `client.on('state', ...)`.
+   * @example
+   * if (client.state !== 'open') banner.show();
+   */
+  get state(): ConnectionState {
+    return this.events.state;
+  }
+
+  /**
+   * Calls `handler` when the client itself has news.
+   *
+   * | Event | When | Payload |
+   * |-------|------|---------|
+   * | `state` | the connection state changed | `{ state, previous, reason?, error? }` (`reason`: `closed`, `backend-stopped`, `timeout`, `manual`) |
+   * | `error` | a background request failed | `{ error, context }` |
+   *
+   * On `open` after `reconnecting` the pedalboard was read again: `currentPedalboard.on('loaded')` fires and the plugin objects of
+   * before the loss are gone (`alive === false`). Pending calls at the moment of the loss fail with `ModUiError('WebSocket closed')`.
+   * @param options `signal` (an `AbortSignal` that ends the subscription).
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = client.on('state', ({ state, reason }) => {
+   *   banner.textContent = state === 'open' ? '' : `Offline (${reason ?? state}), trying again...`;
+   * });
+   */
+  on<K extends keyof ClientEvents>(event: K, handler: (event: ClientEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.emitter.on(event, handler, options);
+  }
+
+  /** Like {@link ModUiClient.on}, but the handler runs once. */
+  once<K extends keyof ClientEvents>(event: K, handler: (event: ClientEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.emitter.once(event, handler, options);
   }
 
   /** Connects the WebSocket ahead of time (feature methods do it on demand). See {@link EventChannel.connect}. */

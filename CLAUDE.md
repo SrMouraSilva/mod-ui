@@ -18,8 +18,9 @@ mod-ui is the web interface of MOD audio devices.
   `.connections` list/connect/disconnect, `.ports.list()` and `.ports.<audio|midi|cv>.<input()|output()>`; per instance:
   `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `move`)
   and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading events), `instance.on`, `param.on('change')`,
-  `patchParam.on('change')`, stable objects (`plugins.get`, `alive`) and a `{ source }` option on every write (phase 1 of
-  `docs/plans/2026-10-modui-client-events.md`; connection state, snapshots and device state are planned).
+  `patchParam.on('change')`, stable objects (`plugins.get`, `alive`), a `{ source }` option on every write, and the connection
+  (`client.state`, `client.on('state' | 'error')`, optional `reconnect`) (phases 1 and 2 of
+  `docs/plans/2026-10-modui-client-events.md`; snapshots for UI frameworks and device state are planned).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -93,6 +94,10 @@ own for the client's sake.
   the same sequence as the classic UI (`html/js/desktop.js`).
 - A socket opened by the client answers `ping` (`pong`) and `data_ready <n>` (echo). A socket shared through
   `options.webSocket` is only listened to.
+- Connection: `EventChannel` owns the state machine (`idle`, `connecting`, `open`, `reconnecting`, `closed`) and the optional
+  reconnection (own socket only, opt-in). Each new own socket empties `GraphModel` (`clear()`, hardware ports included) through
+  `events.onNewSocket()` and the replay rebuilds it and ends with `loaded`; the first `connect()` is never retried, a shared socket
+  is never reopened. Timers and `Math.random` are used directly, so tests use `vi.useFakeTimers()`.
 - Notifications: `GraphModel.apply()` reports what a frame changed (`GraphChange`); `PedalboardStore` builds the plugin objects
   (stable per instance path) and emits on one `Emitter`. A write that the backend does not echo (`param_set`, `patch_set`,
   `plugin_pos`) is applied to the model with `GraphState.applyLocal()`, so it emits like a frame; a write confirmed by a frame

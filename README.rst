@@ -122,6 +122,9 @@ Usage in the page (or in the browser console), where it is available as ``window
     plugin.params.get('gain').on('change', ({ value }) => knob.set(value), { ignoreSource: knob });     // follows others, not its own gesture
     knob.onDrag((value) => plugin.params.get('gain').setValue(value, { source: knob }));
 
+    // Connection state; reconnect by itself with ``new ModUiClient({ reconnect: true })``
+    client.on('state', ({ state, reason }) => banner.hidden = state === 'open');   // idle, connecting, open, reconnecting, closed
+
 From another origin or from Node, pass ``new ModUiClient({ baseUrl: 'http://modduo.local' })``.
 The developer guide, with architecture, class and sequence diagrams, is ``docs/modui-client.md``.
 Every public symbol is documented in the sources (TSDoc); the current scope (pedalboards) and the planned API

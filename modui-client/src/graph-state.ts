@@ -73,6 +73,13 @@ export class GraphModel {
   readonly hardware = new Map<string, ModelHardwarePort>();
   connections: ModelConnection[] = [];
 
+  /** Forgets everything, the pedalboard's own ports included: a new socket starts a new state replay that announces them again. */
+  clear(): void {
+    this.plugins.clear();
+    this.hardware.clear();
+    this.connections = [];
+  }
+
   /** Applies one WebSocket message and reports what changed; unrelated commands change nothing. */
   apply(command: string, args: string): GraphChange[] {
     const parts = args.split(' ');
@@ -250,6 +257,8 @@ export interface ChangeSink {
   changes(changes: GraphChange[], local?: { source: unknown }): void;
   /** The model was replaced by a snapshot read through a second socket: everything has to be rebuilt. */
   reset(): void;
+  /** A new socket of the client starts a state replay: the model was emptied, everything is rebuilt as the replay arrives. */
+  restart(): void;
   /** Resolves when everything that is still being prepared (plugin descriptions) is done. */
   settled(): Promise<void>;
 }
@@ -283,6 +292,12 @@ export class GraphState {
         }
       });
     }
+    // A new own socket (the first one, or a reconnection) receives the whole state again: start from nothing, so that what
+    // disappeared while the client was away (plugins, pedalboard ports) does not stay.
+    events.onNewSocket(() => {
+      this.model.clear();
+      this.sink?.restart();
+    });
   }
 
   /** Connects the object that is told what changed. Called once, by the store. */

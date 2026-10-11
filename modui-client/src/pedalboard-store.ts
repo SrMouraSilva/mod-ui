@@ -181,6 +181,11 @@ export class PedalboardStore implements ChangeSink {
     this.changes([{ type: 'loading', empty: false, modified: false }, { type: 'loaded', snapshotId: 0 }]);
   }
 
+  /** A new socket starts the state replay: the same as the start of a load (the replay ends with `loaded`). */
+  restart(): void {
+    this.changes([{ type: 'loading', empty: false, modified: false }]);
+  }
+
   // ---- handling -----------------------------------------------------------------------------------------------------
 
   private metaOf(change: GraphChange, local?: { source: unknown }): EventMeta {
@@ -227,8 +232,11 @@ export class PedalboardStore implements ChangeSink {
   private handle(change: GraphChange, meta: EventMeta): void | Promise<void> {
     switch (change.type) {
       case 'loading':
+        // A new socket announces the start of its replay itself and the replay brings `loading_start` again: one `loading` is enough.
+        if (!this.loading) {
+          this.bus.emit('loading', { empty: change.empty, modified: change.modified, ...meta });
+        }
         this.loading = true;
-        this.bus.emit('loading', { empty: change.empty, modified: change.modified, ...meta });
         this.killAll('reloaded', meta);
         return;
       case 'cleared':
