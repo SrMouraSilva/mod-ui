@@ -13,6 +13,7 @@
 import { Emitter, type EventMeta, type ListenOptions, type Unsubscribe } from './emitter';
 import type { ChangeSink, GraphChange, GraphState, ModelHardwarePort, ModelPlugin } from './graph-state';
 import type { PluginsApi } from './plugins';
+import { SnapshotStore, type Schedule } from './snapshot';
 import type { PedalboardConnection, Port, PluginInstance } from './pedalboard-graph';
 import type { PluginRemovedReason, StoreEvents } from './pedalboard-events';
 import type { PluginInfo } from './types';
@@ -43,6 +44,8 @@ export interface ObjectFactory {
 export class PedalboardStore implements ChangeSink {
   /** Every event of the pedalboard and of its plugins. */
   readonly bus = new Emitter<StoreEvents>();
+  /** The immutable snapshots of the pedalboard, for UI frameworks. */
+  readonly snapshots: SnapshotStore;
 
   private readonly instances = new Map<string, PluginInstance>();
   private readonly listeners = new Map<PluginInstance, Set<Unsubscribe>>();
@@ -57,7 +60,9 @@ export class PedalboardStore implements ChangeSink {
     private readonly state: GraphState,
     private readonly plugins: PluginsApi,
     private readonly factory: ObjectFactory,
+    schedule: () => Schedule,
   ) {
+    this.snapshots = new SnapshotStore(() => state.peek(), schedule);
     state.setSink(this);
   }
 
@@ -230,6 +235,10 @@ export class PedalboardStore implements ChangeSink {
   }
 
   private handle(change: GraphChange, meta: EventMeta): void | Promise<void> {
+    // `loaded` is noted when it is announced, after the plugins are built; the others as they are handled, in the order of the frames
+    if (change.type !== 'loaded') {
+      this.snapshots.note(change);
+    }
     switch (change.type) {
       case 'loading':
         // A new socket announces the start of its replay itself and the replay brings `loading_start` again: one `loading` is enough.
@@ -297,6 +306,13 @@ export class PedalboardStore implements ChangeSink {
         }
         return;
       }
+      case 'preset': {
+        const plugin = this.loading ? undefined : this.instances.get(change.instance);
+        if (plugin) {
+          this.bus.emit('preset', { plugin, preset: change.preset, previous: change.previous, ...meta });
+        }
+        return;
+      }
       case 'patch': {
         const plugin = this.loading ? undefined : this.instances.get(change.instance);
         if (plugin) {
@@ -344,6 +360,7 @@ export class PedalboardStore implements ChangeSink {
         }
       }
       this.loading = false;
+      this.snapshots.note({ type: 'loaded', snapshotId });
       this.bus.emit('loaded', { snapshotId, ...meta });
     };
     const missing = Array.from(new Set(Array.from(this.state.peek().plugins.values()).map((model) => model.uri))).filter(

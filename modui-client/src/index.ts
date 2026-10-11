@@ -38,6 +38,11 @@
  * | `pedalboard-graph.ts` | {@link PluginInstance}, {@link Port}, {@link PedalboardConnection}, and the internal engine |
  * | `patch-params.ts` | {@link PatchParam}, {@link PluginPatchParams} (`instance.patchParams`) — strings, paths, booleans, ... |
  * | `graph-state.ts` | internal WebSocket-fed model of the running graph |
+ * | `pedalboard-store.ts` | internal: the plugin objects and the events about the running pedalboard |
+ * | `pedalboard-events.ts` | payloads of `currentPedalboard.on(...)`, `instance.on(...)`, `param.on(...)` |
+ * | `snapshot.ts` | {@link PedalboardSnapshot} — immutable state for UI frameworks (`getSnapshot()`, `subscribe()`) |
+ * | `device-state.ts` | {@link DeviceEvents} — `client.device.on('stats' ...)`, transport, snapshots |
+ * | `emitter.ts` | internal typed emitter, `ListenOptions` (`signal`, `ignoreSource`, `ignoreLocal`) |
  * | `pedalboard-images.ts` | {@link PedalboardImages} (`reference.images`), {@link ImageStatus} — screenshot and thumbnail |
  * | `events.ts` | {@link EventChannel} (`client.events`) — the main WebSocket |
  * | `http.ts` | `HttpTransport` — internal `fetch` wrapper |
@@ -65,6 +70,16 @@ export { ModUiClient } from './client';
 export type { ClientEvents, ModUiClientOptions } from './client';
 export { CurrentPedalboard } from './current-pedalboard';
 export { Device } from './device';
+export type { ConnectionSnapshot, PedalboardSnapshot, PluginSnapshot, PortSnapshot, Schedule } from './snapshot';
+export type {
+  BufferSizeEvent,
+  DeviceEvents,
+  SnapshotEvent,
+  StatsEvent,
+  SysStatsEvent,
+  TransportEvent,
+  TrueBypassEvent,
+} from './device-state';
 export { ModUiError, ModUiHttpError, ModUiTimeoutError } from './errors';
 export type { EventMeta, ListenOptions, Origin, Unsubscribe } from './emitter';
 export { EventChannel } from './events';

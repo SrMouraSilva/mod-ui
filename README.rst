@@ -122,6 +122,11 @@ Usage in the page (or in the browser console), where it is available as ``window
     plugin.params.get('gain').on('change', ({ value }) => knob.set(value), { ignoreSource: knob });     // follows others, not its own gesture
     knob.onDrag((value) => plugin.params.get('gain').setValue(value, { source: knob }));
 
+    // UI frameworks: one immutable snapshot of the pedalboard, notified at most once per animation frame
+    const snapshot = useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot);   // React; also pedalboard.subscribe(() => render(pedalboard.getSnapshot()))
+
+    // What the device reports: client.device.on('stats' | 'sysStats' | 'transport' | 'bufferSize' | 'trueBypass' | 'snapshot', ...), client.device.stats, plugin.preset
+
     // Connection state; reconnect by itself with ``new ModUiClient({ reconnect: true })``
     client.on('state', ({ state, reason }) => banner.hidden = state === 'open');   // idle, connecting, open, reconnecting, closed
 

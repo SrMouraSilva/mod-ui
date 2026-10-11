@@ -1,6 +1,6 @@
 # Plan: `ModUiClient` – proactive updates (typed events, connection lifecycle, framework bindings)
 
-Status: **phase 1 implemented** (2026-10-10); phases 2–4 approved, not implemented (design closed 2026-10-10; all open questions decided). Builds on `2026-10-modui-client-pedalboard.md` (`EventChannel`, `Device`),
+Status: **phases 1 to 4 implemented** (2026-10-10) (design closed 2026-10-10; all open questions decided). Builds on `2026-10-modui-client-pedalboard.md` (`EventChannel`, `Device`),
 `2026-10-modui-client-pedalboard-graph.md` (`GraphState`, `PluginInstance`, `Param`) and
 `2026-10-modui-client-patch-params.md` (`PatchParam`). It adds a notification layer on top of them; it redefines none of
 their operations.
@@ -394,6 +394,53 @@ Differences from the design above, to keep the plan honest:
 - Behaviour change worth a line in the release notes: an object kept from before a reload no longer follows the new pedalboard (it is
   `alive === false`); read `plugins.list()` again on `loaded`. One test of `patch-params.test.ts` documented the old behaviour and was changed.
 
+## Implementation notes: phase 2 (2026-10-10)
+- Files: `src/events.ts` (`ConnectionState`, `StateReason`, `StateEvent`, `ReconnectOptions`; state machine, `onState`, `onNewSocket`,
+  retry timer, `connect()` joining a reconnection), `src/client.ts` (`reconnect` option, `state`, `on`, `once`, `ClientEvents`,
+  forwarding of `error`), `src/graph-state.ts` (`GraphModel.clear()`, restart on each new own socket, `ChangeSink.restart()`),
+  `src/pedalboard-store.ts` (`restart()`, one `loading` per bracket). Tests: `test/connection-state.test.ts` (22, fake timers).
+- Delay of attempt `n`: `min(maxDelayMs, minDelayMs * factor^n) * (1 + jitter * (2r - 1))`, `r = Math.random()`. It never gives up; `close()`
+  stops it. Only a connection that was `open` and got lost is retried; the first `connect()` is not (it rejects, the state is `closed`).
+- Every new own socket, the first included, calls `GraphModel.clear()` and the store's `restart()` (a `loading`); the real replay's own
+  `loading_start` does not produce a second `loading`. So the pedalboard's own ports and plugins that vanished do not stay, the objects
+  of before die with `reason: 'reloaded'`, and `loaded` fires when the replay ends.
+- `stop` only sets the reason: the state changes at the close that follows it (the backend closes the sockets right after).
+- `connect()` while `reconnecting` joins the attempts and fails with `ModUiTimeoutError` after `connectTimeoutMs`; the attempts continue.
+  `close()` rejects such callers with `ModUiError('Client closed')`.
+- `client.on('error')` forwards `currentPedalboard.on('error')`; both stay.
+
+## Implementation notes: phases 3 and 4 (2026-10-10)
+Phase 3 (snapshots)
+- Files: `src/snapshot.ts` (`SnapshotStore`, `PedalboardSnapshot`, `PluginSnapshot`, `PortSnapshot`, `ConnectionSnapshot`, `Schedule`,
+  `defaultSchedule`), `src/pedalboard-store.ts` (`snapshots`, `note()` calls), `src/current-pedalboard.ts` (`getSnapshot`, `subscribe`, arrow
+  properties so they work with `useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot)`), `src/client.ts` (`schedule` option),
+  `src/device.ts` and `src/pedalboard-graph.ts` (they pass it down). Tests: `test/snapshot.test.ts` (16).
+- The snapshot is built lazily from the model: `note(change)` (called in frame order from `PedalboardStore.handle()`) marks what is out of
+  date, `current()` rebuilds only that. Untouched plugin objects, the plugin `values` / `patches` maps (compared by content), the
+  connection list and the port list keep their identity. Everything is frozen; maps are null-prototype objects (a LV2 symbol such as
+  `__proto__` is a valid C identifier).
+- Loading: `loading` publishes `{ loading: true, ready: false, plugins: [], connections: [] }` (ports keep their last value) and nothing partial
+  after it; `loaded` rebuilds everything and is noted when it is announced, after the plugins are built.
+- Notifications use `schedule` (default `requestAnimationFrame` when it exists at call time, else `queueMicrotask`), once per tick; a
+  notification is scheduled only when a change really made something out of date. Listeners that throw are isolated like handlers.
+- `PluginSnapshot` also has `preset` (phase 4).
+
+Phase 4 (device state, presets)
+- Files: `src/device-state.ts` (`DeviceState`, payload types, `DeviceEvents`), `src/device.ts` (`on`, `once`, getters `stats`, `sysStats`,
+  `transport`, `bufferSize`, `trueBypass`, `snapshot`), `src/graph-state.ts` (`preset` frame, `ModelPlugin.preset`, `GraphChange` `preset`),
+  `src/pedalboard-store.ts`, `src/pedalboard-events.ts` (`PresetEvent`), `src/pedalboard-graph.ts` (`PluginInstance.preset`,
+  `instance.on('preset')`). Tests: `test/device-state.test.ts` (11).
+- `DeviceState` registers its handlers when the device is created, so the state replay (`sys_stats`, `stats`, `transport`, `truebypass`)
+  seeds the last values. `stats` and `sysStats` are delivered every time; the other four only when the value changes. Values are kept while
+  the connection is down.
+- `sysStats`: `??` and unparsable memory become `null`; frequency and temperature `0` become `null` ("not available").
+- A `transport` frame without the sync mode (one of the backend's variants) keeps the previous mode (`'none'` at first).
+- `pedal_snapshot <index> <name...>`: the name is the rest of the frame. The event and getter are called `snapshot`, as planned; the
+  TSDoc says they are not `getSnapshot()` (the state snapshot of phase 3).
+- Not done (still "Later"): `output_set` meters, addressings (`hw_map`, `midi_map`, `cv_map`, `act_*`, `hw_*`), `log` / `progress`, the
+  pedalboard `size` frame, the async iterator, and any write for transport / true bypass / buffer size (their endpoints are in the
+  "recommended" list of `docs/modui-client/implementation-progress.md`, with the event already in place for their confirmation).
+
 ## Revisions
 - **2026-10-08** — First draft, from the analysis of what `modui-client` offers for proactive updates.
 - **2026-10-08** — Open question 1 decided by the author: events carry objects, the client keeps the full state (new
@@ -405,3 +452,5 @@ Differences from the design above, to keep the plan honest:
 - **2026-10-10** — Questions 4 and 5 decided (recommendations accepted). All questions are closed; status changed to approved.
 - **2026-10-10** — Phase 1 implemented (emitter, `GraphChange`, `PedalboardStore`, stable objects, `plugins.get`, events on the pedalboard,
   plugin, `Param` and `PatchParam`, `source` on writes); implementation notes and differences added.
+- **2026-10-10** — Phase 2 implemented (connection state, opt-in reconnection, clean model after a reconnection, `client.on`); implementation notes added.
+- **2026-10-10** — Phases 3 and 4 implemented (snapshots with batched notifications, device state, plugin presets); notes added. All planned phases are done.

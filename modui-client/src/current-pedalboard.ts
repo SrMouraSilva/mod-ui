@@ -8,6 +8,7 @@
 
 import type { ListenOptions, Unsubscribe } from './emitter';
 import { ModUiError } from './errors';
+import type { PedalboardSnapshot } from './snapshot';
 import type { HttpTransport } from './http';
 import { waitForPendingImages } from './pedalboard-images';
 import { PedalboardConnections, PedalboardPorts } from './pedalboard-connections';
@@ -177,6 +178,32 @@ export class CurrentPedalboard {
   ): Unsubscribe {
     return this.graph.store.bus.on(event, handler, options);
   }
+
+  /**
+   * The state of the pedalboard as one immutable, JSON-serializable object (plugins with their values, connections, the pedalboard's
+   * own ports, `loading` / `ready`). Synchronous, and the **same object until something changes**; what did not change keeps its
+   * identity, so frameworks skip it. Meant for `useSyncExternalStore`-style bindings; see {@link CurrentPedalboard.subscribe}.
+   *
+   * It is an arrow property, so it can be passed around without `this`: `useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot)`.
+   * It is empty and `ready: false` until the first state replay ends, and during a load.
+   * @example
+   * const { plugins, connections, ready } = client.device.currentPedalboard.getSnapshot();
+   */
+  readonly getSnapshot = (): PedalboardSnapshot => this.graph.store.snapshots.current();
+
+  /**
+   * Calls `listener` (no arguments) after the snapshot changed. Notifications are **batched**: however many frames arrive, the
+   * listener runs once per animation frame in a browser (once per microtask elsewhere; see `ModUiClientOptions.schedule`), and
+   * {@link CurrentPedalboard.getSnapshot} then returns the latest state. Use the events (`on`) instead when you must see every change.
+   * An arrow property, like `getSnapshot`. A listener that throws does not affect the others (rethrown asynchronously).
+   * @returns A function that removes the subscription.
+   * @example
+   * // React
+   * const snapshot = useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot);
+   * // anything else
+   * const off = pedalboard.subscribe(() => render(pedalboard.getSnapshot()));
+   */
+  readonly subscribe = (listener: () => void): Unsubscribe => this.graph.store.snapshots.subscribe(listener);
 
   /** Like {@link CurrentPedalboard.on}, but the handler runs once. */
   once<K extends keyof PedalboardEvents>(

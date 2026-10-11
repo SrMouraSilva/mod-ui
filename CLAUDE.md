@@ -19,8 +19,10 @@ mod-ui is the web interface of MOD audio devices.
   `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `move`)
   and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading events), `instance.on`, `param.on('change')`,
   `patchParam.on('change')`, stable objects (`plugins.get`, `alive`), a `{ source }` option on every write, and the connection
-  (`client.state`, `client.on('state' | 'error')`, optional `reconnect`) (phases 1 and 2 of
-  `docs/plans/2026-10-modui-client-events.md`; snapshots for UI frameworks and device state are planned).
+  (`client.state`, `client.on('state' | 'error')`, optional `reconnect`), immutable snapshots for UI frameworks
+  (`currentPedalboard.getSnapshot()` / `subscribe()`, batched per animation frame) and the device's own reports
+  (`device.on('stats' | 'sysStats' | 'transport' | 'bufferSize' | 'trueBypass' | 'snapshot')`, `instance.preset`)
+  (`docs/plans/2026-10-modui-client-events.md`, phases 1 to 4; meters and addressings are not covered).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -74,7 +76,7 @@ own for the client's sake.
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `graph-state.ts`, `emitter.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
   `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
@@ -98,6 +100,10 @@ own for the client's sake.
   reconnection (own socket only, opt-in). Each new own socket empties `GraphModel` (`clear()`, hardware ports included) through
   `events.onNewSocket()` and the replay rebuilds it and ends with `loaded`; the first `connect()` is never retried, a shared socket
   is never reopened. Timers and `Math.random` are used directly, so tests use `vi.useFakeTimers()`.
+- Snapshots: `SnapshotStore` (`snapshot.ts`) is fed by `PedalboardStore.handle()` with `note(change)` and rebuilds only what is out of date when
+  `getSnapshot()` is called; it keeps untouched plugin objects and lists (structural sharing). Listeners are notified through
+  `ModUiClientOptions.schedule` (default `requestAnimationFrame`, else a microtask), looked up when used so tests can stub it. `DeviceState`
+  (`device-state.ts`) listens to the raw frames from the moment the device is created, so the replay seeds the last values.
 - Notifications: `GraphModel.apply()` reports what a frame changed (`GraphChange`); `PedalboardStore` builds the plugin objects
   (stable per instance path) and emits on one `Emitter`. A write that the backend does not echo (`param_set`, `patch_set`,
   `plugin_pos`) is applied to the model with `GraphState.applyLocal()`, so it emits like a frame; a write confirmed by a frame

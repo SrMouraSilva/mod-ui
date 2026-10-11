@@ -29,6 +29,8 @@ export interface ModelPlugin {
    * `PatchParam.setValue()`. Parsed by the parameter's type when read.
    */
   patches: Map<string, string>;
+  /** URI of the current preset, from `preset` frames; `null` when none. */
+  preset: string | null;
 }
 
 /** A port of the pedalboard itself (physical, virtual or MIDI), from `add_hw_port`. */
@@ -65,7 +67,8 @@ export type GraphChange =
   | { type: 'param'; instance: string; symbol: string; value: number; previous: number | undefined }
   | { type: 'active'; instance: string; active: boolean }
   | { type: 'moved'; instance: string; x: number; y: number }
-  | { type: 'patch'; instance: string; uri: string };
+  | { type: 'patch'; instance: string; uri: string }
+  | { type: 'preset'; instance: string; preset: string | null; previous: string | null };
 
 /** The graph, updated by {@link GraphModel.apply}. */
 export class GraphModel {
@@ -123,6 +126,7 @@ export class GraphModel {
             bypassed: bypassed === '1',
             values: new Map(),
             patches: new Map(),
+            preset: null,
           });
           return [{ type: 'plugin-added', instance }];
         }
@@ -194,6 +198,19 @@ export class GraphModel {
         }
         return [];
       }
+      case 'preset': {
+        // <instance> <presetUri> or "null" for none
+        const plugin = this.plugins.get(parts[0]);
+        if (plugin) {
+          const preset = parts[1] === undefined || parts[1] === '' || parts[1] === 'null' ? null : parts[1];
+          const previous = plugin.preset;
+          plugin.preset = preset;
+          if (previous !== preset) {
+            return [{ type: 'preset', instance: plugin.instance, preset, previous }];
+          }
+        }
+        return [];
+      }
       case 'patch_set': {
         // <instance> <writable:0|1> <uri> <type:char> <value...>; the value is the rest of the line and may hold spaces.
         const [instance, , uri, , ...value] = args.split(' ');
@@ -249,6 +266,7 @@ const GRAPH_COMMANDS = [
   'plugin_pos',
   'param_set',
   'patch_set',
+  'preset',
 ];
 
 /** Where {@link GraphState} reports what its model changed (implemented by `PedalboardStore`). */

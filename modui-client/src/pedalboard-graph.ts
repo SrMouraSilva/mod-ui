@@ -15,6 +15,7 @@ import type { GraphChange, GraphModel, GraphState, ModelPlugin } from './graph-s
 import { PluginPatchParams, patchFrameValue } from './patch-params';
 import type { ParamEvent, PluginEvents, StoreEvents } from './pedalboard-events';
 import { PedalboardStore } from './pedalboard-store';
+import type { Schedule } from './snapshot';
 import type { PluginsApi } from './plugins';
 import type {
   PluginInfo,
@@ -295,6 +296,7 @@ export class PluginInstance {
    * | `active` | bypassed or switched on | `{ plugin, active }` |
    * | `moved` | the block moved in the canvas | `{ plugin, x, y }` |
    * | `patch` | a patch parameter changed | `{ plugin, uri, param, value }` |
+   * | `preset` | the current preset changed | `{ plugin, preset, previous }` (`null`: none) |
    * | `removed` | the plugin is gone (removed, reset, reloaded) | `{ plugin, reason }` |
    *
    * Every payload also has `origin` (`'local'` for a change made through this client, `'remote'` otherwise) and `source`.
@@ -334,6 +336,14 @@ export class PluginInstance {
   /** @internal The live state of this plugin (the last known one when it is gone). */
   liveModel(): ModelPlugin {
     return (this.alive ? this.ops.live(this.instance) : undefined) ?? this.last;
+  }
+
+  /**
+   * URI of the current preset of the plugin (the list is in `info.presets`), `null` when none. Live, like {@link PluginInstance.x}:
+   * it follows the classic UI, the HMI and other clients. Changes are announced by `instance.on('preset')`.
+   */
+  get preset(): string | null {
+    return this.liveModel().preset;
   }
 
   /** Horizontal position of the block in the canvas. */
@@ -544,13 +554,14 @@ export class PedalboardGraph {
     private readonly plugins: PluginsApi,
     private readonly enqueue: Enqueue,
     private readonly confirmTimeoutMs: number,
+    schedule: () => Schedule,
   ) {
     this.store = new PedalboardStore(state, plugins, {
       instance: (model, info) => new PluginInstance(model, info, this.ops),
       hardwarePort: (port) =>
         new Port(port.id, port.id.slice(port.id.lastIndexOf('/') + 1), port.title, port.type, port.direction, null),
       connection: (from, to) => new PedalboardConnection(from, to),
-    });
+    }, schedule);
   }
 
   /** @internal Tags the changes `match` accepts as made by this client until the returned function is called. */

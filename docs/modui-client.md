@@ -261,6 +261,24 @@ Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of
   getters (`param.value`, `plugin.x`, `list()`) already show the new state. A handler that throws does not stop the others
   (the error is rethrown asynchronously, so the console shows it). `on()` returns the unsubscribe function; options also take an
   `AbortSignal` (`signal`), and there is `once()`.
+- **For a UI framework: one snapshot, one notification per frame.** `getSnapshot()` returns the whole state as plain, frozen,
+  JSON-serializable data, the same object until something changes, and what did not change keeps its identity (an untouched plugin is
+  the same object, an unchanged list the same array). `subscribe(listener)` calls you at most once per animation frame, however many
+  frames arrived (a knob drag is dozens of messages), and `getSnapshot()` then has the latest state. Both are arrow properties:
+  ```js
+  const pedalboard = client.device.currentPedalboard;
+  // React
+  const snapshot = useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot);
+  snapshot.plugins.map((p) => <PluginView key={p.instance} plugin={p} />);   // p keeps its identity until it changes
+  // Vue / Svelte / Lit / vanilla
+  const off = pedalboard.subscribe(() => render(pedalboard.getSnapshot()));
+  ```
+  `snapshot.plugins[i].values` has the control values the client has seen; a port that is missing is at its default, which the
+  stable `Param` object (`plugin.params.get(symbol).default`, range, name) tells you. While a pedalboard loads the snapshot has
+  `loading: true`, `ready: false` and empty `plugins` / `connections`. Use the events when you must see every change; use the
+  snapshot when you only need to draw the latest state. The notification scheduler is `requestAnimationFrame` in a browser (so a
+  hidden tab is not notified until it is shown) and a microtask elsewhere; pass `schedule` in the options to change it
+  (`new ModUiClient({ schedule: (callback) => setTimeout(callback, 16) })`).
 - A `plugin:added` for a plugin whose description is unknown waits for one `POST /effect/bulk/`; the events behind it wait
   too, so the order is kept. If that request fails you get an `error` event (`context: 'plugin-description'`) and the plugin
   exists with `info === null`; `plugins.list()` / `plugins.get()` try again and fill it in place.
@@ -291,7 +309,26 @@ client.on('error', ({ error, context }) => console.warn(context, error));   // b
 - A socket you pass as `webSocket` (the classic UI's `window.ws`) is never reopened by the client: when it closes the state is
   `closed`, and whoever owns the socket creates a new `ModUiClient` with the new one.
 
-### 1.14 Listen to raw WebSocket messages
+### 1.14 What the device reports: load, transport, snapshots, presets
+
+```js
+const { device } = client;
+device.on('stats', ({ cpuLoad, xruns }) => meter.show(cpuLoad, xruns));          // every second
+device.on('sysStats', ({ memLoad, cpuFreqKhz, cpuTempMilli }) => ...);            // null = not available on this device
+device.on('transport', ({ rolling, beatsPerBar, bpm, syncMode }) => ...);         // when it changes
+device.on('bufferSize', ({ frames }) => ...);
+device.on('trueBypass', ({ left, right }) => ...);
+device.on('snapshot', ({ index, name }) => ...);        // the pedalboard's current snapshot (not getSnapshot())
+
+device.stats;       // last value, seeded by the state replay: a late subscriber reads it (null until the device reported it)
+plugin.preset;      // URI of the plugin's current preset, or null; plugin.on('preset', ({ preset, previous }) => ...)
+```
+
+`stats` and `sysStats` are periodic and arrive every time; the rest are states and arrive when they change. The last values are
+kept while the connection is down (they are the last known: `client.state` says whether they are current). Meters (`output_set`)
+and addressings are not covered.
+
+### 1.15 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -304,7 +341,7 @@ await client.connect();
 off();
 ```
 
-### 1.15 Notes
+### 1.16 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -400,6 +437,8 @@ modui-client/
 │   ├── pedalboard-store.ts   # internal: the plugin objects of the running pedalboard + the events about them
 │   ├── pedalboard-events.ts  # event payloads and maps (PedalboardEvents, PluginEvents, ...)
 │   ├── emitter.ts       # internal: typed Emitter (ordered, isolated), ListenOptions, Origin
+│   ├── snapshot.ts      # SnapshotStore (internal), PedalboardSnapshot and friends, defaultSchedule
+│   ├── device-state.ts  # DeviceState (internal), DeviceEvents: stats, transport, ... (client.device.on)
 │   ├── events.ts        # EventChannel (connection state, reconnection), MessageHandler, Waiting, ConnectionState, StateEvent, ReconnectOptions
 │   ├── http.ts          # HttpTransport (internal)
 │   ├── errors.ts        # ModUiError, ModUiHttpError, ModUiTimeoutError
@@ -418,6 +457,8 @@ modui-client/
     ├── emitter.test.ts
     ├── graph-events.test.ts
     ├── connection-state.test.ts
+    ├── snapshot.test.ts
+    ├── device-state.test.ts
     └── events.test.ts
 ```
 
@@ -439,6 +480,8 @@ flowchart TD
   store["pedalboard-store.ts"]
   pevents["pedalboard-events.ts"]
   emitter["emitter.ts"]
+  snap["snapshot.ts"]
+  dstate["device-state.ts"]
   events["events.ts"]
   http["http.ts"]
   errors["errors.ts"]
@@ -453,7 +496,10 @@ flowchart TD
   images --> http & errors
   plugins --> errors
   pgraph --> errors & store
-  store --> emitter
+  store --> emitter & snap
+  snap --> emitter
+  device --> dstate
+  dstate --> emitter
   gstate --> errors
   events --> errors
   http --> errors
@@ -463,6 +509,9 @@ flowchart TD
   pconn -.-> pgraph
   pgraph -.-> http & events & gstate & plugins & pevents
   store -.-> gstate & plugins & pgraph & pevents
+  snap -.-> gstate
+  dstate -.-> events
+  client -.-> snap
   pevents -.-> emitter & pgraph
   gstate -.-> events
   plugins -.-> http
@@ -521,9 +570,17 @@ classDiagram
     -queue: Promise
     -defaultTimeoutMs: number
     +currentPedalboard: CurrentPedalboard
+    +stats: StatsEvent | null
+    +sysStats: SysStatsEvent | null
+    +transport: TransportEvent | null
+    +bufferSize: BufferSizeEvent | null
+    +trueBypass: TrueBypassEvent | null
+    +snapshot: SnapshotEvent | null
     +load(target: PedalboardTarget, options?: LoadOptions) Promise~LoadResult~
     +loadDefault(options?: LoadOptions) Promise~LoadResult~
-    +reset() Promise~void~
+    +reset(options?: WriteOptions) Promise~void~
+    +on(event, handler, options?) Unsubscribe
+    +once(event, handler, options?) Unsubscribe
   }
 
   class PedalboardImages {
@@ -552,6 +609,8 @@ classDiagram
     +saveAs(suggestedTitle: string) Promise~PedalboardReference~
     +on(event, handler, options?) Unsubscribe
     +once(event, handler, options?) Unsubscribe
+    +getSnapshot() PedalboardSnapshot
+    +subscribe(listener) Unsubscribe
   }
 
   class PluginsApi {
@@ -591,6 +650,7 @@ classDiagram
     +y: number
     +info: PluginInfo | null
     +alive: boolean
+    +preset: string | null
     +ports: PortGroups
     +params: PluginParams
     +patchParams: PluginPatchParams
@@ -655,9 +715,22 @@ classDiagram
   class PedalboardGraph {
     <<internal>>
   }
+  class SnapshotStore {
+    <<internal>>
+    +current() PedalboardSnapshot
+    +subscribe(listener) Unsubscribe
+    +note(change)
+  }
+  class DeviceState {
+    <<internal>>
+    +stats: StatsEvent | null
+    +transport: TransportEvent | null
+    +on(event, handler, options?) Unsubscribe
+  }
   class PedalboardStore {
     <<internal>>
     +bus: Emitter
+    +snapshots: SnapshotStore
     +instance(path) PluginInstance | undefined
     +settled() Promise~void~
     +expect(match, source) release
@@ -727,6 +800,7 @@ classDiagram
     +connectTimeoutMs?: number
     +graphTimeoutMs?: number
     +reconnect?: boolean | ReconnectOptions
+    +schedule?: Schedule
   }
 
   ModUiClient *-- PedalboardsApi
@@ -746,6 +820,10 @@ classDiagram
   PedalboardGraph *-- PedalboardStore : store
   PedalboardStore --> GraphState : changes(), settled()
   PedalboardStore *-- Emitter : bus
+  PedalboardStore *-- SnapshotStore : snapshots
+  CurrentPedalboard --> SnapshotStore : getSnapshot(), subscribe()
+  Device *-- DeviceState
+  DeviceState --> EventChannel : on(stats, transport, ...)
   PedalboardStore ..> PluginInstance : keeps one per plugin
   CurrentPedalboard --> PedalboardStore : on(), once()
   PluginInstance --> PedalboardStore : on(), alive
@@ -1194,6 +1272,11 @@ sequenceDiagram
   T-->>A: loaded (plugins built, read the state again)
 ```
 
+The `SnapshotStore` is fed by the same handling (`note(change)` marks what is out of date, in the order of the frames) and rebuilds
+only that when `getSnapshot()` is called; `subscribe()` listeners are called once per `schedule` tick. The device's own frames
+(`stats`, `transport`, `bufsize`, `truebypass`, `pedal_snapshot`) go straight from `EventChannel` to `DeviceState`, which keeps the
+last value of each and has its own `Emitter`.
+
 The `Emitter` delivers in order and never nested (an event caused by a handler is queued), isolates handlers (an error is
 rethrown with `queueMicrotask`) and applies `ignoreSource` / `ignoreLocal` / `signal`. Per-plugin subscriptions are filters
 on the same emitter, dropped after the plugin's `removed` event.
@@ -1279,7 +1362,7 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - Plugins and connections come from the WebSocket, not from an endpoint. Every new own socket (first connection or reconnection) starts from an empty model and rebuilds it from the state replay, so nothing that vanished in between stays. A socket shared through `options.webSocket` is never reopened by the client.
 - The first `connect()` is not retried by `reconnect` (it rejects and the state is `closed`); only a connection that was `open` and got lost is. Reconnection never gives up by itself: call `client.close()`. Calls that were waiting for a frame when the connection was lost fail with `ModUiError('WebSocket closed')` and are not retried (a write may have reached the backend).
 - `origin: 'local'` is best effort: a change is local when this client had a matching request in flight when the frame arrived. A pedalboard load or reset by someone else at the same moment cannot be told apart (same as the note on `device.load()`).
-- Events are delivered for the changes the model knows (plugins, connections, hardware ports, control values, bypass, position, patch parameters, loading). Meters (`output_set`), transport, statistics, presets, snapshots and addressings are not events yet (planned, phase 4); a one-notification-per-frame snapshot for UI frameworks is phase 3.
+- Events cover what the model knows (plugins, connections, the pedalboard's own ports, control values, bypass, position, patch parameters, presets, loading) and what the device reports (`stats`, `sysStats`, `transport`, `bufferSize`, `trueBypass`, `snapshot`). Meters (`output_set`), addressings (`hw_map`, `midi_map`, `cv_map`), `log` and `progress` frames are not events yet; the pedalboard's `size` frame is not exposed.
 - `setValue()`, `setActive()`, `toggle()` and `move()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
 - `PatchParam.setValue()` cannot confirm anything either (the sender of `patch_set` gets no frame). Only `"` is escaped on the way to mod-host, so a backslash in a string reaches the plugin as it is. Empty strings are refused by the client. Only parameters the host tracks (atom types Bool, Int, Long, Float, Double, String, Path, URI, with ranges) report values; vectors are not supported. Whether `refresh()` gets an answer depends on the plugin.
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.

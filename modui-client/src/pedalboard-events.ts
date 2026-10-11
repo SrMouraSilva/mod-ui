@@ -133,6 +133,15 @@ export interface PatchEvent extends EventMeta {
   value: PatchValue | undefined;
 }
 
+/**
+ * `instance.on('preset')`: the current preset of the plugin changed (`null`: none). The preset list is in `plugin.info.presets`.
+ */
+export interface PresetEvent extends EventMeta {
+  plugin: PluginInstance;
+  preset: string | null;
+  previous: string | null;
+}
+
 /** What `patchParam.on('change')` delivers: a {@link PatchEvent} of a known parameter. */
 export type PatchParamEvent = PatchEvent & { param: PatchParam };
 
@@ -142,6 +151,7 @@ export interface PluginEvents {
   active: ActiveEvent;
   moved: MovedEvent;
   patch: PatchEvent;
+  preset: PresetEvent;
   removed: PluginRemovedEvent;
 }
 
@@ -151,6 +161,7 @@ export interface StoreEvents extends PedalboardEvents {
   active: ActiveEvent;
   moved: MovedEvent;
   patch: PatchEvent;
+  preset: PresetEvent;
   /** Every death of an instance, whatever the reason; backs `instance.on('removed')`. */
   'instance:removed': PluginRemovedEvent;
 }

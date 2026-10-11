@@ -9,6 +9,7 @@
 import { Emitter, type ListenOptions, type Unsubscribe } from './emitter';
 import { Device } from './device';
 import { ModUiError } from './errors';
+import { defaultSchedule, type Schedule } from './snapshot';
 import { EventChannel, type ConnectionState, type ReconnectOptions, type StateEvent } from './events';
 import { HttpTransport } from './http';
 import type { ErrorEvent } from './pedalboard-events';
@@ -47,6 +48,12 @@ export interface ModUiClientOptions {
    * Default: off. See {@link ModUiClient.state}.
    */
   reconnect?: boolean | ReconnectOptions;
+  /**
+   * Runs the callback that notifies the subscribers of `currentPedalboard.subscribe()`, so that a burst of changes (a knob drag is
+   * dozens of WebSocket messages) costs one notification. Default: `requestAnimationFrame` in a browser, a microtask elsewhere.
+   * Node code can pass `(callback) => setTimeout(callback, 16)`, tests a function they call by hand.
+   */
+  schedule?: Schedule;
 }
 
 /** Events of {@link ModUiClient.on}. */
@@ -104,6 +111,7 @@ export class ModUiClient {
     this.pedalboards = new PedalboardsApi(http);
     this.device = new Device(http, this.events, this.pedalboards, new PluginsApi(http), options.loadTimeoutMs ?? 60000, {
       confirmTimeoutMs: options.graphTimeoutMs ?? 10000,
+      schedule: () => options.schedule ?? defaultSchedule,
       // Used when the socket is shared: its state replay has passed, so a short-lived own socket reads a new one.
       openSnapshotChannel: () => (factory ? new EventChannel(wsUrl, factory, undefined, connectTimeoutMs) : null),
     });

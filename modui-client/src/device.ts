@@ -7,6 +7,17 @@
  */
 
 import { CurrentPedalboard } from './current-pedalboard';
+import {
+  DeviceState,
+  type BufferSizeEvent,
+  type DeviceEvents,
+  type SnapshotEvent,
+  type StatsEvent,
+  type SysStatsEvent,
+  type TransportEvent,
+  type TrueBypassEvent,
+} from './device-state';
+import type { ListenOptions, Unsubscribe } from './emitter';
 import { ModUiError } from './errors';
 import type { EventChannel } from './events';
 import { GraphState } from './graph-state';
@@ -14,6 +25,7 @@ import type { HttpTransport } from './http';
 import { PedalboardGraph } from './pedalboard-graph';
 import type { PedalboardsApi } from './pedalboards';
 import type { PluginsApi } from './plugins';
+import type { Schedule } from './snapshot';
 import type { LoadOptions, LoadResult, PedalboardTarget, WriteOptions } from './types';
 
 /**
@@ -28,6 +40,7 @@ import type { LoadOptions, LoadResult, PedalboardTarget, WriteOptions } from './
 export class Device {
   private queue: Promise<unknown> = Promise.resolve();
   private readonly graph: PedalboardGraph;
+  private readonly deviceState: DeviceState;
 
   /** The pedalboard that is running now: find it, save it, edit its plugins and connections. */
   readonly currentPedalboard: CurrentPedalboard;
@@ -42,13 +55,74 @@ export class Device {
     private readonly pedalboards: PedalboardsApi,
     plugins: PluginsApi,
     private readonly defaultTimeoutMs: number,
-    graph: { confirmTimeoutMs: number; openSnapshotChannel: () => EventChannel | null },
+    graph: { confirmTimeoutMs: number; openSnapshotChannel: () => EventChannel | null; schedule: () => Schedule },
   ) {
     this.plugins = plugins;
+    this.deviceState = new DeviceState(events);
     const enqueue = <T>(task: () => Promise<T>) => this.enqueue(task);
     const state = new GraphState(events, graph.openSnapshotChannel);
-    this.graph = new PedalboardGraph(http, events, state, plugins, enqueue, graph.confirmTimeoutMs);
+    this.graph = new PedalboardGraph(http, events, state, plugins, enqueue, graph.confirmTimeoutMs, graph.schedule);
     this.currentPedalboard = new CurrentPedalboard(http, pedalboards, enqueue, this.graph);
+  }
+
+  /**
+   * Calls `handler` when the device reports something new about itself. Nothing is requested from the backend.
+   *
+   * | Event | When | Payload |
+   * |-------|------|---------|
+   * | `stats` | every second | `{ cpuLoad, xruns }` (DSP load in %, dropouts) |
+   * | `sysStats` | every few seconds | `{ memLoad, cpuFreqKhz, cpuTempMilli }` (`null`: not available) |
+   * | `transport` | the global transport changed | `{ rolling, beatsPerBar, bpm, syncMode }` |
+   * | `bufferSize` | the JACK buffer size changed | `{ frames }` |
+   * | `trueBypass` | the hardware true bypass changed | `{ left, right }` |
+   * | `snapshot` | the current snapshot of the pedalboard changed | `{ index, name }` |
+   *
+   * `stats` and `sysStats` are periodic and arrive every time; the others arrive when the value changes. The last value of each is
+   * kept and seeded by the state replay of a new connection, so a late subscriber reads it from {@link Device.stats} and its siblings
+   * (`null` until the device reported it). For the frames of a plugin see `instance.on(...)`.
+   * @param options `signal` (an `AbortSignal` that ends the subscription).
+   * @returns A function that removes the subscription.
+   * @example
+   * const off = client.device.on('stats', ({ cpuLoad, xruns }) => meter.show(cpuLoad, xruns));
+   * client.device.on('transport', ({ bpm, rolling }) => tempo.show(bpm, rolling));
+   */
+  on<K extends keyof DeviceEvents>(event: K, handler: (event: DeviceEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.deviceState.on(event, handler, options);
+  }
+
+  /** Like {@link Device.on}, but the handler runs once. */
+  once<K extends keyof DeviceEvents>(event: K, handler: (event: DeviceEvents[K]) => void, options?: ListenOptions): Unsubscribe {
+    return this.deviceState.once(event, handler, options);
+  }
+
+  /** Last `stats` reported (DSP load and xruns); `null` until the device reported one. Kept while the connection is down. */
+  get stats(): StatsEvent | null {
+    return this.deviceState.stats;
+  }
+
+  /** Last `sysStats` reported (memory, CPU frequency and temperature); `null` until reported. */
+  get sysStats(): SysStatsEvent | null {
+    return this.deviceState.sysStats;
+  }
+
+  /** Last known transport (rolling, beats per bar, tempo, sync mode); `null` until reported. */
+  get transport(): TransportEvent | null {
+    return this.deviceState.transport;
+  }
+
+  /** Last known JACK buffer size; `null` until the device reported one (it does so when it changes). */
+  get bufferSize(): BufferSizeEvent | null {
+    return this.deviceState.bufferSize;
+  }
+
+  /** Last known hardware true bypass; `null` until reported. */
+  get trueBypass(): TrueBypassEvent | null {
+    return this.deviceState.trueBypass;
+  }
+
+  /** The current snapshot of the pedalboard (index and name), as last announced; `null` until announced. */
+  get snapshot(): SnapshotEvent | null {
+    return this.deviceState.snapshot;
   }
 
   /**
