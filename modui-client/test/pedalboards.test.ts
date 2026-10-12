@@ -49,7 +49,7 @@ describe('PedalboardReference.info()', () => {
   });
 });
 
-describe('PedalboardReference.remove()', () => {
+describe('PedalboardReference.delete()', () => {
   const factorySummary = {
     ...summaries[1],
     factory: true,
@@ -63,7 +63,7 @@ describe('PedalboardReference.remove()', () => {
       'GET /pedalboard/remove/': true,
     });
     const [, board] = await client.pedalboards.list();
-    await expect(board.remove()).resolves.toBeUndefined();
+    await expect(board.delete()).resolves.toBeUndefined();
 
     expect(calls[1].method).toBe('GET');
     expect(calls[1].url).toBe(
@@ -74,22 +74,22 @@ describe('PedalboardReference.remove()', () => {
   it('refuses factory pedalboards without calling the backend', async () => {
     const { client, calls } = makeClient({ 'GET /pedalboard/list': [factorySummary] });
     const [factory] = await client.pedalboards.list();
-    await expect(factory.remove()).rejects.toThrow(/factory pedalboard/);
-    await expect(factory.remove()).rejects.toBeInstanceOf(ModUiError);
+    await expect(factory.delete()).rejects.toThrow(/factory pedalboard/);
+    await expect(factory.delete()).rejects.toBeInstanceOf(ModUiError);
     expect(calls).toHaveLength(1); // only the list
   });
 
   it('refuses the default pedalboard without calling the backend', async () => {
     const { client, calls } = makeClient({ 'GET /pedalboard/list': summaries });
     const [defaultBoard] = await client.pedalboards.list();
-    await expect(defaultBoard.remove()).rejects.toThrow(/default pedalboard/);
+    await expect(defaultBoard.delete()).rejects.toThrow(/default pedalboard/);
     expect(calls).toHaveLength(1);
   });
 
   it('throws when the backend answers false', async () => {
     const { client } = makeClient({ 'GET /pedalboard/list': summaries, 'GET /pedalboard/remove/': false });
     const [, board] = await client.pedalboards.list();
-    await expect(board.remove()).rejects.toThrow(/could not remove/);
+    await expect(board.delete()).rejects.toThrow(/could not delete/);
   });
 });
 

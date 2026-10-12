@@ -165,7 +165,7 @@ describe('getSnapshot()', () => {
 
     await gain.params.get('gain')!.setValue(12); // local
     expect(pedalboard.getSnapshot().plugins[0].values.gain).toBe(12);
-    await gain.move({ x: 1, y: 2 });
+    await gain.setPosition({ x: 1, y: 2 });
     expect([pedalboard.getSnapshot().plugins[0].x, pedalboard.getSnapshot().plugins[0].y]).toEqual([1, 2]);
   });
 

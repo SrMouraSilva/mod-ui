@@ -48,7 +48,7 @@ export class CurrentPedalboard {
   /** The inputs and outputs of the pedalboard itself, to connect plugins to. */
   readonly ports: PedalboardPorts;
   /**
-   * The snapshots of the pedalboard (saved sets of plugin values): list, save, load, rename, remove. Not to be confused with
+   * The snapshots of the pedalboard (saved sets of plugin values): list, create, save, load, rename, delete. Not to be confused with
    * {@link CurrentPedalboard.getSnapshot}, the immutable state for UI frameworks.
    */
   readonly snapshots: PedalboardSnapshots;

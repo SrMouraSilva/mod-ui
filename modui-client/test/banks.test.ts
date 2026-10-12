@@ -110,10 +110,10 @@ describe('editing a bank is one read and one write of the whole list', () => {
     expect(live.pedalboards.map((p) => p.title)).toEqual(['A', 'B']);
   });
 
-  it('remove', async () => {
+  it('delete', async () => {
     const { client, state } = await setup();
     const [live, studio] = await client.banks.list();
-    await live.remove();
+    await live.delete();
     expect(state.saves[0].map((b) => b.title)).toEqual(['Studio']);
     await expect(live.rename('x')).rejects.toThrow(/no longer exists/);
     expect(studio.index).toBe(1); // objects not involved are not touched; read again to see the new positions
@@ -131,21 +131,21 @@ describe('editing a bank is one read and one write of the whole list', () => {
     expect(live.pedalboards.map((p) => p.title)).toEqual(['C', 'A', 'B', 'C']);
   });
 
-  it('removePedalboard by position or by pedalboard (first occurrence)', async () => {
+  it('remove(pedalboard) by position or by pedalboard (first occurrence)', async () => {
     const { client, state, pb } = await setup([{ title: 'Live', pedalboards: [stored('A'), stored('B'), stored('A')] }]);
     const [live] = await client.banks.list();
 
-    await live.removePedalboard(1);
-    await live.removePedalboard(pb('A'));
+    await live.remove(1);
+    await live.remove(pb('A'));
 
     expect(state.saves[0][0].pedalboards.map((p) => p.title)).toEqual(['A', 'A']);
     expect(state.saves[1][0].pedalboards.map((p) => p.title)).toEqual(['A']);
   });
 
-  it('movePedalboard', async () => {
+  it('move(from, to)', async () => {
     const { client, state } = await setup([{ title: 'Live', pedalboards: [stored('A'), stored('B'), stored('C')] }]);
     const [live] = await client.banks.list();
-    await live.movePedalboard(0, 2);
+    await live.move(0, 2);
     expect(state.saves[0][0].pedalboards.map((p) => p.title)).toEqual(['B', 'C', 'A']);
     expect(live.pedalboards.map((p) => p.title)).toEqual(['B', 'C', 'A']);
   });
@@ -196,14 +196,14 @@ describe('editing a bank is one read and one write of the whole list', () => {
   it('queues the calls of one client in order, each reading what the one before wrote', async () => {
     const { client, state, pb } = await setup();
     const [live] = await client.banks.list();
-    await Promise.all([live.add(pb('C')), live.add(pb('A')), live.movePedalboard(0, 3)]);
+    await Promise.all([live.add(pb('C')), live.add(pb('A')), live.move(0, 3)]);
     expect(state.banks[0].pedalboards.map((p) => p.title)).toEqual(['B', 'C', 'A', 'A']);
   });
 
   it('a failed call does not block the next one', async () => {
     const { client, state, pb } = await setup();
     const [live] = await client.banks.list();
-    const failing = live.movePedalboard(0, 9);
+    const failing = live.move(0, 9);
     const fine = live.add(pb('C'));
     await expect(failing).rejects.toBeInstanceOf(ModUiError);
     await fine;
@@ -269,10 +269,10 @@ describe('rules checked before anything is written', () => {
     const [live] = await client.banks.list();
     await expect(live.add(pb('C'), { at: 3 })).rejects.toThrow(/out of range/);
     await expect(live.add(pb('C'), { at: -1 })).rejects.toThrow(/out of range/);
-    await expect(live.removePedalboard(2)).rejects.toThrow(/out of range/);
-    await expect(live.removePedalboard(pb('C'))).rejects.toThrow(/not in the bank/);
-    await expect(live.movePedalboard(0, 2)).rejects.toThrow(/out of range/);
-    await expect(live.movePedalboard(1.5, 0)).rejects.toThrow(/out of range/);
+    await expect(live.remove(2)).rejects.toThrow(/out of range/);
+    await expect(live.remove(pb('C'))).rejects.toThrow(/not in the bank/);
+    await expect(live.move(0, 2)).rejects.toThrow(/out of range/);
+    await expect(live.move(1.5, 0)).rejects.toThrow(/out of range/);
     expect(state.saves).toEqual([]);
   });
 
@@ -289,7 +289,7 @@ describe('rules checked before anything is written', () => {
   });
 });
 
-describe('banks.create() / move() / save()', () => {
+describe('banks.create() / move() / replaceAll()', () => {
   it('create appends a bank with its pedalboards', async () => {
     const { client, state, pb } = await setup();
     const created = await client.banks.create('  Solo  ', [pb('C')]);
@@ -319,10 +319,10 @@ describe('banks.create() / move() / save()', () => {
     await expect(client.banks.move('Nope', 0)).rejects.toThrow(/no longer exists/);
   });
 
-  it('save writes exactly what it is given, without reading first', async () => {
+  it('replaceAll writes exactly what it is given, without reading first', async () => {
     const { client, state, pb, calls } = await setup();
     calls.length = 0;
-    await client.banks.save([
+    await client.banks.replaceAll([
       { title: 'New', pedalboards: [pb('A'), { bundle: '/root/.pedalboards/Z.pedalboard', title: 'Z' }], color: 'blue' } as never,
     ]);
 
@@ -333,26 +333,26 @@ describe('banks.create() / move() / save()', () => {
     expect(state.banks).toHaveLength(1);
   });
 
-  it('save takes Bank objects and keeps their extra properties', async () => {
+  it('replaceAll takes Bank objects and keeps their extra properties', async () => {
     const { client, state } = await setup([{ title: 'Live', pedalboards: [stored('A')], color: 'red' }]);
     const banks = await client.banks.list();
-    await client.banks.save(banks);
+    await client.banks.replaceAll(banks);
     expect(state.saves[0]).toEqual([{ title: 'Live', pedalboards: [stored('A')], color: 'red' }]);
   });
 
-  it('save refuses blank or repeated titles, bad entries and unusable pedalboards, without a request', async () => {
+  it('replaceAll refuses blank or repeated titles, bad entries and unusable pedalboards, without a request', async () => {
     const { client, pb, calls } = await setup();
     calls.length = 0;
-    await expect(client.banks.save([{ title: '', pedalboards: [] }])).rejects.toBeInstanceOf(ModUiError);
-    await expect(client.banks.save([{ title: 'a', pedalboards: [] }, { title: 'A', pedalboards: [] }])).rejects.toThrow(/two banks/);
-    await expect(client.banks.save([{ title: 'a', pedalboards: [pb('Rock')] }])).rejects.toThrow(/copy/);
-    await expect(client.banks.save([{ title: 'a', pedalboards: [{ bundle: '', title: 'x' }] }])).rejects.toThrow(/bundle/);
+    await expect(client.banks.replaceAll([{ title: '', pedalboards: [] }])).rejects.toBeInstanceOf(ModUiError);
+    await expect(client.banks.replaceAll([{ title: 'a', pedalboards: [] }, { title: 'A', pedalboards: [] }])).rejects.toThrow(/two banks/);
+    await expect(client.banks.replaceAll([{ title: 'a', pedalboards: [pb('Rock')] }])).rejects.toThrow(/copy/);
+    await expect(client.banks.replaceAll([{ title: 'a', pedalboards: [{ bundle: '', title: 'x' }] }])).rejects.toThrow(/bundle/);
     expect(calls).toEqual([]);
   });
 
-  it('save with no banks empties them all', async () => {
+  it('replaceAll with no banks empties them all', async () => {
     const { client, state } = await setup();
-    await client.banks.save([]);
+    await client.banks.replaceAll([]);
     expect(state.banks).toEqual([]);
   });
 });

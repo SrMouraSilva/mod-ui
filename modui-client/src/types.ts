@@ -167,7 +167,7 @@ export interface LoadResult {
 }
 
 /**
- * Options of the calls that change the running pedalboard (`setValue`, `setActive`, `move`, `plugins.add`, `connections.connect`, ...).
+ * Options of the calls that change the running pedalboard (`setValue`, `setActive`, `setPosition`, `plugins.add`, `connections.connect`, ...).
  */
 export interface WriteOptions {
   /**

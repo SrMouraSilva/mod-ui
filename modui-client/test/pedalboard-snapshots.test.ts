@@ -151,13 +151,13 @@ describe('current snapshot', () => {
   });
 });
 
-describe('snapshots.saveAs()', () => {
+describe('snapshots.create()', () => {
   it('creates a snapshot, makes it current and returns the object with the unique name; no list request after the first read', async () => {
     const { snapshots, calls } = await device();
     const before = await snapshots.list();
     const { current, list } = record(snapshots);
 
-    const created = await snapshots.saveAs('Lead', { source: 'ui' });
+    const created = await snapshots.create('Lead', { source: 'ui' });
 
     expect(created.name).toBe('Lead (2)');
     expect(created.index).toBe(3);
@@ -171,7 +171,7 @@ describe('snapshots.saveAs()', () => {
 
   it('reads the list itself when the names were never read', async () => {
     const { snapshots, calls } = await device();
-    const created = await snapshots.saveAs('Solo');
+    const created = await snapshots.create('Solo');
 
     expect(writes(calls)).toEqual(['GET /snapshot/saveas?title=Solo', 'GET /snapshot/list']);
     expect(created.index).toBe(3);
@@ -181,14 +181,14 @@ describe('snapshots.saveAs()', () => {
 
   it('refuses a blank name without a request', async () => {
     const { snapshots, calls } = await device();
-    await expect(snapshots.saveAs('   ')).rejects.toBeInstanceOf(ModUiError);
+    await expect(snapshots.create('   ')).rejects.toBeInstanceOf(ModUiError);
     expect(writes(calls)).toEqual([]);
   });
 
   it('rejects when the backend cannot create it', async () => {
     const { client } = makeClient({ 'GET /snapshot/saveas': { ok: false, id: null, title: 'x' } });
     await connectedAt(client, 0);
-    await expect(client.device.currentPedalboard.snapshots.saveAs('x')).rejects.toThrow(/could not create/);
+    await expect(client.device.currentPedalboard.snapshots.create('x')).rejects.toThrow(/could not create/);
   });
 });
 
@@ -204,7 +204,7 @@ describe('snapshots.save()', () => {
     const { snapshots, calls } = await device(['A', 'B'], 1);
     const [, b] = await snapshots.list();
     await snapshots.list();
-    await b.remove(); // the current one: the backend now has -1
+    await b.delete(); // the current one: the backend now has -1
     expect(snapshots.currentIndex).toBeNull();
 
     calls.length = 0;
@@ -243,7 +243,7 @@ describe('snapshot.rename()', () => {
     const [def, clean] = await snapshots.list();
     calls.length = 0;
     await expect(clean.rename('')).rejects.toBeInstanceOf(ModUiError);
-    await clean.remove();
+    await clean.delete();
     calls.length = 0;
     await expect(clean.rename('Again')).rejects.toThrow(/gone/);
     expect(calls).toEqual([]);
@@ -258,13 +258,13 @@ describe('snapshot.rename()', () => {
   });
 });
 
-describe('snapshot.remove()', () => {
+describe('snapshot.delete()', () => {
   it('removes it, shifts the later indices and retires the object', async () => {
     const { snapshots, calls } = await device(['A', 'B', 'C', 'D'], 3);
     const [a, b, c, d] = await snapshots.list();
     const { list } = record(snapshots);
 
-    await b.remove();
+    await b.delete();
 
     expect(b.alive).toBe(false);
     expect([a.index, c.index, d.index]).toEqual([0, 1, 2]);
@@ -277,7 +277,7 @@ describe('snapshot.remove()', () => {
     const { snapshots } = await device(['A', 'B'], 1);
     const [, b] = await snapshots.list();
     const { current } = record(snapshots);
-    await b.remove();
+    await b.delete();
     expect(snapshots.currentIndex).toBeNull();
     expect(snapshots.current).toBeNull();
     expect(current[0]).toMatchObject({ snapshot: null, index: null, previous: 1 });
@@ -286,7 +286,7 @@ describe('snapshot.remove()', () => {
   it('mirrors the backend when an earlier snapshot is removed: the current index keeps its number', async () => {
     const { snapshots, state } = await device(['A', 'B', 'C'], 2);
     const [a, , c] = await snapshots.list();
-    await a.remove();
+    await a.delete();
     expect(state.current).toBe(2); // the backend's own number
     expect(snapshots.currentIndex).toBe(2);
     expect(c.index).toBe(1);
@@ -297,7 +297,7 @@ describe('snapshot.remove()', () => {
     const { snapshots, calls } = await device(['Only']);
     const [only] = await snapshots.list();
     calls.length = 0;
-    await expect(only.remove()).rejects.toThrow(/last snapshot/);
+    await expect(only.delete()).rejects.toThrow(/last snapshot/);
     expect(calls).toEqual([]);
   });
 
@@ -305,7 +305,7 @@ describe('snapshot.remove()', () => {
     const { client } = makeClient({ 'GET /snapshot/list': { '0': 'A', '1': 'B' }, 'GET /snapshot/remove': false });
     await connectedAt(client, 0);
     const [a] = await client.device.currentPedalboard.snapshots.list();
-    await expect(a.remove()).rejects.toBeInstanceOf(ModUiError);
+    await expect(a.delete()).rejects.toBeInstanceOf(ModUiError);
     expect(a.alive).toBe(true);
   });
 });
@@ -427,7 +427,7 @@ describe('pedalboard loads and resets', () => {
 describe('queue and events', () => {
   it('runs writes in order behind earlier ones', async () => {
     const { snapshots, calls } = await device();
-    const created = snapshots.saveAs('One');
+    const created = snapshots.create('One');
     const loaded = snapshots.load(0);
     await Promise.all([created, loaded]);
     const order = writes(calls).filter((c) => !c.includes('list'));

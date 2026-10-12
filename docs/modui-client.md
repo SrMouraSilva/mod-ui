@@ -12,7 +12,7 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
 
-Current scope: **pedalboards** (list, info, copy, remove, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, remove, reorder, add / remove / move pedalboards) plus raw WebSocket access.
+Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, remove, reorder, add / remove / move pedalboards) plus raw WebSocket access.
 Plan of the last two: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md).
 
 ---
@@ -176,7 +176,7 @@ await gainParam.setValue(3.5);                         // throws ModUiError outs
 
 // Position in the canvas
 console.log(gain.x, gain.y);                           // live attributes
-await gain.move({ x: 320, y: 140 });
+await gain.setPosition({ x: 320, y: 140 });
 
 // Patch parameters ("PatchParam"): typed values that are not control ports (strings, file paths, URIs, booleans, integers)
 // `plugin`: a PluginInstance whose plugin declares patch parameters
@@ -204,7 +204,7 @@ const solo = await currentPedalboard.saveAs('Solo');   // new bundle ("Solo (2)"
 ```js
 const mine = (await client.pedalboards.list()).filter((pb) => !pb.factory && !pb.isDefault);
 const duplicate = await mine[0].copy();                // new pedalboard, "<title> (2)", running one untouched
-await mine[0].remove();                                // throws ModUiError for factory / default pedalboards
+await mine[0].delete();                                // throws ModUiError for factory / default pedalboards
 ```
 
 ### 1.11 Remove connections and plugins
@@ -243,7 +243,7 @@ plugin.params.get('gain').on('change', ({ value, previous }) => knob.set(value))
 
 Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of events):
 
-- **Render from events, not from the promise of a write.** `setValue()`, `setActive()`, `move()`, `plugins.add()`, ... also
+- **Render from events, not from the promise of a write.** `setValue()`, `setActive()`, `setPosition()`, `plugins.add()`, ... also
   emit their event (`origin: 'local'`), so the screen has one path for every cause. The backend never echoes `param_set`,
   `patch_set` and `plugin_pos` to the sender, which is why the client emits those itself.
 - **Ignore your own changes with `source`.** Pass `{ source }` (a `Symbol`, or the component) to a write, and
@@ -342,10 +342,10 @@ Not to be confused with `getSnapshot()` (the immutable state for UI frameworks) 
 const { snapshots } = client.device.currentPedalboard;
 const all = await snapshots.list();                 // Snapshot[]: index, name, isCurrent, alive (the same objects while the name exists)
 await snapshots.load(1);                            // or all[1].load(); resolves after the backend applied it
-const solo = await snapshots.saveAs('Solo');        // captures the live values, becomes current; "Solo (2)" if taken
+const solo = await snapshots.create('Solo');        // captures the live values, becomes current; "Solo (2)" if taken
 await snapshots.save();                             // overwrite the current one (rejects when there is none)
 await solo.rename('Lead');                          // resolves with the final name
-await solo.remove();                                // the later ones move up; the last snapshot cannot be removed
+await solo.delete();                                // the later ones move up; the last snapshot cannot be deleted
 
 snapshots.currentIndex;                             // sync, valid as soon as the pedalboard loaded; snapshots.current is the object once list() ran
 snapshots.on('current', ({ snapshot, index }) => label.textContent = snapshot?.name ?? '');
@@ -364,12 +364,12 @@ A bank is an ordered list of pedalboards, used by the hardware to navigate them.
 const banks = await client.banks.list();             // Bank[]: title, index, pedalboards (PedalboardReference[])
 const live = await client.banks.create('Live set', [mine[0], mine[1]]);
 await live.add(mine[2], { at: 0 });                  // factory pedalboards are refused; { copyFactory: true } copies them first
-await live.movePedalboard(0, 2);
-await live.removePedalboard(mine[1]);                // or by position
+await live.move(0, 2);
+await live.remove(mine[1]);                          // or by position
 await live.rename('Gig');
 await client.banks.move(live, 0);                    // order of the banks
 await client.device.load(live.pedalboards[0]);       // a bank is a plain collection: nothing "loads" it
-await live.remove();
+await live.delete();
 ```
 
 Every change reads the banks from the device, edits that copy and writes the whole list back (one client never interleaves its own
@@ -394,7 +394,7 @@ off();
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
   block loads or saves. Strings must be non-empty and free of control characters; numbers must fit the type and the range.
-- `setValue()`, `setActive()`, `toggle()` and `move()` are WebSocket messages (`param_set`, `plugin_pos`) that the backend
+- `setValue()`, `setActive()`, `toggle()` and `setPosition()` are WebSocket messages (`param_set`, `plugin_pos`) that the backend
   never confirms to the socket that sent them (only to the others), so they resolve **once the message was sent**, and the
   attributes (`value`, `x`, `y`) and `isActive()` already show the new state. They are queued behind loads and saves.
 - The client checks before sending because the backend raises (and closes the socket) when the plugin does not exist.
@@ -614,7 +614,7 @@ classDiagram
     +get(title: string) Promise~Bank | undefined~
     +create(title: string, pedalboards?: PedalboardReference[]) Promise~Bank~
     +move(bank: Bank | string, toIndex: number) Promise~Bank[]~
-    +save(banks: Bank | BankData[]) Promise~void~
+    +replaceAll(banks: Bank | BankData[]) Promise~void~
   }
 
   class Bank {
@@ -622,10 +622,10 @@ classDiagram
     +index: number
     +pedalboards: PedalboardReference[]
     +rename(title: string) Promise~void~
-    +remove() Promise~void~
+    +delete() Promise~void~
     +add(pedalboard: PedalboardReference, options?: AddToBankOptions) Promise~void~
-    +removePedalboard(pedalboard: number | PedalboardReference) Promise~void~
-    +movePedalboard(from: number, to: number) Promise~void~
+    +remove(pedalboard: number | PedalboardReference) Promise~void~
+    +move(from: number, to: number) Promise~void~
     +setPedalboards(pedalboards: PedalboardReference[]) Promise~void~
   }
 
@@ -635,7 +635,7 @@ classDiagram
     +list() Promise~Snapshot[]~
     +get(index: number) Promise~Snapshot | undefined~
     +save() Promise~void~
-    +saveAs(name: string, options?: WriteOptions) Promise~Snapshot~
+    +create(name: string, options?: WriteOptions) Promise~Snapshot~
     +load(target: Snapshot | number, options?: WriteOptions) Promise~void~
     +on(event: current | list, handler, options?) Unsubscribe
     +once(event: current | list, handler, options?) Unsubscribe
@@ -648,7 +648,7 @@ classDiagram
     +alive: boolean
     +load(options?: WriteOptions) Promise~void~
     +rename(name: string, options?: WriteOptions) Promise~string~
-    +remove(options?: WriteOptions) Promise~void~
+    +delete(options?: WriteOptions) Promise~void~
   }
 
   class PedalboardReference {
@@ -664,7 +664,7 @@ classDiagram
     +isDefault: boolean
     +info() Promise~PedalboardInfo~
     +copy() Promise~PedalboardReference~
-    +remove() Promise~void~
+    +delete() Promise~void~
   }
 
   class Device {
@@ -759,7 +759,7 @@ classDiagram
     +isActive() Promise~boolean~
     +setActive(active: boolean, options?: WriteOptions) Promise~void~
     +toggle(options?: WriteOptions) Promise~boolean~
-    +move(position: Position, options?: WriteOptions) Promise~void~
+    +setPosition(position: Position, options?: WriteOptions) Promise~void~
     +remove(options?: WriteOptions) Promise~void~
     +on(event, handler, options?) Unsubscribe
     +once(event, handler, options?) Unsubscribe
@@ -1473,7 +1473,7 @@ sequenceDiagram
   the HTTP call and cancel it on failure.
 - **Serialize operations that change the running pedalboard** through `Device`'s internal queue (`load`, `reset`, and everything in `currentPedalboard`).
 - **Reject, do not throw**: public methods return rejected promises for bad arguments, never synchronous exceptions.
-- **Guard destructive calls in the client** (`PedalboardReference.remove()` refuses factory and default pedalboards) because the backend does not validate paths.
+- **Guard destructive calls in the client** (`PedalboardReference.delete()` refuses factory and default pedalboards) because the backend does not validate paths.
 - **Remember the backend conventions** (see `docs/openapi.yml`): many handlers answer `200` with a bare
   `false` on failure; turn that into a `ModUiError`. Trailing slashes in paths matter.
 - **No runtime dependencies.** The output is one IIFE file (ES2018) loaded by a `<script>` tag.
@@ -1540,7 +1540,7 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - The first `connect()` is not retried by `reconnect` (it rejects and the state is `closed`); only a connection that was `open` and got lost is. Reconnection never gives up by itself: call `client.close()`. Calls that were waiting for a frame when the connection was lost fail with `ModUiError('WebSocket closed')` and are not retried (a write may have reached the backend).
 - `origin: 'local'` is best effort: a change is local when this client had a matching request in flight when the frame arrived. A pedalboard load or reset by someone else at the same moment cannot be told apart (same as the note on `device.load()`).
 - Events cover what the model knows (plugins, connections, the pedalboard's own ports, control values, bypass, position, patch parameters, presets, loading) and what the device reports (`stats`, `sysStats`, `transport`, `bufferSize`, `trueBypass`, `snapshot`). Meters (`output_set`), addressings (`hw_map`, `midi_map`, `cv_map`), `log` and `progress` frames are not events yet; the pedalboard's `size` frame is not exposed.
-- `setValue()`, `setActive()`, `toggle()` and `move()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
+- `setValue()`, `setActive()`, `toggle()` and `setPosition()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
 - `PatchParam.setValue()` cannot confirm anything either (the sender of `patch_set` gets no frame). Only `"` is escaped on the way to mod-host, so a backslash in a string reaches the plugin as it is. Empty strings are refused by the client. Only parameters the host tracks (atom types Bool, Int, Long, Float, Double, String, Path, URI, with ranges) report values; vectors are not supported. Whether `refresh()` gets an answer depends on the plugin.
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.
 - `connections.disconnect()` checks the model first because the backend answers `true` and announces `disconnect` even when nothing was connected. A connection made by another client a moment ago is known as soon as its `connect` frame arrives.

@@ -24,7 +24,7 @@ import type {
   WriteOptions,
 } from './types';
 
-/** `snapshots.on('current')`: the current snapshot changed (a load, `saveAs`, `remove`, a pedalboard load, the device's own report). */
+/** `snapshots.on('current')`: the current snapshot changed (a load, `create`, `delete`, a pedalboard load, the device's own report). */
 export interface SnapshotCurrentEvent extends EventMeta {
   /** The new current snapshot; `null` when there is none, or when the names are not read yet (call `list()`). */
   snapshot: Snapshot | null;
@@ -60,7 +60,7 @@ interface SnapshotOps {
   isCurrent(snapshot: Snapshot): boolean;
   load(snapshot: Snapshot, options?: WriteOptions): Promise<void>;
   rename(snapshot: Snapshot, name: string, options?: WriteOptions): Promise<string>;
-  remove(snapshot: Snapshot, options?: WriteOptions): Promise<void>;
+  delete(snapshot: Snapshot, options?: WriteOptions): Promise<void>;
 }
 
 /**
@@ -136,10 +136,10 @@ export class Snapshot {
    * Backend: `GET /snapshot/remove` (operationId `removeSnapshot`).
    * @throws {ModUiError} when the snapshot is gone, it is the only one, or the backend refuses.
    * @example
-   * await snapshot.remove();
+   * await snapshot.delete();
    */
-  remove(options?: WriteOptions): Promise<void> {
-    return this.ops.remove(this, options);
+  delete(options?: WriteOptions): Promise<void> {
+    return this.ops.delete(this, options);
   }
 }
 
@@ -170,7 +170,7 @@ const VALUE_CHANGES: ReadonlyArray<GraphChange['type']> = ['param', 'patch', 'ac
  *
  * @example
  * const { snapshots } = client.device.currentPedalboard;
- * const solo = await snapshots.saveAs('Solo');       // captures the live values, becomes current
+ * const solo = await snapshots.create('Solo');       // captures the live values, becomes current
  * await (await snapshots.get(0))!.load();            // back to the first one
  * snapshots.on('current', ({ snapshot }) => label.textContent = snapshot?.name ?? '-');
  */
@@ -281,10 +281,10 @@ export class PedalboardSnapshots {
    * @param name Wished name. The backend makes it unique (`Solo (2)`): read the real one from the result.
    * @throws {ModUiError} when the name is blank, or the backend could not create it.
    * @example
-   * const solo = await client.device.currentPedalboard.snapshots.saveAs('Solo');
+   * const solo = await client.device.currentPedalboard.snapshots.create('Solo');
    * console.log(solo.index, solo.name);
    */
-  saveAs(name: string, options: WriteOptions = {}): Promise<Snapshot> {
+  create(name: string, options: WriteOptions = {}): Promise<Snapshot> {
     if (!isValidName(name)) {
       return Promise.reject(blankName());
     }
@@ -364,7 +364,7 @@ export class PedalboardSnapshots {
    *
    * | Event | When | Payload |
    * |-------|------|---------|
-   * | `current` | the current snapshot changed: a load, `saveAs`, `remove` of the current one, a pedalboard load, the device's report | `{ snapshot, index, previous }` |
+   * | `current` | the current snapshot changed: a load, `create`, `delete` of the current one, a pedalboard load, the device's report | `{ snapshot, index, previous }` |
    * | `list` | names or order changed, or a pedalboard load emptied the list | `{ snapshots }` |
    *
    * Both carry `origin` and `source` like the pedalboard events. No event makes a request: after a pedalboard load `current.snapshot`
@@ -392,7 +392,7 @@ export class PedalboardSnapshots {
     isCurrent: (snapshot) => this.currentId !== null && this.entryOf(snapshot)?.index === this.currentId,
     load: (snapshot, options) => this.load(snapshot, options),
     rename: (snapshot, name, options) => this.renameSnapshot(snapshot, name, options),
-    remove: (snapshot, options) => this.removeSnapshot(snapshot, options),
+    delete: (snapshot, options) => this.deleteSnapshot(snapshot, options),
   };
 
   private renameSnapshot(snapshot: Snapshot, name: string, options: WriteOptions = {}): Promise<string> {
@@ -415,7 +415,7 @@ export class PedalboardSnapshots {
     });
   }
 
-  private removeSnapshot(snapshot: Snapshot, options: WriteOptions = {}): Promise<void> {
+  private deleteSnapshot(snapshot: Snapshot, options: WriteOptions = {}): Promise<void> {
     return this.enqueue(async () => {
       await this.graph.sync();
       const entry = this.live(snapshot);

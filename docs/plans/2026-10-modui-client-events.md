@@ -113,7 +113,7 @@ Event catalogue (`GraphChange`, produced by `GraphModel.apply`):
 | `cleared` | `remove :all`; `device.reset()` | – |
 | plugin `param`, `Param` `change` | `param_set`; `setValue()` | `param` (`Param`), `value, previous` |
 | plugin `active` | `param_set <i> :bypass`; `setActive()`, `toggle()` | `active` |
-| plugin `moved` | `plugin_pos`; `move()` | `x, y` |
+| plugin `moved` | `plugin_pos`; `setPosition()` | `x, y` |
 | plugin / `PatchParam` `change` | `patch_set`; `PatchParam.setValue()`, `refresh()` | `uri` |
 
 Semantics (these become the contract documented in TSDoc and `docs/modui-client.md`):
@@ -134,14 +134,14 @@ Semantics (these become the contract documented in TSDoc and `docs/modui-client.
 - **Exact duplicates are not events**: `connect` of an existing connection (the model ignores it) and a `param_set` whose value did
   not change emit nothing.
 - **`origin`**: `'remote'` for a frame nobody here asked for; `'local'` for a change this client caused. Fire-and-forget calls
-  (`setValue`, `setActive`, `move`, `setValue` of a patch param) emit right after sending. HTTP-confirmed calls (`add`, `remove`,
+  (`setValue`, `setActive`, `setPosition`, `setValue` of a patch param) emit right after sending. HTTP-confirmed calls (`add`, `remove`,
   `connect`, `disconnect`, `load`, `reset`) register an *expectation* for the frame they will provoke before sending the request,
   and the matching frame is tagged `'local'` (the expectation expires with the confirmation timeout). Best effort, as the existing
   note on `Device.load()`: mod-ui gives no way to correlate a `loading_end` with its cause.
 - **`source`: "do not tell me about my own changes".** `origin` only separates this client from the others; it cannot tell two
   components of the same application apart (a slider and a canvas both using the client). Every write takes an optional
   `{ source }` (any value, usually a `Symbol` or the component), carried on the events it causes:
-  `param.setValue(v, { source })`, `setActive`, `toggle`, `move`, `PatchParam.setValue`, `plugins.add/remove`,
+  `param.setValue(v, { source })`, `setActive`, `toggle`, `setPosition`, `PatchParam.setValue`, `plugins.add/remove`,
   `connections.connect/disconnect`, `device.load/reset` (`LoadOptions.source`). A subscription can skip them:
   `param.on('change', handler, { ignoreSource: source })`, or all local ones with `{ ignoreLocal: true }`. Events caused by the
   backend or another client have `source: undefined`. A confirmed call (HTTP + frame) stores its `source` in the expectation,

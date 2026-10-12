@@ -498,7 +498,7 @@ describe('changes made through the client', () => {
     expect(seen).toEqual([[5, 'remote'], [7, 'local']]);
   });
 
-  it('setActive(), toggle() and move() emit local "active" and "moved" events', async () => {
+  it('setActive(), toggle() and setPosition() emit local "active" and "moved" events', async () => {
     const { gain } = await wired();
     const events: any[] = [];
     gain.on('active', (e) => events.push(['active', e.active, e.origin, e.source]));
@@ -507,7 +507,7 @@ describe('changes made through the client', () => {
     await gain.setActive(false, { source: 1 });
     await gain.setActive(false, { source: 2 }); // nothing changed
     await gain.toggle({ source: 3 });
-    await gain.move({ x: 11, y: 12 }, { source: 4 });
+    await gain.setPosition({ x: 11, y: 12 }, { source: 4 });
 
     expect(events).toEqual([
       ['active', false, 'local', 1],

@@ -605,12 +605,12 @@ describe('instance bypass: isActive(), setActive(), toggle()', () => {
   });
 });
 
-describe('instance.move()', () => {
+describe('instance.setPosition()', () => {
   it('sends plugin_pos and x / y show the new position at once', async () => {
     const { current, socket } = await wiredDevice();
     const [instance] = await current.plugins.list();
 
-    await instance.move({ x: 320, y: 140.5 });
+    await instance.setPosition({ x: 320, y: 140.5 });
 
     expect(socket.sent.filter((f) => f.startsWith('plugin_pos'))).toEqual(['plugin_pos /graph/Gain 320 140.5']);
     expect(instance).toMatchObject({ x: 320, y: 140.5 });
@@ -621,7 +621,7 @@ describe('instance.move()', () => {
     async (position) => {
       const { current, socket } = await wiredDevice();
       const [instance] = await current.plugins.list();
-      await expect(instance.move(position as never)).rejects.toThrow(/finite numbers/);
+      await expect(instance.setPosition(position as never)).rejects.toThrow(/finite numbers/);
       expect(socket.sent.filter((f) => f.startsWith('plugin_pos'))).toEqual([]);
     },
   );
@@ -630,7 +630,7 @@ describe('instance.move()', () => {
     const { current, socket } = await wiredDevice();
     const [instance] = await current.plugins.list();
     socket.emit('remove /graph/Gain');
-    await expect(instance.move({ x: 1, y: 2 })).rejects.toThrow(/no plugin/);
+    await expect(instance.setPosition({ x: 1, y: 2 })).rejects.toThrow(/no plugin/);
     expect(socket.sent.filter((f) => f.startsWith('plugin_pos'))).toEqual([]);
   });
 
@@ -648,7 +648,7 @@ describe('instance.move()', () => {
     const [instance] = await current.plugins.list();
     socket.emit('add /graph/Other ' + gainUri + ' 0.0 0.0 0 1.0.0.0 0'); // so the plugin below still exists after the reset
     const loading = client.device.loadDefault();
-    const moving = instance.move({ x: 1, y: 2 }).then(() => order.push('move'), (e) => order.push('move rejected: ' + e.message));
+    const moving = instance.setPosition({ x: 1, y: 2 }).then(() => order.push('move'), (e) => order.push('move rejected: ' + e.message));
     await loading;
     await moving;
     expect(order.slice(0, 2)).toEqual(['reset', 'load']);

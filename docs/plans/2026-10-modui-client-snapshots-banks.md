@@ -1,5 +1,10 @@
 # Plan: `ModUiClient` – pedalboard snapshots and banks
 
+> **Naming update (2026-10-11).** After the first implementation the client's method names were unified (`CLAUDE.md`, "Method names"). Where the text
+> below says `snapshots.saveAs` read `snapshots.create`; `snapshot.remove` / `bank.remove` (the bank itself) / `reference.remove`: `delete`;
+> `bank.removePedalboard`: `bank.remove`; `bank.movePedalboard`: `bank.move`; `client.banks.save`: `client.banks.replaceAll`. The listing under
+> "Requested API" already uses the new names.
+
 Status: **implemented** (2026-10-11), unit tests only; not checked against a real device (see "Verification"). Phase 6 (`getState()` / `subscribe()`) was left out. Builds on `2026-10-modui-client-pedalboard.md` (client, `Device`, the device queue),
 `2026-10-modui-client-pedalboard-graph.md` (live graph, `PluginInstance`) and `2026-10-modui-client-events.md` (`Emitter`, `source`,
 `device.on('snapshot')`). It covers the 9 operations of the `Snapshots` and `Banks` sections of `docs/openapi.yml`, which
@@ -87,11 +92,11 @@ snapshots.current: Snapshot | null                      // sync: the one the bac
 snapshots.currentIndex: number | null                   // sync, valid before list() has run (from loading_end / pedal_snapshot)
 
 await snapshots.save(): Promise<void>                   // POST /snapshot/save: overwrite the current snapshot with the live values
-await snapshots.saveAs(name): Promise<Snapshot>         // GET /snapshot/saveas: new snapshot, becomes current; name made unique
+await snapshots.create(name): Promise<Snapshot>         // GET /snapshot/saveas: new snapshot, becomes current; name made unique
 await snapshots.load(index | snapshot, { source? }): Promise<void>
 
 snapshot.index; snapshot.name; snapshot.isCurrent; snapshot.alive
-await snapshot.load({ source? }); await snapshot.rename(name): Promise<string>; await snapshot.remove()
+await snapshot.load({ source? }); await snapshot.rename(name): Promise<string>; await snapshot.delete()
 
 snapshots.on('current' | 'list', handler, options?); snapshots.once(...)
 ```
@@ -103,18 +108,18 @@ snapshot exists (identity by name, see below).
 await client.banks.list(): Promise<Bank[]>              // GET /banks; pedalboards as PedalboardReference (usable with device.load)
 await client.banks.get(title): Promise<Bank | undefined>
 await client.banks.create(title, pedalboards?): Promise<Bank>
-await client.banks.save(banks: BankData[]): Promise<void>   // POST /banks/save, replace all (low-level; the methods below use it)
+await client.banks.replaceAll(banks: BankData[]): Promise<void>   // POST /banks/save, replace all (low-level; the methods below use it)
 await client.banks.move(bank | title, toIndex): Promise<Bank[]>
 
 bank.title; bank.index; bank.pedalboards: readonly PedalboardReference[]
 await bank.rename(title): Promise<void>
-await bank.remove(): Promise<void>
+await bank.delete(): Promise<void>
 await bank.add(pedalboard, { at?, copyFactory? }): Promise<void>
-await bank.removePedalboard(pedalboard | index): Promise<void>
-await bank.movePedalboard(from, to): Promise<void>
+await bank.remove(pedalboard | index): Promise<void>
+await bank.move(from, to): Promise<void>
 await bank.setPedalboards(pedalboards): Promise<void>
 ```
-`PedalboardReference.remove()` gains no new behaviour, but its TSDoc already says "and its entries in all banks"; banks read earlier are stale
+`PedalboardReference.delete()` gains no new behaviour, but its TSDoc already says "and its entries in all banks"; banks read earlier are stale
 after it (documented, no cache to invalidate because `Bank` objects are values, see below).
 
 ## Design

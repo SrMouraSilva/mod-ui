@@ -14,7 +14,7 @@ import type { HttpTransport } from './http';
 import { PedalboardReference, sameBundle, type PedalboardsApi } from './pedalboards';
 import type { BankInput, BankPedalboardInput, BankSummary } from './types';
 
-/** What {@link BanksApi.save} takes for a bank: a {@link Bank}, or plain data. */
+/** What {@link BanksApi.replaceAll} takes for a bank: a {@link Bank}, or plain data. */
 export interface BankData {
   title: string;
   /** Pedalboards of the library, or `{ bundle, title }` as the backend stores them. */
@@ -50,7 +50,7 @@ interface BankRecord {
  * const [bank] = await client.banks.list();
  * await bank.rename('Live set');
  * await bank.add(mine[0]);                 // appended
- * await bank.movePedalboard(0, 2);
+ * await bank.move(0, 2);
  * await client.device.load(bank.pedalboards[0]);
  */
 export class Bank {
@@ -106,14 +106,14 @@ export class Bank {
   }
 
   /**
-   * Deletes the bank (its pedalboards stay in the library).
+   * Deletes the bank (its pedalboards stay in the library). To take one pedalboard out of the bank use {@link Bank.remove}.
    *
    * Backend: `GET /banks` and `POST /banks/save`.
    * @throws {ModUiError} when the bank no longer exists.
    * @example
-   * await bank.remove();
+   * await bank.delete();
    */
-  remove(): Promise<void> {
+  delete(): Promise<void> {
     return this.api.edit(this, (banks, at) => {
       banks.splice(at, 1);
     });
@@ -154,9 +154,9 @@ export class Bank {
    * @param pedalboard The position, or a pedalboard (its first occurrence is removed).
    * @throws {ModUiError} when the position is out of range or the pedalboard is not in the bank.
    * @example
-   * await bank.removePedalboard(0);
+   * await bank.remove(0);
    */
-  removePedalboard(pedalboard: number | PedalboardReference): Promise<void> {
+  remove(pedalboard: number | PedalboardReference): Promise<void> {
     return this.api.edit(this, (banks, at) => {
       const list = banks[at].pedalboards;
       const place =
@@ -180,9 +180,9 @@ export class Bank {
    * @param to Position it ends at.
    * @throws {ModUiError} when a position is out of range.
    * @example
-   * await bank.movePedalboard(0, 2); // the first one becomes the third
+   * await bank.move(0, 2); // the first one becomes the third
    */
-  movePedalboard(from: number, to: number): Promise<void> {
+  move(from: number, to: number): Promise<void> {
     return this.api.edit(this, (banks, at) => {
       const list = banks[at].pedalboards;
       for (const place of [from, to]) {
@@ -225,7 +225,7 @@ export class Bank {
  * - the bank methods read the list again, change it and write it back (a single client never interleaves its own calls); two writers
  *   at the same moment (another tab, the HMI) are last-write-wins;
  * - a bank is found by its title, which is unique ignoring case; the client refuses duplicates instead of letting the backend rename them;
- * - a pedalboard removed with `reference.remove()` leaves every bank on the device; banks read before are stale.
+ * - a pedalboard deleted with `reference.delete()` leaves every bank on the device; banks read before are stale.
  *
  * @example
  * const banks = await client.banks.list();
@@ -318,17 +318,17 @@ export class BanksApi {
   }
 
   /**
-   * Replaces **every** bank with `banks`. Low level: prefer the methods of {@link Bank} and {@link BanksApi.create}, which keep what
-   * they do not change. Banks that are left out are deleted.
+   * Replaces **every** bank with `banks` (and deletes the ones left out). Low level: prefer the methods of {@link Bank} and {@link BanksApi.create}, which keep what
+   * they do not change.
    *
    * Backend: `POST /banks/save` (operationId `saveBanks`); each pedalboard is stored as `{ bundle, title }`. Nothing is read first.
    * @param banks {@link Bank} objects or plain data.
    * @throws {ModUiError} when a title is blank or repeated (ignoring case), a pedalboard of the library is a factory or default one
    *   or broken, or the backend does not answer `true`.
    * @example
-   * await client.banks.save([{ title: 'Live set', pedalboards: [mine[0]] }]);
+   * await client.banks.replaceAll([{ title: 'Live set', pedalboards: [mine[0]] }]);
    */
-  save(banks: ReadonlyArray<Bank | BankData>): Promise<void> {
+  replaceAll(banks: ReadonlyArray<Bank | BankData>): Promise<void> {
     let payload: BankInput[];
     try {
       payload = banks.map((bank) => {

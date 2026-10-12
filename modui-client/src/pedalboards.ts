@@ -133,30 +133,30 @@ export class PedalboardReference {
   /**
    * Deletes this pedalboard from the device (its bundle directory, and its entries in all banks).
    *
-   * Only **user** pedalboards can be removed. The check is done here, before any request is sent:
+   * Only **user** pedalboards can be deleted. The check is done here, before any request is sent:
    * factory pedalboards (`factory`) and the built-in default one (`isDefault`) are refused, exactly as the
    * classic UI does not offer them. The backend itself does not validate the path (see
    * `removePedalboard` in `docs/openapi.yml`).
    *
-   * Removing the pedalboard that is currently running does not unload it; it keeps running with a stale path.
+   * Deleting the pedalboard that is currently running does not unload it; it keeps running with a stale path.
    *
    * Backend: `GET /pedalboard/remove/?bundlepath=…` (operationId `removePedalboard`).
    * @throws {ModUiError} when the pedalboard is a factory or default one (no request is made), or when the backend
    *   answers `false` (the bundle does not exist any more).
    * @example
    * const mine = (await client.pedalboards.list()).filter((pb) => !pb.factory && !pb.isDefault);
-   * await mine[0].remove();
+   * await mine[0].delete();
    */
-  async remove(): Promise<void> {
+  async delete(): Promise<void> {
     if (this.factory) {
-      throw new ModUiError(`"${this.title}" is a factory pedalboard and cannot be removed`);
+      throw new ModUiError(`"${this.title}" is a factory pedalboard and cannot be deleted`);
     }
     if (this.isDefault) {
-      throw new ModUiError('The default pedalboard cannot be removed');
+      throw new ModUiError('The default pedalboard cannot be deleted');
     }
     const ok = await this.http.getJson<boolean>('/pedalboard/remove/', { bundlepath: this.bundlepath });
     if (ok !== true) {
-      throw new ModUiError(`The backend could not remove "${this.bundlepath}" (does the bundle still exist?)`);
+      throw new ModUiError(`The backend could not delete "${this.bundlepath}" (does the bundle still exist?)`);
     }
   }
 }

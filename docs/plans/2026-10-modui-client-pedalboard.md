@@ -116,7 +116,7 @@ desktop title/bundle state (set only from the HTTP response in `desktop.loadPeda
 with a backend broadcast (suggestion below).
 
 ## Suggestions for the remaining pedalboard endpoints (for review, not implemented)
-Implemented since the first draft: `device.currentPedalboard.get/save/saveAs`, `reference.remove()`,
+Implemented since the first draft: `device.currentPedalboard.get/save/saveAs`, `reference.delete()`,
 `reference.images` and `reference.copy()` (see "Revisions"). Still open:
 
 | API | Endpoint | Notes |
@@ -182,7 +182,7 @@ edits never show up and a bundle without images answers `404`. `docs/openapi.yml
     (`asNew=1`; the backend makes the title unique, so read the real one from the result). Both return the saved
     `PedalboardReference`, found in `GET /pedalboard/list`. They run through the `Device` queue, so they never overlap
     a load/reset.
-  - `PedalboardReference.remove()`: throws `ModUiError` for factory and default pedalboards before any request,
+  - `PedalboardReference.delete()` (was `remove()` until 2026-10-11): throws `ModUiError` for factory and default pedalboards before any request,
     and when the backend answers `false`. The default pedalboard is refused too (the classic UI never offers it).
   - **Backend change** (the only one): `GET /pedalboard/current` → `{ bundlepath, title, modified }`
     (`PedalboardCurrent` in `mod/webserver.py`), because the running pedalboard was only exposed inside the rendered
@@ -246,3 +246,8 @@ edits never show up and a bundle without images answers `404`. `docs/openapi.yml
 - **2026-10-07 (7)** — Plan renamed from `2026-10-modui-client.md` to `2026-10-modui-client-pedalboard.md`; the graph area has its own plan, `2026-10-modui-client-pedalboard-graph.md`.
 
 - **2026-10-10** — The client moved from `html/js/lib/modui-client/` to `modui-client/` at the repository root, so it can become an NPM package later. The build output is unchanged (`html/js/lib/modui-client.js`, git-ignored; `npm run build` now writes it with `--outfile=../html/js/lib/modui-client.js`). Earlier entries above that mention `html/js/lib/modui-client/` describe the old location.
+
+- **2026-10-11 (2)** — Method names unified across the client (see "Method names" in `CLAUDE.md`): `reference.remove()` became `reference.delete()`
+  and `instance.move()` became `instance.setPosition()`; `snapshot.remove()` / `bank.remove()` became `delete()`, `snapshots.saveAs()` became
+  `snapshots.create()`, `banks.save()` became `banks.replaceAll()`, `bank.removePedalboard()` / `bank.movePedalboard()` became `bank.remove()` /
+  `bank.move()`. Earlier entries above keep the names of their time.

@@ -90,7 +90,7 @@ Mapping to the endpoints:
      part of the instance (`PluginInfo.ports.control.input`), so nothing is asynchronous.
    - `Param { symbol, name, default, minimum, maximum, designation, properties, value }` and `await param.setValue(v)`.
    - `await instance.isActive()`, `await instance.setActive(active)`, `await instance.toggle()` (resolves with the new state).
-   - `await instance.move({ x, y })`.
+   - `await instance.setPosition({ x, y })`.
 
 ## Implementation notes (differences from the draft)
 - The wire interface `PedalboardConnection` of `types.ts` (a connection stored in a bundle: `source` / `target`) was renamed

@@ -268,7 +268,7 @@ describe('PatchParam.refresh()', () => {
     const pending = param(instance, labelUri).refresh({ timeoutMs: 500 });
     await flush();
 
-    await instance.move({ x: 5, y: 6 }); // would hang if refresh() still held the queue
+    await instance.setPosition({ x: 5, y: 6 }); // would hang if refresh() still held the queue
     expect(socket.sent).toContain(`plugin_pos ${instanceId} 5 6`);
 
     socket.emit(`patch_set ${instanceId} 1 ${labelUri} s done`);

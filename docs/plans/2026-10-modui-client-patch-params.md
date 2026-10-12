@@ -135,7 +135,7 @@ accepted values produce the exact frame (`patch_set /graph/X <uri> s some text`,
 empty string, newline, NaN, non-integer for `i`, out of range, not writable, plugin gone) send nothing. `refresh()`: the waiter is
 registered before the send, resolves on the matching frame only (other uri or instance ignored), also when the answer arrives before
 the send returns, rejects for non-readable / gone plugins, times out (small `timeoutMs`), and does not block the device queue
-(`move()` called meanwhile is sent). Frame arriving from "another client" updates `value`.
+(`setPosition()` called meanwhile is sent). Frame arriving from "another client" updates `value`.
 
 ## Verification
 `npm test` in `html/js/lib/modui-client`; `npx @redocly/cli lint docs/openapi.yml`; `python3 docs/modui-client/sync-progress.py --check`.

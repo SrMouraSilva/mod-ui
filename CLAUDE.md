@@ -16,16 +16,16 @@ mod-ui is the web interface of MOD audio devices.
   client built on `fetch` and the main WebSocket. Current scope: pedalboards (list, info, remove, load, loadDefault, reset, currentPedalboard get/save/saveAs)
   and live editing of the running pedalboard (`device.plugins.list`, `currentPedalboard.plugins` list/add/remove,
   `.connections` list/connect/disconnect, `.ports.list()` and `.ports.<audio|midi|cv>.<input()|output()>`; per instance:
-  `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `move`)
+  `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `setPosition`)
   and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading events), `instance.on`, `param.on('change')`,
   `patchParam.on('change')`, stable objects (`plugins.get`, `alive`), a `{ source }` option on every write, and the connection
   (`client.state`, `client.on('state' | 'error')`, optional `reconnect`), immutable snapshots for UI frameworks
   (`currentPedalboard.getSnapshot()` / `subscribe()`, batched per animation frame) and the device's own reports
   (`device.on('stats' | 'sysStats' | 'transport' | 'bufferSize' | 'trueBypass' | 'snapshot')`, `instance.preset`)
   (`docs/plans/2026-10-modui-client-events.md`, phases 1 to 4; meters and addressings are not covered).
-  Also the running pedalboard's snapshots (`currentPedalboard.snapshots`: list/get/save/saveAs/load, `Snapshot.rename/remove/load`, `current`,
-  `currentIndex`, `on('current' | 'list')`) and the user banks (`client.banks`: list/get/create/move/save, `Bank.rename/remove/add/
-  removePedalboard/movePedalboard/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`).
+  Also the running pedalboard's snapshots (`currentPedalboard.snapshots`: list/get/save/create/load, `Snapshot.rename/delete/load`, `current`,
+  `currentIndex`, `on('current' | 'list')`) and the user banks (`client.banks`: list/get/create/move/replaceAll, `Bank.rename/delete/add/
+  remove/move/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -76,6 +76,27 @@ new argument, a changed behaviour, a fix), stop and ask the user for confirmatio
 decision (confirmed or refused) in the plan of the area concerned (`docs/plans/2026-10-modui-client-pedalboard.md`,
 `docs/plans/2026-10-modui-client-pedalboard-graph.md`, ...). Never edit `mod/`, `modtools/` or `utils/` on your
 own for the client's sake.
+
+### Method names (one vocabulary for every entity)
+Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these, and give a new entity the same verbs.
+
+| Intent | Verb | Used by |
+|---|---|---|
+| Read | `list()`, `get(key)` | every collection (async, unless the data is in memory like `params.list()`) |
+| Make a new **saved** entity | `create(...)` | `banks.create`, `snapshots.create` (captures the live values), `presets.create` (planned) |
+| Put an existing thing into a container | `add(...)` | `plugins.add` (from the catalogue), `bank.add(pedalboard)` |
+| **Destroy** a saved entity | `delete()` | `reference.delete()`, `snapshot.delete()`, `bank.delete()`, `preset.delete()` (planned) |
+| Take something **out of a container** | `remove(...)` | `plugins.remove` / `instance.remove()`, `bank.remove(pedalboard \| index)` |
+| Link / unlink | `connect` / `disconnect` | connections (the domain's own words) |
+| Write the live state into an existing entity | `save(...)` | `currentPedalboard.save`, `snapshots.save` (the current one), `preset.save(name?)` (planned) |
+| Replace a whole list | `replaceAll(...)` | `banks.replaceAll` (deletes what is left out) |
+| Apply | `load(...)` | `device.load`, `snapshots.load`, `presets.load` (planned) |
+| Rename | `rename(name)` | `snapshot.rename`, `bank.rename`; where the backend cannot (presets) the rename is `save(name)` and says that it also overwrites |
+| Change the **order** in a list | `move(from, to)` | `banks.move`, `bank.move` |
+| Place a block in the canvas | `setPosition({ x, y })` | `instance.setPosition` |
+| Change a value | `setValue(v)`, `setActive(b)` | params, patch parameters, bypass |
+
+`currentPedalboard.saveAs(title)` and `reference.copy()` stay as they are: they are the pedalboard's two ways of making a copy, not a new entity.
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,

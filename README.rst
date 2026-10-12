@@ -114,14 +114,14 @@ Usage in the page (or in the browser console), where it is available as ``window
     await instance.params.get('gain').setValue(3.5);   // control values: a live `value`, range checked
     await instance.setActive(false);                   // bypass (also isActive(), toggle())
     await instance.patchParams.get(uri).setValue('Verse');   // strings, paths, booleans, ...: typed, validated (also refresh())
-    await instance.move({ x: 320, y: 140 });
+    await instance.setPosition({ x: 320, y: 140 });
     await plugins.remove(instance);
 
     // Snapshots of the running pedalboard (saved sets of plugin values) and the device's banks
     const { snapshots } = client.device.currentPedalboard;
-    const solo = await snapshots.saveAs('Solo');     // also list(), load(indexOrSnapshot), save(); snapshot.rename(name), snapshot.remove()
+    const solo = await snapshots.create('Solo');     // also list(), load(indexOrSnapshot), save(); snapshot.rename(name), snapshot.delete()
     snapshots.on('current', ({ snapshot }) => label.textContent = snapshot?.name ?? '');
-    const bank = await client.banks.create('Live set', [pedalboards[0]]);   // also list(), move(); bank.add(pb), rename(), remove(), movePedalboard(from, to)
+    const bank = await client.banks.create('Live set', [pedalboards[0]]);   // also list(), move(), replaceAll(); bank.add(pb), rename(), delete(), remove(pb), move(from, to)
 
     // Keep a screen up to date: events about the running pedalboard, whoever changes it (no event makes a request)
     const off = client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));   // also removed, connection:*, loading, loaded

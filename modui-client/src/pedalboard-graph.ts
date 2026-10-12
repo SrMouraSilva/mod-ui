@@ -77,7 +77,7 @@ export interface InstanceOps {
   isActive(instance: string): Promise<boolean>;
   setActive(instance: string, active: boolean, source?: unknown): Promise<void>;
   toggle(instance: string, source?: unknown): Promise<boolean>;
-  move(instance: string, position: Position, source?: unknown): Promise<void>;
+  setPosition(instance: string, position: Position, source?: unknown): Promise<void>;
 }
 
 /** Control ports the host drives itself: `param_set` on them is refused. */
@@ -406,7 +406,7 @@ export class PluginInstance {
   }
 
   /**
-   * Moves the block in the canvas and resolves once the message was sent (no confirmation is sent to the sender). The
+   * Sets the place of the block in the canvas and resolves once the message was sent (no confirmation is sent to the sender). The
    * position is stored with the pedalboard at the next save, and `x` / `y` already show it.
    *
    * Announced to `instance.on('moved')` (`origin: 'local'`) when the position really changes.
@@ -415,13 +415,13 @@ export class PluginInstance {
    * @param options.source Marks the change as yours (see {@link Param.setValue}).
    * @throws {ModUiError} for coordinates that are not finite numbers, or a plugin that is not in the pedalboard.
    * @example
-   * await instance.move({ x: 320, y: 140 });
+   * await instance.setPosition({ x: 320, y: 140 });
    */
-  move(position: Position, options: WriteOptions = {}): Promise<void> {
+  setPosition(position: Position, options: WriteOptions = {}): Promise<void> {
     if (!position || !isFinite(position.x) || !isFinite(position.y) || typeof position.x !== 'number' || typeof position.y !== 'number') {
       return Promise.reject(new ModUiError('Expected a position { x, y } with finite numbers'));
     }
-    return this.rejectIfGone() ?? this.ops.move(this.instance, position, options.source);
+    return this.rejectIfGone() ?? this.ops.setPosition(this.instance, position, options.source);
   }
 
   /**
@@ -765,7 +765,7 @@ export class PedalboardGraph {
     this.state.applyLocal('param_set', `${instance} :bypass ${value}`, source);
   }
 
-  move(instance: string, position: Position, source?: unknown): Promise<void> {
+  setPosition(instance: string, position: Position, source?: unknown): Promise<void> {
     return this.enqueue(async () => {
       await this.requirePlugin(instance);
       this.events.send(`plugin_pos ${instance} ${position.x} ${position.y}`);
@@ -859,7 +859,7 @@ export class PedalboardGraph {
     isActive: (instance) => this.isActive(instance),
     setActive: (instance, active, source) => this.setActive(instance, active, source),
     toggle: (instance, source) => this.toggle(instance, source),
-    move: (instance, position, source) => this.move(instance, position, source),
+    setPosition: (instance, position, source) => this.setPosition(instance, position, source),
   };
 
   /** The model entry of a plugin. The backend raises (and closes the socket) for an unknown instance, so check first. */
