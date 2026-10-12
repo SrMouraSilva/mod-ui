@@ -24,8 +24,10 @@ function shouldSkipPort(port) {
     return false;
 }
 
+// Tone3000 hosts NAM captures (amp heads, pedals, amps+cabs, outboard) and cabinet IRs; it has no
+// AIDA-X models, so AIDA-X ports get no Tone3000 entry.
 function supportsT3K(parameter) {
-    return parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir' || type == 'aidadspmodel')
+    return parameter.fileTypes.some(type => type == 'nammodel' || type == 'cabsim' || type == 'ir')
 }
 
 function loadFileTypesList(parameter, dummy, callback) {
@@ -2855,7 +2857,12 @@ JqueryClass('customSelectPath', baseWidget, {
                 if (!self.data('enabled')) {
                     return self.customSelectPath('prevent', e)
                 }
-                var value = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+                var value = opt.attr('mod-parameter-value')
+                // folder entries are UI only and are compared against file.fullname as is;
+                // file values keep the doubled backslashes they were always sent with
+                if (!value?.startsWith('dir://')) {
+                    value = value.replace(/\\/g,'\\\\')
+                }
                 if (value?.startsWith('dir://')) {
                     const icons = self.data('icons')
                     const currentPath = self.customSelectPath('getCurrentPath')
@@ -2910,8 +2917,8 @@ JqueryClass('customSelectPath', baseWidget, {
         if (current.length == 0) {
             currentPaths = port.basepaths
         } else {
-            // show only files in the current path
-            currentPaths = [ current.join('/') ]
+            // show only files in the current path (each entry is a full path, see pushDir)
+            currentPaths = [ current[current.length - 1] ]
         }
 
         let validItems = []
@@ -2952,7 +2959,7 @@ JqueryClass('customSelectPath', baseWidget, {
 
          self.find('[mod-role=enumeration-option]').each(function () {
             let opt = $(this)
-            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+            let item = opt.attr('mod-parameter-value')
 
             if (validItems.find((file) => item === file.fullname)) {
                 opt.removeClass('mod-hidden')
@@ -3008,7 +3015,7 @@ JqueryClass('customSelectPath', baseWidget, {
 
         self.find('[mod-role=enumeration-option]').each(function () {
             let opt = $(this)
-            let item = opt.attr('mod-parameter-value').replace(/\\/g,'\\\\')
+            let item = opt.attr('mod-parameter-value')
 
             if (validItems.find((file) => item === file.fullname)) {
                 opt.removeClass('mod-hidden')
@@ -3029,7 +3036,13 @@ JqueryClass('customSelectPath', baseWidget, {
         var self = $(this)
         self.find('[mod-role=enumeration-option]').removeClass('selected')
 
-        var selected = self.find('[mod-role=enumeration-option][mod-parameter-value="' + value + '"]')
+        // match by comparing the attribute in JS, a CSS attribute selector treats the backslashes
+        // of a Windows path as escapes. The value may come with doubled backslashes (a click)
+        // or as is (plugin value, Tone3000 download).
+        var selected = self.find('[mod-role=enumeration-option]').filter(function () {
+            const optValue = $(this).attr('mod-parameter-value')
+            return optValue === value || optValue.replace(/\\/g,'\\\\') === value
+        })
         if (selected.length === 0) {
             return
         }
@@ -3044,24 +3057,19 @@ JqueryClass('customSelectPath', baseWidget, {
 
         // sync the current folder with the value path
         if (self.data('initialized')) {
-            let parts = value.split('/')
-            let path = ""
-            let parentPath = ""
+            // every folder level of the option's path, '/' or '\\' separated (same as pushDir)
+            const optionPath = selected.first().attr('mod-parameter-value')
             let newCurrent = []
 
-            for(let index = 0; index < parts.length - 1; index++) {
-                if (index > 0) path += '/'
-                path += parts[index]
-                const folder = self.find("[mod-role=enumeration-option][mod-parameter-value='dir://" + path + "']")
+            for(let index = 0; index < optionPath.length; index++) {
+                if (optionPath[index] !== '/' && optionPath[index] !== '\\') continue
+                const path = optionPath.slice(0, index)
+                const folder = self.find('[mod-role=enumeration-option]').filter(function () {
+                    return $(this).attr('mod-parameter-value') === 'dir://' + path
+                })
                 if (folder.length > 0) {
-                    if (parentPath.length > 0) {
-                        // puth the other folders
-                        newCurrent.push(parts[index])
-                    } else {
-                        // push the root
-                        newCurrent.push(path)
-                    }
-                    parentPath = path
+                    // full path of every folder level, same as pushDir
+                    newCurrent.push(path)
                     // update the element UI
                     const backArrow = self.data('icons').backArrow
 

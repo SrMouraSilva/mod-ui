@@ -5,9 +5,11 @@
 import json
 import logging
 import os
+import platform
 import re
 import shutil
 import subprocess
+import threading
 import sys
 import time
 import urllib.parse
@@ -30,6 +32,7 @@ try:
 except ImportError:
     haveSignal = False
 
+from mod import hostinfo
 from mod.profile import Profile
 from mod.settings import (DESKTOP, LOG, DEV_API,
                           HTML_DIR, DOWNLOAD_TMP_DIR, DEVICE_KEY, DEVICE_WEBSERVER_PORT,
@@ -157,18 +160,21 @@ def install_bundles_in_tmp_dir(callback):
     callback(resp)
 
 def run_command(args, cwd, callback):
+    # The command's exit is awaited on a thread and the callback posted back to the IOLoop.
+    # The previous version registered the child's stdout for epoll's HUP event (the raw
+    # mask 16): that fires on Linux only, so on macOS and Windows (MOD Desktop) the callback
+    # never ran and every request through here, plugin install included, hung for good.
     ioloop = IOLoop.instance()
     proc   = subprocess.Popen(args, cwd=cwd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
-    def end_fileno(fileno, event):
-        ret = proc.poll()
-        if ret is None:
-            return
-        ioloop.remove_handler(fileno)
+    def wait_for_exit():
+        stdout, stderr = proc.communicate()
         if callback is not None:
-            callback((ret,) + proc.communicate())
+            ioloop.add_callback(callback, (proc.returncode, stdout, stderr))
 
-    ioloop.add_handler(proc.stdout.fileno(), end_fileno, 16)
+    thread = threading.Thread(target=wait_for_exit)
+    thread.daemon = True
+    thread.start()
 
 def install_package(filename, callback):
     if not os.path.exists(filename):
@@ -376,7 +382,8 @@ class MultiPartFileReceiver(JsonRequestHandler):
 class SystemInfo(JsonRequestHandler):
     def get(self):
         hwdesc = get_hardware_descriptor()
-        uname  = os.uname()
+        # os.uname() does not exist on Windows
+        uname  = platform.uname()
 
         if os.path.exists("/etc/mod-release/system"):
             with open("/etc/mod-release/system") as fh:
@@ -416,10 +423,19 @@ class SystemInfo(JsonRequestHandler):
             "uname": {
                 "machine": uname.machine,
                 "release": uname.release,
-                "sysname": uname.sysname,
+                "sysname": uname.system,
                 "version": uname.version
             }
         }
+
+        if DESKTOP:
+            # a computer has no hardware descriptor, release file or controller:
+            # say what it is, what it runs on and what audio setup was started
+            info["host"] = hostinfo.collect([os.path.dirname(LV2_PEDALBOARDS_DIR.rstrip('/\\')), DATA_DIR])
+            info["host"]["buffer_size"] = get_jack_buffer_size()
+            info["host"]["sample_rate"] = get_jack_sample_rate()
+            if info["host"]["uptime"] is not None:
+                info["uptime"] = info["host"]["uptime"]
 
         self.write(info)
 
@@ -1881,6 +1897,10 @@ class TemplateHandler(TimelessRequestHandler):
             'titleblend': '' if SESSION.host.pedalboard_name else 'blend',
             'dev_api_class': 'dev_api' if DEV_API else '',
             'using_desktop': 'true' if DESKTOP else 'false',
+            # Real bool, for {% if %}. 'using_desktop' above is the *string*
+            # 'true'/'false', because it is substituted into JS; both strings
+            # are truthy, so it cannot be branched on in the template.
+            'desktop_app': DESKTOP,
             'using_mod': 'true' if DEVICE_KEY and hwdesc.get('platform', None) is not None else 'false',
             'user_name': mod_squeeze(user_id.get("name", "")),
             'user_email': mod_squeeze(user_id.get("email", "")),
@@ -1979,6 +1999,21 @@ class BulkTemplateLoader(TimelessRequestHandler):
                           mod_squeeze(contents)
                           )
                        )
+        # MOD Desktop specific templates, exposed as TEMPLATES['desktop_app_<name>'].
+        # Skipped entirely on hardware: nothing there renders them, and they are
+        # dead weight in a bundle the device parses on every load.
+        appdir = os.path.join(basedir, 'desktop-app')
+        if DESKTOP and os.path.isdir(appdir):
+            for template in os.listdir(appdir):
+                if not re.match('^[a-z_]+\.html$', template):
+                    continue
+                with open(os.path.join(appdir, template), 'r') as fh:
+                    contents = fh.read()
+                self.write("TEMPLATES['desktop_app_%s'] = '%s';\n\n"
+                           % (template[:-5],
+                              mod_squeeze(contents)
+                              )
+                           )
         self.finish()
 
     # custom call, we cannot use CachedJsonRequestHandler
