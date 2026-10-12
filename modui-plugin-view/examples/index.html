@@ -1,0 +1,120 @@
+<!doctype html>
+<!-- SPDX-FileCopyrightText: 2012-2026 MOD Audio UG -->
+<!-- SPDX-License-Identifier: AGPL-3.0-or-later -->
+<!--
+  A minimal frontend that drives a MOD device without the classic UI: modui-client for the data, modui-plugin-view for the plugin GUIs.
+  Serve it with `node examples/serve.mjs` (see that file). No framework: a React / Vue / Svelte app does the same in an effect / ref.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>modui-plugin-view example</title>
+  <style>
+    body { margin: 0; font: 14px system-ui, sans-serif; background: #1d1f22; color: #ddd; }
+    header { padding: 12px 16px; display: flex; gap: 12px; align-items: center; flex-wrap: wrap; border-bottom: 1px solid #333; }
+    header h1 { font-size: 16px; margin: 0 12px 0 0; }
+    select, button { font: inherit; }
+    #state { opacity: .7; }
+    main { padding: 16px; }
+    h2 { font-size: 13px; text-transform: uppercase; letter-spacing: .08em; opacity: .6; margin: 24px 0 8px; }
+    .board { display: flex; flex-wrap: wrap; gap: 24px; align-items: flex-start; }
+    .slot { position: relative; cursor: pointer; }
+    /* Only the wrapper the library creates: the plugin's own root also has class mod-pedal and positions itself. */
+    .slot > .mod-pedal { position: relative; }
+    .slot .name { font-size: 12px; opacity: .6; margin-top: 6px; }
+    /* The settings panel of mod-ui is a full-window overlay (.mod-pedal-settings is absolute with insets): give it a sized box. */
+    #settings .mod-settings { position: fixed; inset: 0; z-index: 1000; background: rgba(17, 17, 17, .92); }
+    #settings .mod-settings::after { content: none; }
+    #log { font: 12px ui-monospace, monospace; white-space: pre; max-height: 160px; overflow: auto; background: #111; padding: 8px; }
+  </style>
+  <!-- jQuery only so that plugins with their own JavaScript run (the library itself does not need it). Some plugin scripts also use
+       jQuery plugins that the classic UI loads (x42 fil4 draws with jquery.svg). -->
+  <script src="/js/lib/jquery-1.9.1.min.js"></script>
+  <script src="/js/lib/jquery.svg.js"></script>
+  <script src="/js/lib/modui-client.js"></script>
+  <script src="/js/lib/modui-plugin-view.js"></script>
+</head>
+<body>
+  <header>
+    <h1>MOD — external frontend</h1>
+    <select id="catalog"><option>Loading plugins…</option></select>
+    <button id="add">Add to pedalboard</button>
+    <span id="state"></span>
+  </header>
+  <main>
+    <h2>Running pedalboard (live) — double-click a pedal for its settings</h2>
+    <div class="board" id="board"></div>
+    <h2>Preview of the selected plugin (local, nothing is sent)</h2>
+    <div class="board" id="preview"></div>
+    <h2>Events</h2>
+    <div id="log"></div>
+  </main>
+  <!-- Double-click a pedal to open its settings here. -->
+  <div id="settings"></div>
+  <script>
+    const { ModUiClient } = window.ModUi;
+    const { PluginViews } = window.ModUiPluginView;
+
+    const client = new ModUiClient({ reconnect: true });   // same origin (through the proxy)
+    const views = new PluginViews(client, { jQuery: window.jQuery });
+    const current = client.device.currentPedalboard;
+    const board = document.getElementById('board');
+    const settingsBox = document.getElementById('settings');
+    const logBox = document.getElementById('log');
+    const shown = new Map();   // instance path -> view
+
+    const log = (text) => { logBox.textContent = `${new Date().toLocaleTimeString()}  ${text}\n` + logBox.textContent.slice(0, 4000); };
+    client.on('state', ({ state }) => (document.getElementById('state').textContent = `connection: ${state}`));
+    views.on('error', ({ uri, context, error }) => log(`error (${context}) ${uri}: ${error}`));
+
+    async function show(instance) {
+      if (shown.has(instance.instance)) return;
+      shown.set(instance.instance, null);
+      const view = await views.create(instance);
+      shown.set(instance.instance, view);
+      const slot = document.createElement('div');
+      slot.className = 'slot';
+      slot.append(view.icon);
+      const name = document.createElement('div');
+      name.className = 'name';
+      name.textContent = instance.instance;
+      slot.append(name);
+      board.append(slot);
+      slot.addEventListener('dblclick', () => {
+        settingsBox.replaceChildren(view.settings);
+      });
+      view.on('close', () => view.settings.remove());
+      view.on('change', ({ symbol, value, origin }) => log(`${instance.instance} ${symbol} = ${value} (${origin})`));
+      view.on('active', ({ active, origin }) => log(`${instance.instance} ${active ? 'on' : 'bypassed'} (${origin})`));
+      view.on('preset', ({ preset, origin }) => log(`${instance.instance} preset ${preset} (${origin})`));
+      view.on('destroyed', () => { slot.remove(); shown.delete(instance.instance); });
+    }
+
+    async function refresh() {
+      for (const instance of await current.plugins.list()) show(instance);
+    }
+
+    current.on('plugin:added', ({ plugin }) => show(plugin));
+    current.on('loaded', refresh);
+
+    (async () => {
+      await client.connect();
+      await refresh();
+      const plugins = (await client.device.plugins.list()).sort((a, b) => a.name.localeCompare(b.name));
+      const select = document.getElementById('catalog');
+      select.replaceChildren(...plugins.map((plugin) => new Option(`${plugin.name} (${plugin.brand})`, plugin.uri)));
+      let preview = null;
+      const showPreview = async () => {
+        preview?.destroy();
+        preview = await views.create(select.value);
+        document.getElementById('preview').replaceChildren(preview.icon);
+        preview.on('change', ({ symbol, value }) => log(`preview ${symbol} = ${value} (local)`));
+      };
+      select.addEventListener('change', showPreview);
+      document.getElementById('add').addEventListener('click', () => current.plugins.add(select.value));
+      showPreview();
+    })().catch((error) => log(String(error)));
+  </script>
+</body>
+</html>

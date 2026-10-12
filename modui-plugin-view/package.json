@@ -1,0 +1,24 @@
+{
+  "name": "modui-plugin-view",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Renders and drives the GUI (modgui) of MOD plugins outside the classic mod-ui, on top of modui-client.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "exports": "./src/index.ts",
+  "engines": {
+    "node": ">=22.12"
+  },
+  "scripts": {
+    "build": "esbuild src/index.ts --bundle --format=iife --target=es2018 --outfile=../html/js/lib/modui-plugin-view.js",
+    "watch": "esbuild src/index.ts --bundle --format=iife --target=es2018 --sourcemap=inline --outfile=../html/js/lib/modui-plugin-view.js --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc --noEmit && vitest run"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "happy-dom": "21.0.1",
+    "typescript": "7.0.2",
+    "vitest": "5.0.3"
+  }
+}

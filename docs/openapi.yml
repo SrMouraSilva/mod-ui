@@ -353,6 +353,11 @@ paths:
         always the **last** argument, or it is base64 encoded JSON. Values written with `%f` use Python formatting
         (`1.000000`). Several human readable labels have their spaces replaced by `_` on the wire.
 
+        **Origin check:** Tornado's default `check_origin` applies: the host of the `Origin` header must equal the `Host` header,
+        otherwise the upgrade is refused with `403`. A proxy in front of mod-ui (a dev server of an external frontend) must rewrite
+        both (with Vite `server.proxy`: `changeOrigin: true` rewrites `Host` only; set `Origin` in a `proxyReqWs` handler, see
+        `docs/modui-plugin-view.md`).
+
         ## Session life-cycle
 
         1. On `open`, Nagle is disabled. If this is the **first** socket, the backend starts a UI session

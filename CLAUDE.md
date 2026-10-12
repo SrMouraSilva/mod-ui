@@ -29,6 +29,10 @@ mod-ui is the web interface of MOD audio devices.
   list/get/load/create/save/delete, `Preset.load/save/delete`, `current`, `on('list')`) (`docs/plans/2026-10-modui-client-presets.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
+- **Plugin GUIs**: `modui-plugin-view/` (sources in `src/`, tests in `test/`), renders and drives a plugin's modgui (icon, settings,
+  widgets, plugin JavaScript) in any page on top of `modui-client` (type-only dependency; the app passes its client). Entry point
+  `new PluginViews(client).create(instance | plugin | uri)`. Guide: `docs/modui-plugin-view.md`; plan: `docs/plans/2026-10-modui-plugin-view.md`.
+  It ports `html/js/modgui.js`: when that file changes (template data, widgets, the script API), check the port.
 - **Plans**: `docs/plans/` (see "Plans" below).
 
 ## Commands
@@ -44,6 +48,9 @@ npm install
 npm test          # tsc --noEmit + vitest
 npm run build     # writes html/js/lib/modui-client.js (generated, git-ignored)
 npm run watch     # rebuild on change
+
+# plugin GUIs (same toolchain)
+cd modui-plugin-view && npm install && npm test && npm run build   # writes html/js/lib/modui-plugin-view.js (git-ignored)
 
 # API contract
 npx @redocly/cli lint docs/openapi.yml
@@ -157,7 +164,7 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 
 ### General
 - Code, comments and docs in English.
-- Do not commit generated files (`html/js/lib/modui-client.js`, `node_modules/`).
+- Do not commit generated files (`html/js/lib/modui-client.js`, `html/js/lib/modui-plugin-view.js`, `node_modules/`).
 
 ## Plans
 

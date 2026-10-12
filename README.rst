@@ -147,3 +147,27 @@ are in ``docs/plans/2026-10-modui-client-pedalboard.md`` (live editing of the ru
 
 Known limitation: when the client loads a pedalboard while the classic UI is open, the canvas reloads through the
 WebSocket, but the title shown by the classic UI is not updated.
+
+Plugin GUIs outside mod-ui (modui-plugin-view)
+----------------------------------------------
+
+``modui-plugin-view/`` renders the GUI (modgui) of a plugin, its pedal and its settings panel, in any page and keeps it live through
+``modui-client``: knobs, switches and selectors move when anybody changes a value, gestures write to the device, the plugin's own
+JavaScript runs (with jQuery). With the two libraries a new frontend, a React SPA for instance, can manage a device without the classic UI.
+
+.. code-block:: bash
+
+    $ cd modui-plugin-view
+    $ npm install
+    $ npm test
+    $ npm run build      # writes html/js/lib/modui-plugin-view.js (generated, not versioned)
+
+.. code-block:: javascript
+
+    const views = new PluginViews(client, { jQuery: window.jQuery });
+    const view = await views.create(instance);          // a plugin of the running pedalboard; or a plugin URI for a local preview
+    box.append(view.icon);  panel.append(view.settings);
+    view.on('change', ({ symbol, value, origin }) => ...);
+
+The page must be served from mod-ui's origin or through a proxy (no CORS). Guide: ``docs/modui-plugin-view.md``;
+example page: ``modui-plugin-view/examples/``; plan: ``docs/plans/2026-10-modui-plugin-view.md``.
