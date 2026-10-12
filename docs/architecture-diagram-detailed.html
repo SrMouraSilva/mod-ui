@@ -1,0 +1,304 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>mod-ui architecture, detailed</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --color-paper:   #f5f5f5;
+      --color-ink:     #2e1f33;
+      --color-muted:   #5c4a64;
+      --color-accent:  #a84e0a;
+      --font-sans:     'Geist', system-ui, sans-serif;
+      --font-serif:    'Instrument Serif', serif;
+      --font-mono:     'Geist Mono', ui-monospace, monospace;
+    }
+    body {
+      font-family: var(--font-sans);
+      background: var(--color-paper);
+      color: var(--color-ink);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      padding: 3rem 2rem;
+    }
+    .frame { max-width: 1632px; width: 100%; }
+    .diagram-container { width: 100%; overflow-x: auto; }
+    .eyebrow {
+      font-family: var(--font-mono);
+      font-size: 0.66rem;
+      font-weight: 500;
+      letter-spacing: 0.18em;
+      text-transform: uppercase;
+      color: var(--color-muted);
+      margin-bottom: 0.5rem;
+    }
+    h1 {
+      font-family: var(--font-serif);
+      font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem);
+      font-weight: 400;
+      letter-spacing: -0.02em;
+      line-height: 1.15;
+      color: var(--color-ink);
+      margin-bottom: 1.5rem;
+    }
+    svg { width: 100%; min-width: 1632px; display: block; }
+    @media print {
+      .diagram-container { overflow-x: visible; }
+      svg { min-width: 0; }
+    }
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="eyebrow">Architecture · mod-ui · detailed view</p>
+    <h1>Every layer of mod-ui, from the browser to the audio device</h1>
+
+    <div class="diagram-container">
+      <svg viewBox="0 0 1632 1040" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="architecture-modui-detailed-title architecture-modui-detailed-desc">
+        <title id="architecture-modui-detailed-title">mod-ui architecture, detailed</title>
+        <desc id="architecture-modui-detailed-desc">The legacy jQuery frontend and the new TypeScript libraries talk to a Tornado webserver in mod/, which drives Session and Host; Host uses Addressings and libmod_utils and controls mod-host, the HMI and Control Chain, while data lives on disk and plugin stores in the MOD cloud.</desc>
+        <defs>
+          <pattern id="architecture-modui-detailed-dots" width="22" height="22" patternUnits="userSpaceOnUse">
+            <circle cx="1" cy="1" r="0.9" fill="rgba(46,31,51,0.10)"/>
+          </pattern>
+          <marker id="arrow" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#5c4a64"/></marker>
+          <marker id="arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#a84e0a"/></marker>
+          <marker id="arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polygon points="0 0, 8 3, 0 6" fill="#883996"/></marker>
+        </defs>
+
+        <rect width="100%" height="100%" fill="#f5f5f5"/>
+        <rect width="100%" height="100%" fill="url(#architecture-modui-detailed-dots)" opacity="0.55"/>
+
+        <!-- Zones -->
+        <rect x="40" y="72" width="224" height="512" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="66" y="76" width="172" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="152" y="85" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">LEGACY FRONTEND · HTML/JS</text>
+        <rect x="40" y="616" width="224" height="304" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="66" y="620" width="172" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="152" y="629" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">NEW FRONTEND · TYPESCRIPT</text>
+        <rect x="344" y="72" width="704" height="416" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="626" y="76" width="140" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="696" y="85" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">MOD/ · PYTHON BACKEND</text>
+        <rect x="1104" y="72" width="224" height="416" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="1166" y="76" width="100" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1216" y="85" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">OUTSIDE PYTHON</text>
+        <rect x="1384" y="72" width="208" height="176" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="1456" y="76" width="64" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="1488" y="85" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">INTERNET</text>
+        <rect x="584" y="520" width="464" height="144" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <rect x="772" y="524" width="88" height="12" rx="2" fill="#f5f5f5"/>
+        <text x="816" y="533" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.14em">DATA ON DISK</text>
+
+        <!-- Arrows first (behind boxes) -->
+        <line x1="368" y1="272" x2="248" y2="272" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <path d="M 248,392 H 288 Q 296,392 296,384 V 296 Q 296,288 304,288 H 368" fill="none" stroke="#883996" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 368,304 H 320 Q 312,304 312,312 V 504 Q 312,512 304,512 H 248" fill="none" stroke="#a84e0a" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <path d="M 248,824 H 320 Q 328,824 328,816 V 328 Q 328,320 336,320 H 368" fill="none" stroke="#883996" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <line x1="152" y1="736" x2="152" y2="784" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 248,152 H 264 Q 272,152 272,144 V 52 Q 272,44 280,44 H 1528 Q 1536,44 1536,52 V 136" fill="none" stroke="#883996" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <path d="M 456,256 V 68 Q 456,60 464,60 H 1448 Q 1456,60 1456,68 V 136" fill="none" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="544" y1="296" x2="608" y2="296" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="784" y1="296" x2="848" y2="296" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="696" y1="336" x2="696" y2="376" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="696" y1="256" x2="696" y2="216" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <line x1="936" y1="256" x2="936" y2="216" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="936" y1="336" x2="936" y2="376" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="1024" y1="296" x2="1136" y2="296" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 1024,276 H 1064 Q 1072,276 1072,268 V 184 Q 1072,176 1080,176 H 1136" fill="none" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <path d="M 1024,316 H 1080 Q 1088,316 1088,324 V 408 Q 1088,416 1096,416 H 1136" fill="none" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="696" y1="456" x2="696" y2="552" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <line x1="936" y1="456" x2="936" y2="552" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+
+        <!-- Nodes -->
+        <!-- Node: Plugin GUIs -->
+        <rect x="56" y="112" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="112" width="192" height="80" rx="6" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+        <rect x="64" y="120" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.22)" stroke-width="0.8"/>
+        <text x="74" y="129" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">JS</text>
+        <text x="152" y="152" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Plugin GUIs</text>
+        <text x="152" y="168" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">modgui.js · effects.js</text>
+        <text x="152" y="182" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">cloudplugin.js · Mustache</text>
+        <!-- Node: Pages &amp; shell -->
+        <rect x="56" y="232" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="232" width="192" height="80" rx="6" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+        <rect x="64" y="240" width="32" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.22)" stroke-width="0.8"/>
+        <text x="80" y="249" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTML</text>
+        <text x="152" y="272" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pages &amp; shell</text>
+        <text x="152" y="288" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">index.html · include/</text>
+        <text x="152" y="302" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">desktop.js · window.js</text>
+        <!-- Node: Pedalboard editor -->
+        <rect x="56" y="352" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="352" width="192" height="80" rx="6" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+        <rect x="64" y="360" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.22)" stroke-width="0.8"/>
+        <text x="74" y="369" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">JS</text>
+        <text x="152" y="392" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pedalboard editor</text>
+        <text x="152" y="408" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pedalboard.js · banks.js</text>
+        <text x="152" y="422" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">snapshot.js · pedalboards.js</text>
+        <!-- Node: Device link -->
+        <rect x="56" y="472" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="472" width="192" height="80" rx="6" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+        <rect x="64" y="480" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.22)" stroke-width="0.8"/>
+        <text x="74" y="489" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">JS</text>
+        <text x="152" y="512" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Device link</text>
+        <text x="152" y="528" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">host.js · hardware.js</text>
+        <text x="152" y="542" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">transport.js · cc-manager.js</text>
+        <!-- Node: modui-plugin-view -->
+        <rect x="56" y="656" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="656" width="192" height="80" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+        <rect x="64" y="664" width="20" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
+        <text x="74" y="673" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TS</text>
+        <text x="152" y="696" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">modui-plugin-view</text>
+        <text x="152" y="712" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">renders a plugin's modgui</text>
+        <text x="152" y="726" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">modui-plugin-view/src</text>
+        <!-- Node: modui-client -->
+        <rect x="56" y="784" width="192" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="56" y="784" width="192" height="80" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+        <rect x="64" y="792" width="20" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
+        <text x="74" y="801" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TS</text>
+        <text x="152" y="824" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">modui-client</text>
+        <text x="152" y="840" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">HTTP + WebSocket client</text>
+        <text x="152" y="854" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">graph state · snapshots</text>
+        <!-- Node: Webserver -->
+        <rect x="368" y="256" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="368" y="256" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <rect x="376" y="264" width="28" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="390" y="273" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTP</text>
+        <text x="456" y="296" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Webserver</text>
+        <text x="456" y="312" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">webserver.py · Tornado</text>
+        <text x="456" y="326" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">88 handler classes · 3 sockets</text>
+        <!-- Node: Session -->
+        <rect x="608" y="256" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="608" y="256" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <rect x="616" y="264" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="626" y="273" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PY</text>
+        <text x="696" y="296" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Session</text>
+        <text x="696" y="312" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">session.py · prefs</text>
+        <text x="696" y="326" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">owns Host, HMI, recorder</text>
+        <!-- Node: Dev fakes -->
+        <rect x="608" y="136" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="608" y="136" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1" stroke-dasharray="4,3"/>
+        <rect x="616" y="144" width="24" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="628" y="153" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">DEV</text>
+        <text x="696" y="176" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Dev fakes</text>
+        <text x="696" y="192" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">development.py</text>
+        <text x="696" y="206" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">FakeHost · FakeHMI</text>
+        <!-- Node: Support modules -->
+        <rect x="608" y="376" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="608" y="376" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <rect x="616" y="384" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="626" y="393" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PY</text>
+        <text x="696" y="416" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Support modules</text>
+        <text x="696" y="432" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">bank.py · profile.py</text>
+        <text x="696" y="446" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">recorder · screenshot · tuner</text>
+        <!-- Node: Host -->
+        <rect x="848" y="256" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="848" y="256" width="176" height="80" rx="6" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+        <rect x="856" y="264" width="32" height="12" rx="2" fill="transparent" stroke="rgba(168,78,10,0.50)" stroke-width="0.8"/>
+        <text x="872" y="273" fill="#a84e0a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CORE</text>
+        <text x="936" y="296" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Host</text>
+        <text x="936" y="312" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">host.py · 7k lines</text>
+        <text x="936" y="326" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugins · snapshots · MIDI</text>
+        <!-- Node: Addressings -->
+        <rect x="848" y="136" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="848" y="136" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <rect x="856" y="144" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="866" y="153" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">PY</text>
+        <text x="936" y="176" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Addressings</text>
+        <text x="936" y="192" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">addressings.py</text>
+        <text x="936" y="206" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">params to HMI/CC/MIDI/CV</text>
+        <!-- Node: libmod_utils -->
+        <rect x="848" y="376" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="848" y="376" width="176" height="80" rx="6" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <rect x="856" y="384" width="36" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.40)" stroke-width="0.8"/>
+        <text x="874" y="393" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">C LIB</text>
+        <text x="936" y="416" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">libmod_utils</text>
+        <text x="936" y="432" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">modtools/utils.py · ctypes</text>
+        <text x="936" y="446" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">LV2 scan · pedalboard I/O</text>
+        <!-- Node: HMI hardware -->
+        <rect x="1136" y="136" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="1136" y="136" width="176" height="80" rx="6" fill="rgba(92,74,100,0.10)" stroke="#6f5a78" stroke-width="1"/>
+        <rect x="1144" y="144" width="28" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.40)" stroke-width="0.8"/>
+        <text x="1158" y="153" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="1224" y="176" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">HMI hardware</text>
+        <text x="1224" y="192" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">hmi.py · serial</text>
+        <text x="1224" y="206" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">knobs · buttons · screens</text>
+        <!-- Node: mod-host -->
+        <rect x="1136" y="256" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="1136" y="256" width="176" height="80" rx="6" fill="rgba(92,74,100,0.10)" stroke="#6f5a78" stroke-width="1"/>
+        <rect x="1144" y="264" width="28" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.40)" stroke-width="0.8"/>
+        <text x="1158" y="273" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="1224" y="296" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">mod-host</text>
+        <text x="1224" y="312" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">TCP :5555</text>
+        <text x="1224" y="326" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">JACK audio · LV2 plugins</text>
+        <!-- Node: Control Chain -->
+        <rect x="1136" y="376" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="1136" y="376" width="176" height="80" rx="6" fill="rgba(92,74,100,0.10)" stroke="#6f5a78" stroke-width="1"/>
+        <rect x="1144" y="384" width="28" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.40)" stroke-width="0.8"/>
+        <text x="1158" y="393" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="1224" y="416" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Control Chain</text>
+        <text x="1224" y="432" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">control_chain.py · socket</text>
+        <text x="1224" y="446" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">external pedals</text>
+        <!-- Node: MOD cloud -->
+        <rect x="1400" y="136" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="1400" y="136" width="176" height="80" rx="6" fill="rgba(92,74,100,0.10)" stroke="#6f5a78" stroke-width="1"/>
+        <rect x="1408" y="144" width="28" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.40)" stroke-width="0.8"/>
+        <text x="1422" y="153" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">EXT</text>
+        <text x="1488" y="176" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">MOD cloud</text>
+        <text x="1488" y="192" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">api.mod.audio</text>
+        <text x="1488" y="206" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugins + pedalboards store</text>
+        <!-- Node: State files -->
+        <rect x="608" y="552" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="608" y="552" width="176" height="80" rx="6" fill="rgba(46,31,51,0.05)" stroke="#5c4a64" stroke-width="1"/>
+        <rect x="616" y="560" width="36" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.50)" stroke-width="0.8"/>
+        <text x="634" y="569" fill="#5c4a64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FILES</text>
+        <text x="696" y="592" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">State files</text>
+        <text x="696" y="608" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">data/banks.json · prefs.json</text>
+        <text x="696" y="622" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">last.json · profile*.json</text>
+        <!-- Node: LV2 bundles -->
+        <rect x="848" y="552" width="176" height="80" rx="6" fill="#f5f5f5"/>
+        <rect x="848" y="552" width="176" height="80" rx="6" fill="rgba(46,31,51,0.05)" stroke="#5c4a64" stroke-width="1"/>
+        <rect x="856" y="560" width="36" height="12" rx="2" fill="transparent" stroke="rgba(92,74,100,0.50)" stroke-width="0.8"/>
+        <text x="874" y="569" fill="#5c4a64" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">FILES</text>
+        <text x="936" y="592" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">LV2 bundles</text>
+        <text x="936" y="608" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugins + pedalboards</text>
+        <text x="936" y="622" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">on disk, scanned by libmod</text>
+
+        <!-- Callout -->
+        <text x="56" y="892" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">index.html loads modui-client,</text>
+        <text x="56" y="906" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">but no legacy script calls it yet.</text>
+
+        <!-- Legend strip -->
+        <line x1="40" y1="968" x2="1592" y2="968" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+        <text x="40" y="988" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+        <rect x="40" y="996" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+        <text x="60" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Core</text>
+        <rect x="116" y="996" width="14" height="10" rx="2" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
+        <text x="136" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Backend module</text>
+        <rect x="240" y="996" width="14" height="10" rx="2" fill="#ffffff" stroke="#2e1f33" stroke-width="1" stroke-dasharray="3,2"/>
+        <text x="260" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Optional / dev only</text>
+        <rect x="388" y="996" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+        <text x="408" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Legacy browser code</text>
+        <rect x="540" y="996" width="14" height="10" rx="2" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+        <text x="560" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">New TypeScript library</text>
+        <rect x="704" y="996" width="14" height="10" rx="2" fill="rgba(46,31,51,0.05)" stroke="#5c4a64" stroke-width="1"/>
+        <text x="724" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Files on disk</text>
+        <rect x="816" y="996" width="14" height="10" rx="2" fill="rgba(92,74,100,0.10)" stroke="#6f5a78" stroke-width="1"/>
+        <text x="836" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">External process / service</text>
+        <line x1="1000" y1="1001" x2="1028" y2="1001" stroke="#883996" stroke-width="1.2" marker-end="url(#arrow-link)"/>
+        <text x="1036" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">HTTP request</text>
+        <line x1="1124" y1="1001" x2="1152" y2="1001" stroke="#a84e0a" stroke-width="1.4" marker-end="url(#arrow-accent)"/>
+        <text x="1160" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">WebSocket push</text>
+        <line x1="1262" y1="1001" x2="1290" y2="1001" stroke="#5c4a64" stroke-width="1.2" marker-end="url(#arrow)"/>
+        <text x="1298" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Call / protocol</text>
+        <line x1="1394" y1="1001" x2="1422" y2="1001" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#arrow)"/>
+        <text x="1430" y="1004" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Serves files / optional</text>
+      </svg>
+    </div>
+  </div>
+</body>
+</html>

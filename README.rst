@@ -85,89 +85,53 @@ API documentation
 
 ``docs/openapi.yml`` describes everything the backend exposes to the browser: the HTTP endpoints, the WebSocket
 messages (``/websocket``, ``/rpbsocket``, ``/rplsocket``), the server-rendered pages and the other channels.
-Open it with any OpenAPI viewer (Swagger UI, Redoc, the VS Code OpenAPI extension) or lint it with::
+The rendered documentation is published at https://srmourasilva.github.io/mod-ui/.
+Open the file with any OpenAPI viewer (Swagger UI, Redoc, the VS Code OpenAPI extension) or lint it with::
 
     $ npx @redocly/cli lint docs/openapi.yml
 
 TypeScript client (modui-client)
 --------------------------------
 
-``modui-client/`` contains a small, typed client for the backend (``fetch`` + WebSocket).
-It is optional: the existing UI does not depend on it and Python-only work needs none of this.
+``modui-client/`` is a friendly, typed API to manage a MOD device from code (``fetch`` + WebSocket).
+It hides the HTTP endpoints and WebSocket messages behind a few classes, so you can build new interfaces
+for the device, beyond the classic mod-ui, in the browser or in Node.js. It is optional: the classic UI does not need it.
 
-The sources live in ``modui-client/src/`` (one module per area) and the tests in ``test/``.
-The build bundles them into one plain JavaScript file, ``html/js/lib/modui-client.js``. That file is **generated and not versioned** (see ``.gitignore``);
-``index.html`` loads it, ``setup.py`` and ``mod-deploy.sh`` pick it up with the other ``html/js/lib/*.js`` files.
-If you do not build it, the page still works, the browser just reports a 404 for that script.
+Build it with Node.js 22.12 or newer:
 
-Requirements: Node.js 22.12 or newer.
-
-Build, watch and test::
+.. code-block:: bash
 
     $ cd modui-client
     $ npm install
-    $ npm run build      # writes html/js/lib/modui-client.js
-    $ npm run watch      # rebuilds on change, with an inline source map
-    $ npm test           # type check + unit tests (vitest)
+    $ npm run build      # writes html/js/lib/modui-client.js (generated, not versioned)
+    $ npm test           # type check + unit tests
 
-npm 11 may warn that esbuild's install script was not approved; the build works without it.
+Release builds must run ``npm install && npm run build`` in that folder before installing ``html/``.
 
-Release builds must run ``npm install && npm run build`` in that folder before installing ``html/``,
-otherwise ``modui-client.js`` is missing from the package.
+In the page it is available as ``window.ModUiClient``; from another origin or from Node, pass
+``new ModUiClient({ baseUrl: 'http://modduo.local' })``.
 
-Usage in the page (or in the browser console), where it is available as ``window.ModUiClient``::
+.. code-block:: javascript
 
     const client = new ModUiClient();
+
+    // Get the pedalboards and switch the current one
     const pedalboards = await client.pedalboards.list();
     const info = await pedalboards[0].info();
-    await client.device.load(info);      // resolves after the WebSocket "loading_end"
-    await client.device.loadDefault();   // empty "Untitled" pedalboard
-    await client.device.currentPedalboard.save();             // overwrite the running pedalboard
-    await client.device.currentPedalboard.saveAs('My copy');  // save it as a new pedalboard
+    await client.device.load(info);
 
-    // Live editing of the running pedalboard
-    const gain = (await client.device.plugins.list()).find((plugin) => plugin.label === 'Gain');
-    const { plugins, connections, ports } = client.device.currentPedalboard;
-    const instance = await plugins.add(gain, { x: 200, y: 100 });
-    const [capture] = await ports.audio.output();    // ports of the pedalboard itself: audio/midi/cv x input()/output(), or ports.list()
-    const connection = await connections.connect(capture, instance.ports.audio.input[0]);   // output -> input, same type
-    await connections.disconnect(connection);
-    await instance.params.get('gain').setValue(3.5);   // control values: a live `value`, range checked
-    await instance.setActive(false);                   // bypass (also isActive(), toggle())
-    await instance.patchParams.get(uri).setValue('Verse');   // strings, paths, booleans, ...: typed, validated (also refresh())
-    await instance.setPosition({ x: 320, y: 140 });
-    await plugins.remove(instance);
+    // Load an effect into the running pedalboard and change a parameter
+    const available = await client.device.plugins.list();
+    const gain = available.find((plugin) => plugin.label === 'Gain');
+    const instance = await client.device.currentPedalboard.plugins.add(gain, { x: 200, y: 100 });
+    await instance.params.get('gain').setValue(3.5);
 
-    // Snapshots of the running pedalboard (saved sets of plugin values) and the device's banks
-    const { snapshots } = client.device.currentPedalboard;
-    const solo = await snapshots.create('Solo');     // also list(), load(indexOrSnapshot), save(); snapshot.rename(name), snapshot.delete()
-    snapshots.on('current', ({ snapshot }) => label.textContent = snapshot?.name ?? '');
-    const preset = await instance.presets.create('Warm');   // presets of a plugin: list(), load(presetOrUri), create(name); preset.save(name?), delete()
-    const bank = await client.banks.create('Live set', [pedalboards[0]]);   // also list(), move(), replaceAll(); bank.add(pb), rename(), delete(), remove(pb), move(from, to)
+    // Events: react to changes, whoever makes them (the device, the HMI or another browser)
+    client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));
+    instance.params.get('gain').on('change', ({ value }) => knob.set(value));
 
-    // Keep a screen up to date: events about the running pedalboard, whoever changes it (no event makes a request)
-    const off = client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));   // also removed, connection:*, loading, loaded
-    plugin.params.get('gain').on('change', ({ value }) => knob.set(value), { ignoreSource: knob });     // follows others, not its own gesture
-    knob.onDrag((value) => plugin.params.get('gain').setValue(value, { source: knob }));
-
-    // UI frameworks: one immutable snapshot of the pedalboard, notified at most once per animation frame
-    const snapshot = useSyncExternalStore(pedalboard.subscribe, pedalboard.getSnapshot);   // React; also pedalboard.subscribe(() => render(pedalboard.getSnapshot()))
-
-    // What the device reports: client.device.on('stats' | 'sysStats' | 'transport' | 'bufferSize' | 'trueBypass' | 'snapshot', ...), client.device.stats, plugin.preset
-
-    // Connection state; reconnect by itself with ``new ModUiClient({ reconnect: true })``
-    client.on('state', ({ state, reason }) => banner.hidden = state === 'open');   // idle, connecting, open, reconnecting, closed
-
-From another origin or from Node, pass ``new ModUiClient({ baseUrl: 'http://modduo.local' })``.
-The developer guide, with architecture, class and sequence diagrams, is ``docs/modui-client.md``.
-Every public symbol is documented in the sources (TSDoc); the current scope (pedalboards) and the planned API
-are in ``docs/plans/2026-10-modui-client-pedalboard.md`` (live editing of the running pedalboard:
-``docs/plans/2026-10-modui-client-pedalboard-graph.md``; patch parameters such as strings and file paths:
-``docs/plans/2026-10-modui-client-patch-params.md``; events for frontends that update themselves:
-``docs/plans/2026-10-modui-client-events.md``; snapshots and banks: ``docs/plans/2026-10-modui-client-snapshots-banks.md``; plugin presets: ``docs/plans/2026-10-modui-client-presets.md``).
-
-Known limitation: when the client loads a pedalboard while the classic UI is open, the canvas reloads through the
-WebSocket, but the title shown by the classic UI is not updated.
+For more details (connections, snapshots, banks, presets, patch parameters, UI frameworks, architecture and diagrams),
+see ``docs/modui-client.md``.
 
 Plugin GUIs outside mod-ui (modui-plugin-view)
 ----------------------------------------------

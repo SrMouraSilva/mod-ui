@@ -8,6 +8,7 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Tests**: [`modui-client/test/`](../modui-client/test/)
 - **Build output** (generated, not versioned): `html/js/lib/modui-client.js`
 - **Wire contract**: [`docs/openapi.yml`](openapi.yml)
+- **Diagrams**: [`docs/modui-client/diagrams/`](modui-client/diagrams/) (architecture and data model: one generated SVG each, defined in `diagrams/src/specs.py`; `index.html` shows them all)
 - **API coverage** (what is implemented, how to use it, what is recommended next): [`docs/modui-client/implementation-progress.md`](modui-client/implementation-progress.md)
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
@@ -441,45 +442,13 @@ The per-operation comparison is in [`docs/modui-client/implementation-progress.m
 
 ## 2. Where it sits
 
-```mermaid
-flowchart LR
-  subgraph Browser
-    APP["Application code<br/>(new UI, console, tests)"]
-    subgraph modui-client
-      C[ModUiClient]
-      P["PedalboardsApi<br/>client.pedalboards"]
-      D["Device<br/>client.device"]
-      E["EventChannel<br/>client.events"]
-      H[HttpTransport]
-    end
-    LEGACY["Classic UI<br/>(jQuery, host.js)"]
-  end
+![Architecture: application code reaches the server through ModUiClient, whose HttpTransport and EventChannel talk to the Tornado webserver; the classic UI talks to the same webserver; Session and Host drive mod-host and the HMI, and Host broadcasts every change to all sockets](modui-client/diagrams/architecture.svg)
 
-  subgraph "mod-ui server (Tornado)"
-    R["HTTP handlers<br/>mod/webserver.py"]
-    WS["ServerWebSocket<br/>/websocket"]
-    S["Session<br/>mod/session.py"]
-    HO["Host<br/>mod/host.py"]
-  end
-
-  MH[(mod-host<br/>audio engine)]
-  HMI[(HMI / Control Chain)]
-
-  APP --> C
-  C --> P & D & E
-  P --> H
-  D --> H
-  D --> E
-  H -- "fetch (JSON)" --> R
-  E <-- "text frames" --> WS
-  LEGACY <-- "$.ajax / ws" --> R & WS
-  R --> S
-  WS --> S
-  S --> HO
-  HO <-- "TCP 5555/5556" --> MH
-  HO <-- serial --> HMI
-  HO -- "msg_callback (broadcast)" --> WS
-```
+- **Your code** only touches `ModUiClient`. It reaches the server through two doors: `HttpTransport` (`fetch`, one request per operation)
+  and `EventChannel` (the `/websocket`, which carries the state replay and every later change).
+- **The classic UI** uses `$.ajax` and its own socket (`window.ws`) against the same server. It can share that socket with the client
+  (`new ModUiClient({ webSocket: window.ws })`).
+- **Only `mod/` talks to the device.** `Host` speaks TCP to `mod-host` and serial to the HMI; the client never does.
 
 Every change made through HTTP is broadcast by the backend to **all** WebSocket clients, which is how the
 classic UI, other tabs and this client stay in sync.
@@ -539,592 +508,110 @@ modui-client/
     └── events.test.ts
 ```
 
-Module dependencies (arrows point to what a module imports):
-
-```mermaid
-flowchart TD
-  index["index.ts"]
-  client["client.ts"]
-  device["device.ts"]
-  current["current-pedalboard.ts"]
-  pedalboards["pedalboards.ts"]
-  images["pedalboard-images.ts"]
-  plugins["plugins.ts"]
-  pplugins["pedalboard-plugins.ts"]
-  pconn["pedalboard-connections.ts"]
-  pgraph["pedalboard-graph.ts"]
-  psnaps["pedalboard-snapshots.ts"]
-  ppresets["plugin-presets.ts"]
-  banks["banks.ts"]
-  gstate["graph-state.ts"]
-  store["pedalboard-store.ts"]
-  pevents["pedalboard-events.ts"]
-  emitter["emitter.ts"]
-  snap["snapshot.ts"]
-  dstate["device-state.ts"]
-  events["events.ts"]
-  http["http.ts"]
-  errors["errors.ts"]
-  runtime["runtime.ts"]
-  types["types.ts"]
-
-  index --> client & device & current & pedalboards & images & plugins & pplugins & pconn & pgraph & psnaps & ppresets & banks & events & errors
-  client --> device & pedalboards & banks & plugins & events & http & errors
-  device --> current & gstate & pgraph & events & http & pedalboards & errors
-  current --> pplugins & pconn & psnaps & http & pedalboards & errors
-  psnaps --> emitter & errors
-  ppresets --> emitter & errors
-  plugins --> ppresets
-  pgraph --> ppresets
-  banks --> pedalboards & errors
-  pedalboards --> http & images
-  images --> http & errors
-  plugins --> errors
-  pgraph --> errors & store
-  store --> emitter & snap
-  snap --> emitter
-  device --> dstate
-  dstate --> emitter
-  gstate --> errors
-  events --> errors
-  http --> errors
-
-  current -.-> pgraph
-  pplugins -.-> pgraph
-  pconn -.-> pgraph
-  psnaps -.-> pgraph & http & events & gstate
-  ppresets -.-> pgraph & gstate
-  banks -.-> http & types
-  pgraph -.-> http & events & gstate & plugins & pevents
-  store -.-> gstate & plugins & pgraph & pevents
-  snap -.-> gstate
-  dstate -.-> events
-  client -.-> snap
-  pevents -.-> emitter & pgraph
-  gstate -.-> events
-  plugins -.-> http
-  client -.-> runtime
-  events -.-> runtime
-  http -.-> runtime
-  device -.-> types
-  pedalboards -.-> types
-```
-
-Dotted arrows are type-only imports; they can go both ways (the store and the graph know each other's types). There are no runtime cycles; `types.ts` and `runtime.ts` import nothing.
-
 ---
 
-## 4. Class diagram
+## 4. Data model
 
-```mermaid
-classDiagram
-  direction LR
+The objects you hold, one diagram per domain. Start with the overview, then open the domain you need. The diagrams are generated SVG files
+(`docs/modui-client/diagrams/`, [how to change them](modui-client/diagrams/README.md)); open [`index.html`](modui-client/diagrams/index.html) in a browser to see them
+all with the web fonts. All diagrams use the same notation:
 
-  class ModUiClient {
-    +baseUrl: string
-    +device: Device
-    +pedalboards: PedalboardsApi
-    +banks: BanksApi
-    +events: EventChannel
-    +state: ConnectionState
-    +constructor(options?: ModUiClientOptions)
-    +connect() Promise~void~
-    +close() void
-    +on(event: state | error, handler, options?) Unsubscribe
-    +once(event: state | error, handler, options?) Unsubscribe
-  }
+- **Boxes.** Purple: a class of the client. White with a dark border: a *wire type*, the JSON the backend sends or expects (declared in
+  `src/types.ts`, mirrors the schemas of [`docs/openapi.yml`](openapi.yml)). Grey: plain client data or an enum. Dashed: defined in another diagram.
+  Terracotta: the aggregate root of that domain.
+- **Lines.** Solid: owns or contains, with a cardinality at each end (the number at an end says how many of *that* entity relate to one of the other).
+  Dashed arrow: creates, reads or refers to.
+- **Fields and operations.** The upper compartment lists the attributes (`name: type`), the lower one the operations. Only what matters is listed;
+  the TSDoc of each class has the full API, and the verbs follow the vocabulary of `CLAUDE.md`.
 
-  class PedalboardsApi {
-    -http: HttpTransport
-    +list() Promise~PedalboardReference[]~
-  }
+### 4.1 Overview
 
-  class BanksApi {
-    +list() Promise~Bank[]~
-    +get(title: string) Promise~Bank | undefined~
-    +create(title: string, pedalboards?: PedalboardReference[]) Promise~Bank~
-    +move(bank: Bank | string, toIndex: number) Promise~Bank[]~
-    +replaceAll(banks: Bank | BankData[]) Promise~void~
-  }
+![Overview: a bank holds pedalboards; the device loads a pedalboard, lists the installed plugins and runs the current pedalboard, which has snapshots, connections and plugin instances; an instance has params, patch params and presets](modui-client/diagrams/domain-overview.svg)
 
-  class Bank {
-    +title: string
-    +index: number
-    +pedalboards: PedalboardReference[]
-    +rename(title: string) Promise~void~
-    +delete() Promise~void~
-    +add(pedalboard: PedalboardReference, options?: AddToBankOptions) Promise~void~
-    +remove(pedalboard: number | PedalboardReference) Promise~void~
-    +move(from: number, to: number) Promise~void~
-    +setPedalboards(pedalboards: PedalboardReference[]) Promise~void~
-  }
+| Concept | What it is | Reached from | Detail |
+|---|---|---|---|
+| **Bank** | An ordered list of pedalboards, used by the hardware to navigate them | `client.banks` | [4.10](#410-banks) |
+| **Pedalboard** | A pedalboard saved in the library (`PedalboardReference`) | `client.pedalboards` | [4.2](#42-pedalboard-library), [4.3](#43-pedalboard-bundle) |
+| **Device** | What is running and installed, and what the device reports | `client.device` | [4.4](#44-device) |
+| **CurrentPedalboard** | The pedalboard that is running, edited live | `client.device.currentPedalboard` | [4.5](#45-current-pedalboard) |
+| **Connection** | A link from an output port to an input port of the running pedalboard | `currentPedalboard.connections` | [4.5](#45-current-pedalboard) |
+| **Plugin** | An installed LV2 plugin (the catalogue) | `client.device.plugins` | [4.6](#46-plugin-and-plugin-instance) |
+| **PluginInstance** | One plugin block of the running pedalboard | `currentPedalboard.plugins` | [4.6](#46-plugin-and-plugin-instance) |
+| **Param** | A control port of an instance: a number | `instance.params` | [4.6](#46-plugin-and-plugin-instance) |
+| **PatchParam** | A typed value of an instance that is not a port (string, path, URI, ...) | `instance.patchParams` | [4.7](#47-patch-parameters) |
+| **Preset** | A named set of the port values of one plugin | `instance.presets` | [4.8](#48-plugin-presets) |
+| **Snapshot** | A saved set of values of the whole pedalboard | `currentPedalboard.snapshots` | [4.9](#49-pedalboard-snapshots) |
 
-  class PluginPresets {
-    +currentUri: string | null
-    +current: Preset | null
-    +list() Promise~Preset[]~
-    +get(uri: string) Promise~Preset | undefined~
-    +load(target: Preset | string, options?: WriteOptions) Promise~void~
-    +create(name: string, options?: WriteOptions) Promise~Preset~
-    +save(preset: Preset, name?: string, options?: WriteOptions) Promise~Preset~
-    +delete(preset: Preset, options?: WriteOptions) Promise~void~
-    +on(event: list, handler, options?) Unsubscribe
-    +once(event: list, handler, options?) Unsubscribe
-  }
+Read it as sentences: a *bank* holds *pedalboards*; the *device* loads a pedalboard, lists the installed *plugins* and runs the *current pedalboard*;
+the current pedalboard has *snapshots*, *connections* and *plugin instances*; an instance is an instance of a *plugin* and has *params*, *patch params* and *presets*.
+A **saved** pedalboard and the **running** one are different objects on purpose: loading copies the first into the second (see 5.1), saving writes the second back (5.2).
 
-  class Preset {
-    +uri: string
-    +label: string
-    +bundlepath: string | null
-    +isUser: boolean
-    +isCurrent: boolean
-    +alive: boolean
-    +load(options?: WriteOptions) Promise~void~
-    +save(name?: string, options?: WriteOptions) Promise~Preset~
-    +delete(options?: WriteOptions) Promise~void~
-  }
+### 4.2 Pedalboard library
 
-  class PedalboardSnapshots {
-    +currentIndex: number | null
-    +current: Snapshot | null
-    +list() Promise~Snapshot[]~
-    +get(index: number) Promise~Snapshot | undefined~
-    +save() Promise~void~
-    +create(name: string, options?: WriteOptions) Promise~Snapshot~
-    +load(target: Snapshot | number, options?: WriteOptions) Promise~void~
-    +on(event: current | list, handler, options?) Unsubscribe
-    +once(event: current | list, handler, options?) Unsubscribe
-  }
+![Pedalboard library: PedalboardsApi lists PedalboardReference handles; each handle holds a PedalboardSummary and PedalboardImages and can read the full PedalboardInfo](modui-client/diagrams/domain-pedalboard.svg)
 
-  class Snapshot {
-    +index: number
-    +name: string
-    +isCurrent: boolean
-    +alive: boolean
-    +load(options?: WriteOptions) Promise~void~
-    +rename(name: string, options?: WriteOptions) Promise~string~
-    +delete(options?: WriteOptions) Promise~void~
-  }
+`PedalboardReference` is a lightweight handle built from a list entry (`PedalboardSummary`); `PedalboardInfo` is the full bundle content (next section).
+Both carry `bundlepath`, so both can be passed to `Device.load()` (type `PedalboardTarget`). The images belong to the **saved bundle**, never to the running
+state (5.4).
 
-  class PedalboardReference {
-    +bundlepath: string
-    +title: string
-    +uri: string
-    +broken: boolean
-    +factory: boolean
-    +hasTrialPlugins: boolean
-    +version: number
-    +summary: PedalboardSummary
-    +images: PedalboardImages
-    +isDefault: boolean
-    +info() Promise~PedalboardInfo~
-    +copy() Promise~PedalboardReference~
-    +delete() Promise~void~
-  }
+### 4.3 Pedalboard bundle
 
-  class Device {
-    -queue: Promise
-    -defaultTimeoutMs: number
-    +currentPedalboard: CurrentPedalboard
-    +stats: StatsEvent | null
-    +sysStats: SysStatsEvent | null
-    +transport: TransportEvent | null
-    +bufferSize: BufferSizeEvent | null
-    +trueBypass: TrueBypassEvent | null
-    +snapshot: SnapshotEvent | null
-    +load(target: PedalboardTarget, options?: LoadOptions) Promise~LoadResult~
-    +loadDefault(options?: LoadOptions) Promise~LoadResult~
-    +reset(options?: WriteOptions) Promise~void~
-    +on(event, handler, options?) Unsubscribe
-    +once(event, handler, options?) Unsubscribe
-  }
+![Pedalboard bundle: PedalboardInfo contains plugins with their control port values, connections, hardware ports and transport settings; MIDI assignments are MidiControl values](modui-client/diagrams/domain-pedalboard-bundle.svg)
 
-  class PedalboardImages {
-    -ctime: string
-    +getThumbnailUrl() string
-    +getScreenshotUrl() string
-    +status() Promise~ImageStatus~
-    -waitPending() Promise~ImageStatus~
-    +generate() Promise~void~
-  }
+What `GET /pedalboard/info/` returns for a saved pedalboard. The server sends no bundle path, so the client adds `bundlepath` itself (section 9). This is the
+**stored** content: the running pedalboard is not described by it but rebuilt from the WebSocket (4.5 and 5.6).
 
-  class ImageStatus {
-    <<enumeration>>
-    Missing
-    Generating
-    Available
-  }
+### 4.4 Device
 
-  class CurrentPedalboard {
-    -enqueue: Enqueue
-    +plugins: PedalboardPlugins
-    +connections: PedalboardConnections
-    +ports: PedalboardPorts
-    +get() Promise~PedalboardReference | null~
-    +save(newTitle?: string) Promise~PedalboardReference~
-    +saveAs(suggestedTitle: string) Promise~PedalboardReference~
-    +on(event, handler, options?) Unsubscribe
-    +once(event, handler, options?) Unsubscribe
-    +getSnapshot() PedalboardSnapshot
-    +subscribe(listener) Unsubscribe
-  }
+![Device: owns the running pedalboard and the plugin catalogue, loads pedalboards and returns a LoadResult, and keeps the last values the device reported](modui-client/diagrams/domain-device.svg)
 
-  class PluginsApi {
-    +list() Promise~Plugin[]~
-  }
-  class Plugin {
-    +uri: string
-    +name: string
-    +label: string
-    +info() Promise~PluginInfo~
-  }
-  class PedalboardPlugins {
-    +list() Promise~PluginInstance[]~
-    +get(instance: string) Promise~PluginInstance | undefined~
-    +add(plugin: PluginTarget, position?: Position, options?: WriteOptions) Promise~PluginInstance~
-    +remove(instance, options?: WriteOptions) Promise~void~
-  }
-  class PedalboardConnections {
-    +list() Promise~PedalboardConnection[]~
-    +connect(from: Port | string, to: Port | string) Promise~PedalboardConnection~
-    +disconnect(connection: PedalboardConnection) Promise~void~
-  }
-  class PedalboardPorts {
-    +audio: PedalboardPortGroup
-    +midi: PedalboardPortGroup
-    +cv: PedalboardPortGroup
-    +list() Promise~Port[]~
-  }
-  class PedalboardPortGroup {
-    +input() Promise~Port[]~
-    +output() Promise~Port[]~
-  }
-  class PluginInstance {
-    +instance: string
-    +uri: string
-    +x: number
-    +y: number
-    +info: PluginInfo | null
-    +alive: boolean
-    +preset: string | null
-    +ports: PortGroups
-    +params: PluginParams
-    +patchParams: PluginPatchParams
-    +presets: PluginPresets
-    +port(symbol) Port | undefined
-    +isActive() Promise~boolean~
-    +setActive(active: boolean, options?: WriteOptions) Promise~void~
-    +toggle(options?: WriteOptions) Promise~boolean~
-    +setPosition(position: Position, options?: WriteOptions) Promise~void~
-    +remove(options?: WriteOptions) Promise~void~
-    +on(event, handler, options?) Unsubscribe
-    +once(event, handler, options?) Unsubscribe
-  }
-  class PluginParams {
-    +list() Param[]
-    +get(symbol) Param | undefined
-  }
-  class PluginPatchParams {
-    +list() PatchParam[]
-    +get(uri) PatchParam | undefined
-  }
-  class PatchParam {
-    +uri: string
-    +label: string
-    +type: PatchParamType
-    +readable: boolean
-    +writable: boolean
-    +default: PatchValue
-    +minimum: number
-    +maximum: number
-    +fileTypes: string[]
-    +supportedExtensions: string[]
-    +value: PatchValue
-    +refresh(options) Promise~PatchValue~
-    +setValue(value: PatchValue, options?: WriteOptions) Promise~void~
-    +on(event: change, handler, options?) Unsubscribe
-  }
-  class Param {
-    +symbol: string
-    +name: string
-    +default: number
-    +minimum: number
-    +maximum: number
-    +designation: string
-    +properties: string[]
-    +value: number
-    +setValue(value: number, options?: WriteOptions) Promise~void~
-    +on(event: change, handler, options?) Unsubscribe
-  }
-  class Port {
-    +id: string
-    +symbol: string
-    +name: string
-    +type: audio | midi | cv
-    +direction: input | output
-    +owner: PluginInstance | null
-  }
-  class PedalboardConnection {
-    +from: Port
-    +to: Port
-    +id: string
-  }
-  class PedalboardGraph {
-    <<internal>>
-  }
-  class SnapshotStore {
-    <<internal>>
-    +current() PedalboardSnapshot
-    +subscribe(listener) Unsubscribe
-    +note(change)
-  }
-  class DeviceState {
-    <<internal>>
-    +stats: StatsEvent | null
-    +transport: TransportEvent | null
-    +on(event, handler, options?) Unsubscribe
-  }
-  class PedalboardStore {
-    <<internal>>
-    +bus: Emitter
-    +snapshots: SnapshotStore
-    +instance(path) PluginInstance | undefined
-    +settled() Promise~void~
-    +expect(match, source) release
-  }
-  class Emitter {
-    <<internal>>
-    +on(event, handler, options?) Unsubscribe
-    +once(event, handler, options?) Unsubscribe
-    +emit(event, payload)
-  }
-  class GraphState {
-    <<internal>>
-    +ready() Promise~GraphModel~
-    +applyLocal(command, args, source)
-  }
+`Device` is the root of everything that is *running*. `load()` resolves with a `LoadResult` once the backend confirmed it (5.1). The reports (`stats`, `transport`, ...)
+are periodic or change-driven, are kept as last values, and are seeded by the state replay, so a late subscriber can read them (1.14). Every operation that changes the
+running pedalboard goes through the device's queue (section 6).
 
-  class EventChannel {
-    +state: ConnectionState
-    +onState(handler, options?) Unsubscribe
-    -socket: WebSocketLike
-    -owned: boolean
-    -handlers: Map
-    -waiters: Set
-    +connected: boolean
-    +connect() Promise~void~
-    +on(command, handler: MessageHandler) unsubscribe
-    +waitFor(command, timeoutMs, predicate?) Waiting
-    +send(text: string) void
-    +close() void
-  }
+### 4.5 Current pedalboard
 
-  class HttpTransport {
-    <<internal>>
-    -baseUrl: string
-    -fetchImpl: FetchLike
-    +getJson~T~(path, query?) Promise~T~
-    +postForm~T~(path, form) Promise~T~
-  }
+![Current pedalboard: it holds the live plugin instances, its own ports, the connections between ports, its snapshots, and an immutable state snapshot for UI frameworks](modui-client/diagrams/domain-current-pedalboard.svg)
 
-  class ModUiError {
-    +name: string
-    +message: string
-  }
-  class ModUiHttpError {
-    +status: number
-    +url: string
-    +body: string
-  }
-  class ModUiTimeoutError
+The pedalboard's own ports (capture, playback, MIDI) have no owner (`port.owner === null`); the ports of a plugin belong to its instance. A connection always goes
+from an output to an input of the same type. `get()` reads `GET /pedalboard/current` (`bundlepath`, `title`, `modified`; empty `bundlepath` = never saved).
+`getSnapshot()` is the **immutable state** for UI frameworks (1.12), not a pedalboard snapshot (4.9).
 
-  class WebSocketLike {
-    <<interface>>
-    +readyState: number
-    +send(data) void
-    +close() void
-    +addEventListener(type, listener) void
-    +removeEventListener(type, listener) void
-  }
+### 4.6 Plugin and plugin instance
 
-  class ModUiClientOptions {
-    <<interface>>
-    +baseUrl?: string
-    +fetch?: FetchLike
-    +WebSocket?: WebSocketFactory
-    +webSocket?: WebSocketLike
-    +loadTimeoutMs?: number
-    +connectTimeoutMs?: number
-    +graphTimeoutMs?: number
-    +reconnect?: boolean | ReconnectOptions
-    +schedule?: Schedule
-  }
+![Plugin: a Plugin from the catalogue is described by PluginInfo; a PluginInstance in the running pedalboard has ports, control parameters, patch parameters and presets](modui-client/diagrams/domain-plugin.svg)
 
-  ModUiClient *-- PedalboardsApi
-  ModUiClient *-- Device
-  ModUiClient *-- EventChannel
-  Device *-- CurrentPedalboard
-  Device *-- PluginsApi : plugins
-  PluginsApi ..> Plugin : creates
-  CurrentPedalboard *-- PedalboardPlugins : plugins
-  CurrentPedalboard *-- PedalboardConnections : connections
-  CurrentPedalboard *-- PedalboardPorts : ports
-  PedalboardPorts *-- PedalboardPortGroup : audio, midi, cv
-  PedalboardPlugins --> PedalboardGraph
-  PedalboardConnections --> PedalboardGraph
-  PedalboardPorts --> PedalboardGraph
-  PedalboardGraph --> GraphState : reads
-  PedalboardGraph *-- PedalboardStore : store
-  PedalboardStore --> GraphState : changes(), settled()
-  PedalboardStore *-- Emitter : bus
-  PedalboardStore *-- SnapshotStore : snapshots
-  CurrentPedalboard --> SnapshotStore : getSnapshot(), subscribe()
-  Device *-- DeviceState
-  DeviceState --> EventChannel : on(stats, transport, ...)
-  PedalboardStore ..> PluginInstance : keeps one per plugin
-  CurrentPedalboard --> PedalboardStore : on(), once()
-  PluginInstance --> PedalboardStore : on(), alive
-  PedalboardGraph --> EventChannel : waits for add, remove, connect, disconnect
-  PedalboardGraph --> PluginsApi : plugin descriptions
-  PedalboardGraph ..> PluginInstance : creates, through the store
-  PedalboardGraph ..> PedalboardConnection : creates, through the store
-  PluginInstance *-- "*" Port : ports.audio.input, .audio.output, .midi.*, .cv.*
-  PluginInstance *-- PluginParams : params
-  PluginParams *-- "*" Param : list(), get(symbol)
-  Param --> PluginInstance : owner
-  PluginInstance *-- PluginPresets : presets
-  PluginPresets *-- "*" Preset : list(), get(uri)
-  PluginPresets --> PluginsApi : shares one PresetCatalog per plugin URI
-  Preset --> PluginPresets : acts on its instance
-  PluginInstance *-- PluginPatchParams : patchParams
-  PluginPatchParams *-- "*" PatchParam : list(), get(uri)
-  PatchParam --> PluginInstance : owner
-  PedalboardConnection --> Port : from, to
-  GraphState --> EventChannel : on(...) before connect()
-  ModUiClient ..> ModUiClientOptions : configured by
-  ModUiClient ..> HttpTransport : creates
-  PedalboardsApi --> HttpTransport
-  ModUiClient *-- BanksApi : banks
-  BanksApi --> HttpTransport
-  BanksApi --> PedalboardsApi : builds the references
-  BanksApi ..> Bank : creates
-  Bank --> BanksApi : edits through it
-  Bank o-- PedalboardReference : pedalboards
-  CurrentPedalboard *-- PedalboardSnapshots : snapshots
-  PedalboardSnapshots --> HttpTransport
-  PedalboardSnapshots --> PedalboardGraph : sync(), expect(), store events
-  PedalboardSnapshots ..> Snapshot : creates, one per name
-  PedalboardsApi ..> PedalboardReference : creates
-  PedalboardReference --> HttpTransport
-  PedalboardReference *-- PedalboardImages : images
-  PedalboardImages --> HttpTransport
-  PedalboardImages ..> ImageStatus : returns
-  CurrentPedalboard ..> PedalboardImages : waits for the thumbnail after a save
-  Device --> HttpTransport
-  Device --> EventChannel
-  Device --> PedalboardsApi : loadDefault()
-  CurrentPedalboard --> HttpTransport
-  CurrentPedalboard --> PedalboardsApi : finds the saved bundle
-  CurrentPedalboard ..> PedalboardReference : returns
-  CurrentPedalboard ..> Device : shares its queue
-  EventChannel --> WebSocketLike
-  Error <|-- ModUiError
-  ModUiError <|-- ModUiHttpError
-  ModUiError <|-- ModUiTimeoutError
-  HttpTransport ..> ModUiHttpError : throws
-  EventChannel ..> ModUiTimeoutError : throws
-```
+A `Plugin` is what is *installed*; a `PluginInstance` is one block of the running pedalboard, found by its path (`/graph/Gain`). Control ports are `Param`s, not `Port`s
+(a `Port` is audio, MIDI or CV, the only kinds you can connect). The description (`PluginInfo`) is read once per URI and cached; an instance whose description is
+still unknown has `info === null`. When the plugin is removed, the pedalboard is reset or another one is loaded, the object stops standing for a plugin (`alive === false`).
 
-### Data model
+### 4.7 Patch parameters
 
-`PedalboardReference` is a lightweight handle built from a list entry; `PedalboardInfo` is the full bundle content.
-Both carry `bundlepath`, so both can be passed to `Device.load()` (type `PedalboardTarget`).
+![Patch parameters: a plugin instance exposes PluginPatchParams; each PatchParam has a type and a live value and is built from the parameter description in PluginInfo](modui-client/diagrams/domain-patch-params.svg)
 
-```mermaid
-classDiagram
-  direction LR
+Typed values that are not control ports: strings, file paths, URIs, booleans, integers (1.8). `setValue()` is validated by type and is fire-and-forget (`patch_set`);
+`refresh()` asks the plugin (`patch_get`) and waits for its answer (1.19).
 
-  class PedalboardSummary {
-    <<wire: GET /pedalboard/list>>
-    broken: boolean
-    factory: boolean
-    hasTrialPlugins: boolean
-    uri: string
-    bundle: string
-    title: string
-    version: number
-  }
+### 4.8 Plugin presets
 
-  class PedalboardInfo {
-    <<wire: GET /pedalboard/info/ + bundlepath>>
-    bundlepath: string
-    title: string
-    width: number
-    height: number
-    factory: boolean
-    midi_separated_mode: boolean
-    midi_loopback: boolean
-    version: number
-  }
+![Presets: PluginPresets of an instance wraps the entries of one PresetCatalog per plugin URI into Preset objects; the entries come from GET /effect/get_non_cached](modui-client/diagrams/domain-presets.svg)
 
-  class PedalboardPlugin {
-    instance: string
-    uri: string
-    bypassed: boolean
-    x: number
-    y: number
-    preset: string
-  }
-  class PedalboardPluginPort {
-    symbol: string
-    value: number
-  }
-  class PedalboardInfoConnection {
-    source: string
-    target: string
-  }
-  class PedalboardHardware {
-    audio_ins: number
-    audio_outs: number
-    cv_ins: number
-    cv_outs: number
-  }
-  class PedalboardTimeInfo {
-    available: number
-    bpb: number
-    bpm: number
-    rolling: boolean
-  }
-  class MidiControl {
-    channel: number
-    control: number
-    minimum: number
-    maximum: number
-  }
-  class CurrentPedalboardState {
-    <<wire: GET /pedalboard/current>>
-    bundlepath: string
-    title: string
-    modified: boolean
-  }
-  class LoadResult {
-    bundlepath: string
-    name: string
-    snapshotId: number
-  }
+A preset belongs to the **plugin**, so two instances of the same plugin see the same list: one `PresetCatalog` per URI (owned by `PluginsApi`), wrapped per instance
+so `preset.load()` acts on the instance it was listed from. `save()` and `delete()` only work on the instance's current user preset (1.17, 5.11).
 
-  PedalboardReference --> PedalboardSummary : summary
-  PedalboardReference ..> PedalboardInfo : info()
-  PedalboardInfo *-- "*" PedalboardPlugin : plugins
-  PedalboardInfo *-- "*" PedalboardInfoConnection : connections
-  PedalboardInfo *-- PedalboardHardware : hardware
-  PedalboardInfo *-- PedalboardTimeInfo : timeInfo
-  PedalboardPlugin *-- "*" PedalboardPluginPort : ports
-  PedalboardPlugin --> MidiControl : bypassCC
-  PedalboardPluginPort --> MidiControl : midiCC
-  Device ..> LoadResult : load()
-  CurrentPedalboard ..> CurrentPedalboardState : reads
-```
+### 4.9 Pedalboard snapshots
+
+![Snapshots: the running pedalboard has PedalboardSnapshots, a list of Snapshot objects identified by position; the names come from GET /snapshot/list](modui-client/diagrams/domain-snapshots.svg)
+
+The backend identifies a snapshot by its **position**, so removing one renumbers the later ones; the client tells `Snapshot` objects apart by name and reads the names
+only in `list()` (1.15, 5.9).
+
+### 4.10 Banks
+
+![Banks: BanksApi reads banks as BankSummary and writes the whole list as BankInput; a Bank holds an ordered list of pedalboard references](modui-client/diagrams/domain-banks.svg)
+
+A `Bank` is a **value**: it does not follow changes made by others. The backend stores one list of banks and `POST /banks/save` replaces it, so each edit reads the list,
+changes the copy and writes it all back (1.16, 5.10).
 
 ---
 
@@ -1511,7 +998,7 @@ sequenceDiagram
   K->>P: edit(bank, change)
   P->>B: GET /banks (also cleans missing / broken pedalboards)
   B-->>P: banks with full pedalboard summaries
-  P->>P: find the bank by title (case-insensitive); apply change to the fresh copy
+  P->>P: find the bank by title (case-insensitive), then apply the change to the fresh copy
   P->>B: POST /banks/save  [{ title, pedalboards: [{ bundle, title }] }, ...]
   B-->>P: true
   P->>K: update title, index and pedalboards
@@ -1545,7 +1032,7 @@ sequenceDiagram
   P->>B: GET /effect/get_non_cached
   B-->>P: presets
   P->>P: catalog.update (same Preset object, new uri and label)
-  P-->>A: presets.on('list') on every instance of the plugin; the promise resolves
+  P-->>A: presets.on('list') on every instance of the plugin, then the promise resolves
 
   Note over A,B: load: the preset and param_set frames arrive before the HTTP answer, so a store expectation (param, preset of that instance) is held while the request is in flight
 ```

@@ -74,8 +74,12 @@ or a WebSocket message (`msg_callback`/`write_message` in `mod/host.py`, `mod/se
 4. Update the operation's row in `docs/modui-client/implementation-progress.md` when the client gains or loses an operation,
    then run `python3 docs/modui-client/sync-progress.py` (it regenerates the summary table and the html dashboard
    `implementation-progress.html`; never edit those by hand).
-5. Update `docs/modui-client.md` (including its Mermaid diagrams) and the README section
+5. Update `docs/modui-client.md` (including its Mermaid flow diagrams) and the README section
    "TypeScript client (modui-client)" when the API or its usage changes.
+6. Keep the architecture and data-model diagrams of the guide in step (`docs/modui-client/diagrams/`). They are **generated SVG files, never edited by hand**:
+   change the diagram in `docs/modui-client/diagrams/src/specs.py` (a new class, field, operation or relation; a new domain gets its own function and a
+   section in the guide), run `python3 docs/modui-client/diagrams/src/build.py`, fix the warnings it prints and commit the `.svg` files with `specs.py`.
+   Each SVG has a Mermaid summary of its content in `<metadata>`; read `diagrams/README.md` first.
 
 ### Do not change the backend without asking
 The goal is to leave the Python backend as it is. When building `modui-client`, work around backend limits in the client
