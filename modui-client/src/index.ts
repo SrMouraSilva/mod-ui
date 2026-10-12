@@ -38,6 +38,7 @@
  * | `pedalboard-snapshots.ts` | {@link PedalboardSnapshots} (`currentPedalboard.snapshots`), {@link Snapshot} — saved sets of plugin values |
  * | `banks.ts` | {@link BanksApi} (`client.banks`), {@link Bank} — ordered collections of pedalboards |
  * | `pedalboard-graph.ts` | {@link PluginInstance}, {@link Port}, {@link PedalboardConnection}, and the internal engine |
+ * | `plugin-presets.ts` | {@link PluginPresets} (`instance.presets`), {@link Preset} — factory and user presets of a plugin |
  * | `patch-params.ts` | {@link PatchParam}, {@link PluginPatchParams} (`instance.patchParams`) — strings, paths, booleans, ... |
  * | `graph-state.ts` | internal WebSocket-fed model of the running graph |
  * | `pedalboard-store.ts` | internal: the plugin objects and the events about the running pedalboard |
@@ -65,6 +66,7 @@ import { ImageStatus, PedalboardImages } from './pedalboard-images';
 import { PedalboardConnections, PedalboardPortGroup, PedalboardPorts } from './pedalboard-connections';
 import { Param, PedalboardConnection, PluginInstance, PluginParams, Port } from './pedalboard-graph';
 import { PatchParam, PluginPatchParams } from './patch-params';
+import { PluginPresets, Preset } from './plugin-presets';
 import { PedalboardPlugins } from './pedalboard-plugins';
 import { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
 import { PedalboardReference, PedalboardsApi } from './pedalboards';
@@ -96,6 +98,8 @@ export { PedalboardConnections, PedalboardPortGroup, PedalboardPorts } from './p
 export { Param, PedalboardConnection, PluginInstance, PluginParams, Port } from './pedalboard-graph';
 export type { PortGroups, PortsByDirection } from './pedalboard-graph';
 export { PatchParam, PluginPatchParams } from './patch-params';
+export { PluginPresets, Preset } from './plugin-presets';
+export type { PresetEvents, PresetListEvent } from './plugin-presets';
 export { PedalboardPlugins } from './pedalboard-plugins';
 export { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
 export type { SnapshotCurrentEvent, SnapshotEvents, SnapshotListEvent } from './pedalboard-snapshots';
@@ -129,6 +133,8 @@ if (typeof window !== 'undefined') {
     PluginParams,
     PatchParam,
     PluginPatchParams,
+    PluginPresets,
+    Preset,
     PedalboardPlugins,
     PedalboardSnapshots,
     Snapshot,

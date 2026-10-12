@@ -269,6 +269,11 @@ export interface PluginInfo extends PluginSummary {
   };
   /** Patch parameters (strings, paths, booleans, ...); use `instance.patchParams` instead of reading this. */
   parameters?: PluginParameterInfo[];
+  /**
+   * Presets as of the moment the description was read. The list goes stale after a save or a delete; the client updates it after its
+   * own writes and reads, and `instance.presets.list()` is the reliable way to read it.
+   */
+  presets?: PluginPresetInfo[];
   [other: string]: unknown;
 }
 
@@ -329,4 +334,32 @@ export interface BankInput {
   title: string;
   pedalboards: BankPedalboardInput[];
   [extra: string]: unknown;
+}
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plugin presets
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** A preset of a plugin as `GET /effect/get` and `GET /effect/get_non_cached` list it (schema `PluginPreset`). */
+export interface PluginPresetInfo {
+  valid: boolean;
+  uri: string;
+  label: string;
+  /** The preset's bundle directory for a **user** preset (needed to replace or delete it); `""` for a factory preset. */
+  path: string;
+}
+
+/** `GET /effect/get_non_cached` answer (schema `NonCachedPluginInfo`). */
+export interface NonCachedPluginInfo {
+  licensed?: unknown;
+  presets: PluginPresetInfo[];
+}
+
+/** `GET /effect/preset/save_new` and `save_replace` answer (schema `PresetSaveResult`). */
+export interface PresetSaveResponse {
+  ok: boolean;
+  /** Preset bundle directory (only when `ok`). */
+  bundle?: string;
+  /** URI of the saved preset (only when `ok`). */
+  uri?: string;
 }

@@ -957,7 +957,9 @@ paths:
       tags: [Plugins]
       operationId: getPluginNonCached
       summary: Volatile plugin data (license state and presets)
-      description: The part of the plugin description that changes at run time and therefore must not be cached.
+      description: >-
+        The part of the plugin description that changes at run time and therefore must not be cached. `presets` is the reliable way to read
+        the presets: the list in `getPlugin` goes stale after every `savePresetAsNew`, `savePresetReplace` and `deletePreset`.
       parameters:
         - $ref: '#/components/parameters/PluginUri'
       responses:
@@ -1388,8 +1390,10 @@ paths:
       operationId: loadPreset
       summary: Load a plugin preset
       description: >-
-        Applies the preset, broadcasts `preset` and `param_set` frames and, if the HMI is up, updates its preset
-        selector (up to 10 s). Returns `false` on failure or timeout.
+        Applies the preset, broadcasts a `preset <instance> <uri>` frame and then a `param_set` frame for every port whose value changed
+        (ports with a designation are skipped), marks the pedalboard as modified and, if the HMI is up, updates its preset selector
+        (up to 10 s). The answer comes after all of that. Returns `false` when the preset URI is unknown, when another load interrupted
+        this one, and **on the 10 s HMI timeout even though the preset was applied**. An unknown instance is an HTTP 500, not `false`.
       parameters:
         - $ref: '#/components/parameters/InstancePath'
         - name: uri
@@ -1406,7 +1410,11 @@ paths:
       tags: [Presets]
       operationId: savePresetAsNew
       summary: Save the current values as a new preset
-      description: Creates a new LV2 preset bundle below the user plugin directory and re-addresses the HMI preset selector.
+      description: >-
+        Saves the **live values** of the instance into a new LV2 preset bundle below the user plugin directory (the file symbol is the
+        name made into a symbol, cut to 32 characters; labels are not unique), makes it the instance's current preset and re-addresses the
+        HMI preset selector. **No `preset` frame is sent**, so other sockets do not learn the new current preset. Only `"` is escaped on
+        the way to mod-host: a newline or a trailing backslash in `name` can break the command. An unknown instance is an HTTP 500.
       parameters:
         - $ref: '#/components/parameters/InstancePath'
         - name: name
@@ -1423,7 +1431,11 @@ paths:
       tags: [Presets]
       operationId: savePresetReplace
       summary: Overwrite (and optionally rename) the current user preset
-      description: '`uri` must be the currently selected preset of the instance and `bundle` its existing bundle directory, otherwise `{ok:false}`.'
+      description: >-
+        Overwrites the preset with the **live values** of the instance under the new name (this is also the only way to rename a preset).
+        `uri` must be the instance's **current** preset and `bundle` its existing bundle directory (`PluginPreset.path`), otherwise
+        `{ok:false}`. The preset URI changes with the name and becomes the current preset; **no `preset` frame is sent**. If mod-host fails
+        after the old files were removed, the bundle is deleted: the preset is lost.
       parameters:
         - $ref: '#/components/parameters/InstancePath'
         - name: uri
@@ -1448,7 +1460,9 @@ paths:
       tags: [Presets]
       operationId: deletePreset
       summary: Delete the currently selected user preset
-      description: On success a `preset <instance> null` frame is broadcast.
+      description: >-
+        `uri` must be the instance's **current** preset and `bundle` its existing bundle directory (`PluginPreset.path`), otherwise `false`.
+        On success a `preset <instance> null` frame is broadcast. Factory presets have no bundle and cannot be deleted.
       parameters:
         - $ref: '#/components/parameters/InstancePath'
         - name: uri
@@ -2831,7 +2845,7 @@ components:
         valid: { type: boolean }
         uri: { type: string }
         label: { type: string }
-        path: { type: string, description: "File path of the preset (empty for factory presets inside the bundle)." }
+        path: { type: string, description: "The bundle directory of a **user** preset (what `savePresetReplace` and `deletePreset` take as `bundle`); empty for a factory preset." }
 
     PluginGui:
       type: object

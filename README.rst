@@ -121,6 +121,7 @@ Usage in the page (or in the browser console), where it is available as ``window
     const { snapshots } = client.device.currentPedalboard;
     const solo = await snapshots.create('Solo');     // also list(), load(indexOrSnapshot), save(); snapshot.rename(name), snapshot.delete()
     snapshots.on('current', ({ snapshot }) => label.textContent = snapshot?.name ?? '');
+    const preset = await instance.presets.create('Warm');   // presets of a plugin: list(), load(presetOrUri), create(name); preset.save(name?), delete()
     const bank = await client.banks.create('Live set', [pedalboards[0]]);   // also list(), move(), replaceAll(); bank.add(pb), rename(), delete(), remove(pb), move(from, to)
 
     // Keep a screen up to date: events about the running pedalboard, whoever changes it (no event makes a request)
@@ -142,7 +143,7 @@ Every public symbol is documented in the sources (TSDoc); the current scope (ped
 are in ``docs/plans/2026-10-modui-client-pedalboard.md`` (live editing of the running pedalboard:
 ``docs/plans/2026-10-modui-client-pedalboard-graph.md``; patch parameters such as strings and file paths:
 ``docs/plans/2026-10-modui-client-patch-params.md``; events for frontends that update themselves:
-``docs/plans/2026-10-modui-client-events.md``; snapshots and banks: ``docs/plans/2026-10-modui-client-snapshots-banks.md``).
+``docs/plans/2026-10-modui-client-events.md``; snapshots and banks: ``docs/plans/2026-10-modui-client-snapshots-banks.md``; plugin presets: ``docs/plans/2026-10-modui-client-presets.md``).
 
 Known limitation: when the client loads a pedalboard while the classic UI is open, the canvas reloads through the
 WebSocket, but the title shown by the classic UI is not updated.

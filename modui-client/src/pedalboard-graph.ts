@@ -13,6 +13,7 @@ import type { EventChannel } from './events';
 import type { HttpTransport } from './http';
 import type { GraphChange, GraphModel, GraphState, ModelPlugin } from './graph-state';
 import { PluginPatchParams, patchFrameValue } from './patch-params';
+import { PluginPresets, type PresetCatalog, type PresetEngine } from './plugin-presets';
 import type { ParamEvent, PluginEvents, StoreEvents } from './pedalboard-events';
 import { PedalboardStore } from './pedalboard-store';
 import type { Schedule } from './snapshot';
@@ -68,6 +69,10 @@ export interface InstanceOps {
     once?: boolean,
     extra?: (payload: StoreEvents[K]) => boolean,
   ): Unsubscribe;
+  /** The presets of a plugin URI, shared by all its instances. */
+  presetCatalog(uri: string): PresetCatalog;
+  /** What {@link PluginInstance.presets} needs from the engine. */
+  presetEngine: PresetEngine;
   remove(instance: string, source?: unknown): Promise<void>;
   setParam(instance: string, symbol: string, value: number, source?: unknown): Promise<void>;
   /** Sends `patch_set` with the already validated and encoded value. */
@@ -237,6 +242,8 @@ export class PluginInstance {
   readonly params: PluginParams;
   /** The patch parameters (strings, paths, booleans, ...): `patchParams.list()`, `patchParams.get(uri)`. */
   readonly patchParams: PluginPatchParams;
+  /** The presets of the plugin (shared with its other instances): `presets.list()`, `load()`, `create()`, `save()`, `delete()`. */
+  readonly presets: PluginPresets;
 
   private description: PluginInfo | null = null;
 
@@ -246,6 +253,7 @@ export class PluginInstance {
     this.uri = last.uri;
     this.params = new PluginParams([]);
     this.patchParams = new PluginPatchParams(this, ops);
+    this.presets = new PluginPresets(this, ops.presetCatalog(last.uri), ops.presetEngine);
     if (info) {
       this.attach(info);
     }
@@ -339,7 +347,7 @@ export class PluginInstance {
   }
 
   /**
-   * URI of the current preset of the plugin (the list is in `info.presets`), `null` when none. Live, like {@link PluginInstance.x}:
+   * URI of the current preset of the plugin (the list is `presets.list()`), `null` when none. Live, like {@link PluginInstance.x}:
    * it follows the classic UI, the HMI and other clients. Changes are announced by `instance.on('preset')`.
    */
   get preset(): string | null {
@@ -852,6 +860,18 @@ export class PedalboardGraph {
     live: (instance) => this.state.peek().plugins.get(instance),
     isAlive: (plugin) => this.store.isAlive(plugin),
     listen: (plugin, event, handler, options, once, extra) => this.store.listen(plugin, event, handler, options, once, extra),
+    presetCatalog: (uri) => this.plugins.presetCatalog(uri),
+    presetEngine: {
+      getJson: (path, query) => this.http.getJson(path, query),
+      queue: (task) =>
+        this.enqueue(async () => {
+          await this.state.ready();
+          return task();
+        }),
+      has: (instance) => this.state.peek().plugins.has(instance),
+      expect: (match, source) => this.store.expect(match, source),
+      setCurrent: (instance, uri, source) => this.state.applyLocal('preset', `${instance} ${uri ?? 'null'}`, source),
+    },
     remove: (instance, source) => this.removePlugin(instance, { source }),
     setParam: (instance, symbol, value, source) => this.setParam(instance, symbol, value, source),
     setPatch: (instance, uri, typeChar, encoded, source) => this.setPatch(instance, uri, typeChar, encoded, source),

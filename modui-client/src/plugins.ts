@@ -8,6 +8,7 @@
 
 import { ModUiError } from './errors';
 import type { HttpTransport } from './http';
+import { PresetCatalog } from './plugin-presets';
 import type { PluginInfo, PluginSummary } from './types';
 
 /**
@@ -55,6 +56,8 @@ export class PluginsApi {
   private readonly infos = new Map<string, PluginInfo>();
   /** Descriptions that are about to arrive from another request (a plugin being added), by URI. */
   private readonly arriving = new Map<string, Promise<void>>();
+  /** The presets of each plugin, shared by its instances. */
+  private readonly catalogs = new Map<string, PresetCatalog>();
 
   /** @internal Use `client.device.plugins`. */
   constructor(private readonly http: HttpTransport) {}
@@ -115,6 +118,24 @@ export class PluginsApi {
       }
     }
     return result;
+  }
+
+  /**
+   * @internal The presets of a plugin, shared by all its instances. Whenever the list is replaced the cached description is updated in
+   * place (`info.presets`), so code that reads it sees the list the client last knew.
+   */
+  presetCatalog(uri: string): PresetCatalog {
+    let catalog = this.catalogs.get(uri);
+    if (!catalog) {
+      catalog = new PresetCatalog((presets) => {
+        const info = this.infos.get(uri);
+        if (info) {
+          info.presets = presets;
+        }
+      });
+      this.catalogs.set(uri, catalog);
+    }
+    return catalog;
   }
 
   /** The description of a plugin when it is already known, without a request. */

@@ -12,7 +12,7 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
 
-Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, remove, reorder, add / remove / move pedalboards) plus raw WebSocket access.
+Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, delete, reorder, add / remove / move pedalboards), the **presets** of a plugin instance (list, load, create, save, delete) plus raw WebSocket access.
 Plan of the last two: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md).
 
 ---
@@ -376,7 +376,30 @@ Every change reads the banks from the device, edits that copy and writes the who
 calls; another tab or the HMI writing at the same moment wins or loses, last write). A `Bank` is a value: read again to see others'
 changes. Reading cleans the banks on the device (missing and broken pedalboards are dropped for good). See 5.10.
 
-### 1.17 Listen to raw WebSocket messages
+### 1.17 Plugin presets
+
+A *preset* is a named set of port values of **one plugin**: *factory* presets ship with it, *user* presets are saved by the user. They belong to
+the plugin, so two instances of the same plugin see the same list. Not to be confused with pedalboard snapshots (1.15), which hold every plugin.
+
+```js
+const { presets } = gain;                               // instance.presets
+const all = await presets.list();                       // Preset[]: uri, label, isUser, isCurrent, bundlepath (null for factory), alive
+await presets.load(all[0]);                             // or all[0].load() or presets.load(uri); the values arrive as ordinary frames
+const warm = await presets.create('Warm');              // saves the LIVE values as a new user preset, becomes current
+await gain.params.get('gain').setValue(3);
+await warm.save();                                      // overwrite it with the live values; warm.save('Louder') also renames it
+await warm.delete();                                    // user presets only
+
+gain.preset;                                            // URI of the current preset (sync); presets.current is the object once list() ran
+presets.on('list', ({ presets }) => menu.render(presets));        // gain.on('preset', ...) follows the current preset
+```
+
+`save()` and `delete()` only work on the instance's **current** preset (load it first) and never on a factory preset; the client says so before sending
+anything. The list is always read from `GET /effect/get_non_cached` (the one inside `plugin.info()` goes stale after a save; the client keeps
+`gain.info.presets` up to date after its own writes). The backend sends no frame for a save, so the client records the new current preset itself.
+Changes by other clients are found by calling `list()` again. See 5.11.
+
+### 1.18 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -389,7 +412,7 @@ await client.connect();
 off();
 ```
 
-### 1.18 Notes
+### 1.19 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -482,6 +505,7 @@ modui-client/
 │   ├── pedalboard-graph.ts        # PluginInstance, Port, PedalboardConnection + the internal engine
 │   ├── patch-params.ts            # PatchParam, PluginPatchParams (instance.patchParams)
 │   ├── pedalboard-snapshots.ts    # Snapshot, PedalboardSnapshots (currentPedalboard.snapshots)
+│   ├── plugin-presets.ts          # Preset, PluginPresets (instance.presets), PresetCatalog (internal)
 │   ├── banks.ts         # Bank, BanksApi (client.banks)
 │   ├── graph-state.ts   # internal: WebSocket-fed model of the running graph, and what each frame changed (GraphChange)
 │   ├── pedalboard-store.ts   # internal: the plugin objects of the running pedalboard + the events about them
@@ -505,6 +529,7 @@ modui-client/
     ├── pedalboard-graph.test.ts
     ├── patch-params.test.ts
     ├── pedalboard-snapshots.test.ts
+    ├── plugin-presets.test.ts
     ├── banks.test.ts
     ├── emitter.test.ts
     ├── graph-events.test.ts
@@ -529,6 +554,7 @@ flowchart TD
   pconn["pedalboard-connections.ts"]
   pgraph["pedalboard-graph.ts"]
   psnaps["pedalboard-snapshots.ts"]
+  ppresets["plugin-presets.ts"]
   banks["banks.ts"]
   gstate["graph-state.ts"]
   store["pedalboard-store.ts"]
@@ -542,11 +568,14 @@ flowchart TD
   runtime["runtime.ts"]
   types["types.ts"]
 
-  index --> client & device & current & pedalboards & images & plugins & pplugins & pconn & pgraph & psnaps & banks & events & errors
+  index --> client & device & current & pedalboards & images & plugins & pplugins & pconn & pgraph & psnaps & ppresets & banks & events & errors
   client --> device & pedalboards & banks & plugins & events & http & errors
   device --> current & gstate & pgraph & events & http & pedalboards & errors
   current --> pplugins & pconn & psnaps & http & pedalboards & errors
   psnaps --> emitter & errors
+  ppresets --> emitter & errors
+  plugins --> ppresets
+  pgraph --> ppresets
   banks --> pedalboards & errors
   pedalboards --> http & images
   images --> http & errors
@@ -564,6 +593,7 @@ flowchart TD
   pplugins -.-> pgraph
   pconn -.-> pgraph
   psnaps -.-> pgraph & http & events & gstate
+  ppresets -.-> pgraph & gstate
   banks -.-> http & types
   pgraph -.-> http & events & gstate & plugins & pevents
   store -.-> gstate & plugins & pgraph & pevents
@@ -627,6 +657,31 @@ classDiagram
     +remove(pedalboard: number | PedalboardReference) Promise~void~
     +move(from: number, to: number) Promise~void~
     +setPedalboards(pedalboards: PedalboardReference[]) Promise~void~
+  }
+
+  class PluginPresets {
+    +currentUri: string | null
+    +current: Preset | null
+    +list() Promise~Preset[]~
+    +get(uri: string) Promise~Preset | undefined~
+    +load(target: Preset | string, options?: WriteOptions) Promise~void~
+    +create(name: string, options?: WriteOptions) Promise~Preset~
+    +save(preset: Preset, name?: string, options?: WriteOptions) Promise~Preset~
+    +delete(preset: Preset, options?: WriteOptions) Promise~void~
+    +on(event: list, handler, options?) Unsubscribe
+    +once(event: list, handler, options?) Unsubscribe
+  }
+
+  class Preset {
+    +uri: string
+    +label: string
+    +bundlepath: string | null
+    +isUser: boolean
+    +isCurrent: boolean
+    +alive: boolean
+    +load(options?: WriteOptions) Promise~void~
+    +save(name?: string, options?: WriteOptions) Promise~Preset~
+    +delete(options?: WriteOptions) Promise~void~
   }
 
   class PedalboardSnapshots {
@@ -755,6 +810,7 @@ classDiagram
     +ports: PortGroups
     +params: PluginParams
     +patchParams: PluginPatchParams
+    +presets: PluginPresets
     +port(symbol) Port | undefined
     +isActive() Promise~boolean~
     +setActive(active: boolean, options?: WriteOptions) Promise~void~
@@ -936,6 +992,10 @@ classDiagram
   PluginInstance *-- PluginParams : params
   PluginParams *-- "*" Param : list(), get(symbol)
   Param --> PluginInstance : owner
+  PluginInstance *-- PluginPresets : presets
+  PluginPresets *-- "*" Preset : list(), get(uri)
+  PluginPresets --> PluginsApi : shares one PresetCatalog per plugin URI
+  Preset --> PluginPresets : acts on its instance
   PluginInstance *-- PluginPatchParams : patchParams
   PluginPatchParams *-- "*" PatchParam : list(), get(uri)
   PatchParam --> PluginInstance : owner
@@ -1458,6 +1518,38 @@ sequenceDiagram
   K-->>A: promise resolves
 ```
 
+### 5.11 Plugin presets (`instance.presets`)
+
+The presets of a plugin are shared by all its instances (one `PresetCatalog` per plugin URI, owned by `PluginsApi`); each instance wraps the
+entries in its own `Preset` objects, so `preset.load()` acts on the instance it was listed from. A user preset is told apart by its bundle
+directory, which survives a save (the URI and label change), a factory preset by its URI. The backend sends the `preset` frame only for a
+load and a delete; a save changes the current preset silently, so the client records it with `applyLocal`.
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant A as Application
+  participant P as PluginPresets
+  participant Q as Device queue
+  participant B as mod-ui backend
+  participant M as GraphState / store
+
+  A->>P: preset.save('Louder', { source })
+  P->>P: alive, user preset, is instance.preset? (else ModUiError, nothing sent)
+  P->>Q: enqueue
+  Q->>P: run
+  P->>B: GET /effect/preset/save_replace/graph/Gain?uri&bundle&name
+  B-->>P: { ok, bundle, uri }  (no preset frame is sent)
+  P->>M: applyLocal('preset', instance + new uri, source)
+  M-->>A: instance.on('preset') origin local, source
+  P->>B: GET /effect/get_non_cached
+  B-->>P: presets
+  P->>P: catalog.update (same Preset object, new uri and label)
+  P-->>A: presets.on('list') on every instance of the plugin; the promise resolves
+
+  Note over A,B: load: the preset and param_set frames arrive before the HTTP answer, so a store expectation (param, preset of that instance) is held while the request is in flight
+```
+
 ---
 
 ## 6. Design rules
@@ -1547,5 +1639,6 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - Connections to plugins that are not installed are left out of `connections.list()` (their ports are unknown).
 - Snapshots are identified by position, and the backend sends no frame for `saveas`, `rename` or `remove`: other clients' changes to the list are found only by calling `list()` again, and a rename made elsewhere looks like "removed + added" (the objects are matched by name). Removing a snapshot **before** the current one leaves the backend's current index unchanged (it then points at the next snapshot); `currentIndex` mirrors that number. Nothing reads the content of a snapshot, and when the snapshot selector is addressed to a hardware actuator the classic UI refuses to add, delete or load snapshots while the client cannot see addressings and does not refuse. `GET /snapshot/name` is not used because it answers `Default` for any index. `snapshots.load()` tags the value events of every client with `'local'` while its request is in flight.
 - Banks: only user banks exist for the web (factory banks are the HMI's). `client.banks.list()` is not read-only on the device: pedalboards that are missing or broken are dropped from the banks for good. Every edit rewrites the whole list, so two writers at the same moment are last-write-wins; a bank is found by its title (unique ignoring case). Properties of a bank pedalboard entry other than `bundle` and `title` are not preserved (the read replaces them with the library summary). Whether an HMI that is already running sees a bank saved from the web was not verified on a device.
+- Presets: the backend sends no `preset` frame for a save, only for a load and a delete; `save()` and `delete()` work only on the instance's current user preset and fail silently otherwise (the client checks first); `save()` overwrites the preset with the live values (there is no rename-only call) and a failed one can delete the preset's bundle (the list is read again, so `alive` tells the truth). `load()` answers `false` on the 10 s hardware timeout although the preset was applied. Names with a control character or a backslash are refused because only `"` is escaped on the way to mod-host. Changes other clients make to the list are found only by calling `list()` again. Whether a preset holds patch-parameter values (and so whether `patch_set` frames follow a load) was not verified on a device.
 - `reference.copy()` cannot choose the title of the copy and refuses titles with quotes, `/`, `&`, `\`, `*`, `[` or control characters, because of how the backend renames the copy.
 - A thumbnail URL is a snapshot: after another client regenerates the images, call `status()` (or `generate()`) on a reference to learn the new creation time, otherwise the URL may still hit the browser's one-year cache.

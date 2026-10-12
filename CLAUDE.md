@@ -25,7 +25,8 @@ mod-ui is the web interface of MOD audio devices.
   (`docs/plans/2026-10-modui-client-events.md`, phases 1 to 4; meters and addressings are not covered).
   Also the running pedalboard's snapshots (`currentPedalboard.snapshots`: list/get/save/create/load, `Snapshot.rename/delete/load`, `current`,
   `currentIndex`, `on('current' | 'list')`) and the user banks (`client.banks`: list/get/create/move/replaceAll, `Bank.rename/delete/add/
-  remove/move/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`).
+  remove/move/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`), and the presets of a plugin instance (`instance.presets`:
+  list/get/load/create/save/delete, `Preset.load/save/delete`, `current`, `on('list')`) (`docs/plans/2026-10-modui-client-presets.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -83,14 +84,14 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 | Intent | Verb | Used by |
 |---|---|---|
 | Read | `list()`, `get(key)` | every collection (async, unless the data is in memory like `params.list()`) |
-| Make a new **saved** entity | `create(...)` | `banks.create`, `snapshots.create` (captures the live values), `presets.create` (planned) |
+| Make a new **saved** entity | `create(...)` | `banks.create`, `snapshots.create` (captures the live values), `presets.create` |
 | Put an existing thing into a container | `add(...)` | `plugins.add` (from the catalogue), `bank.add(pedalboard)` |
-| **Destroy** a saved entity | `delete()` | `reference.delete()`, `snapshot.delete()`, `bank.delete()`, `preset.delete()` (planned) |
+| **Destroy** a saved entity | `delete()` | `reference.delete()`, `snapshot.delete()`, `bank.delete()`, `preset.delete()` |
 | Take something **out of a container** | `remove(...)` | `plugins.remove` / `instance.remove()`, `bank.remove(pedalboard \| index)` |
 | Link / unlink | `connect` / `disconnect` | connections (the domain's own words) |
-| Write the live state into an existing entity | `save(...)` | `currentPedalboard.save`, `snapshots.save` (the current one), `preset.save(name?)` (planned) |
+| Write the live state into an existing entity | `save(...)` | `currentPedalboard.save`, `snapshots.save` (the current one), `preset.save(name?)` |
 | Replace a whole list | `replaceAll(...)` | `banks.replaceAll` (deletes what is left out) |
-| Apply | `load(...)` | `device.load`, `snapshots.load`, `presets.load` (planned) |
+| Apply | `load(...)` | `device.load`, `snapshots.load`, `presets.load` |
 | Rename | `rename(name)` | `snapshot.rename`, `bank.rename`; where the backend cannot (presets) the rename is `save(name)` and says that it also overwrites |
 | Change the **order** in a list | `move(from, to)` | `banks.move`, `bank.move` |
 | Place a block in the canvas | `setPosition({ x, y })` | `instance.setPosition` |
@@ -100,7 +101,7 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
   `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
@@ -138,6 +139,9 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 - Snapshots and banks: `PedalboardSnapshots` keeps the names only from `list()` and from its own writes (applying the backend's rules for
   the current index) plus the `pedal_snapshot` report; no event makes a request. `Snapshot` objects are told apart by name. Bank edits
   are read-modify-write of the whole list inside a queue private to `BanksApi`; a `Bank` is a value that updates itself after its own write.
+- Presets: one `PresetCatalog` per plugin URI (owned by `PluginsApi`, shared by the instances) is the source of `presets.list()`, always read from
+  `GET /effect/get_non_cached`. A user preset is told apart by its bundle path, a factory one by its URI. The backend sends no `preset` frame for a
+  save, so `create` / `save` record the new current preset with `GraphState.applyLocal()`; `load` and `delete` hold a `store.expect()` for the frames.
 - Every public symbol has TSDoc in English: what it does, which backend calls it makes (with the OpenAPI
   `operationId`), errors thrown, and an `@example`. Write it for both developers and AI tools.
 

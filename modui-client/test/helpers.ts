@@ -363,3 +363,83 @@ export function fakeSnapshotBackend(names: string[], current = 0) {
   };
   return { state, routes };
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// Plugin presets
+// ---------------------------------------------------------------------------------------------------------------------
+
+export interface FakePreset {
+  valid: true;
+  uri: string;
+  label: string;
+  path: string;
+}
+
+/**
+ * The preset endpoints of one plugin instance with the rules of `mod/host.py`: `load` sends `preset` and `param_set` frames, saves send
+ * nothing, replace and delete only work on the instance's current preset, delete sends `preset <instance> null`.
+ */
+export function fakePresetBackend(instance: string, initial: FakePreset[], holder: { socket?: FakeWebSocket }) {
+  const state = {
+    presets: initial.map((preset) => ({ ...preset })),
+    current: null as string | null,
+    calls: [] as string[],
+    failReplace: false,
+    holdLoad: undefined as undefined | (() => void),
+    loadAnswer: undefined as undefined | boolean,
+  };
+  const arg = (call: Call, key: string) => new URL(call.url).searchParams.get(key) ?? '';
+  const symbol = (name: string) => name.replace(/[^A-Za-z0-9]/g, '_').slice(0, 32);
+  const note = (call: Call) => state.calls.push(`${new URL(call.url).pathname}${new URL(call.url).search}`);
+  const routes: Record<string, unknown> = {
+    'GET /effect/get_non_cached': (call: Call) => {
+      note(call);
+      return { presets: state.presets };
+    },
+    [`GET /effect/preset/load/${instance}`]: (call: Call) => {
+      note(call);
+      const uri = arg(call, 'uri');
+      if (state.loadAnswer !== undefined) return state.loadAnswer;
+      if (!state.presets.some((preset) => preset.uri === uri)) return false;
+      state.current = uri;
+      holder.socket!.emit(`preset ${instance} ${uri}`);
+      holder.socket!.emit(`param_set ${instance} gain 6.5`);
+      state.holdLoad?.();
+      return true;
+    },
+    [`GET /effect/preset/save_new/${instance}`]: (call: Call) => {
+      note(call);
+      const name = arg(call, 'name');
+      const bundle = `/root/.lv2/${symbol(instance)}-${symbol(name)}.lv2`;
+      const uri = `file://${bundle}/${symbol(name)}.ttl`;
+      state.presets.push({ valid: true, uri, label: name, path: bundle });
+      state.current = uri;
+      return { ok: true, bundle, uri };
+    },
+    [`GET /effect/preset/save_replace/${instance}`]: (call: Call) => {
+      note(call);
+      const found = state.presets.find((preset) => preset.uri === arg(call, 'uri') && preset.path === arg(call, 'bundle'));
+      if (!found || state.current !== found.uri) return { ok: false };
+      if (state.failReplace) {
+        state.presets = state.presets.filter((preset) => preset !== found); // the backend removes the bundle on failure
+        state.current = null;
+        return { ok: false };
+      }
+      const name = arg(call, 'name');
+      found.label = name;
+      found.uri = `file://${found.path}/${symbol(name)}.ttl`;
+      state.current = found.uri;
+      return { ok: true, bundle: found.path, uri: found.uri };
+    },
+    [`GET /effect/preset/delete/${instance}`]: (call: Call) => {
+      note(call);
+      const found = state.presets.find((preset) => preset.uri === arg(call, 'uri') && preset.path === arg(call, 'bundle'));
+      if (!found || state.current !== found.uri) return false;
+      state.presets = state.presets.filter((preset) => preset !== found);
+      state.current = null;
+      holder.socket!.emit(`preset ${instance} null`);
+      return true;
+    },
+  };
+  return { state, routes };
+}
