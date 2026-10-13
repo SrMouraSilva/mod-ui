@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 960 640" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="domain-device-title domain-device-desc">
+<svg viewBox="0 0 960 656" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="domain-device-title domain-device-desc">
 <title id="domain-device-title">Device</title>
 <desc id="domain-device-desc">Device owns the running pedalboard and the plugin catalogue, loads pedalboards and returns a LoadResult, and keeps the last values the device reported, such as load, transport and buffer size.</desc>
 <metadata><![CDATA[
@@ -42,7 +42,8 @@ classDiagram
   note for Devicereports "last value; null until reported"
   class PluginsApi {
     <<class>>
-    list()
+    list() , get(uri)
+    getDefaultTemplates()
   }
   note for PluginsApi "client.device.plugins"
   class Plugin {
@@ -70,7 +71,7 @@ classDiagram
 <path d="M 408,208 L 408,232 Q 408,240 400,240 L 160,240 Q 152,240 152,248 L 152,296" fill="none" stroke="#5c4a64" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#domain-device-arrow)"/>
 <path d="M 480,208 L 480,296" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
 <path d="M 552,208 L 552,232 Q 552,240 560,240 L 800,240 Q 808,240 808,248 L 808,296" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
-<path d="M 808,376 L 808,440" fill="none" stroke="#5c4a64" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#domain-device-arrow)"/>
+<path d="M 808,392 L 808,456" fill="none" stroke="#5c4a64" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#domain-device-arrow)"/>
 <!-- Labels -->
 <rect x="282.8" y="86" width="66.4" height="12" fill="#f5f5f5"/><text x="316" y="95" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">LOAD(TARGET)</text>
 <rect x="602" y="60" width="9.2" height="12" fill="#f5f5f5"/><text x="604" y="69" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
@@ -83,9 +84,9 @@ classDiagram
 <rect x="558" y="215" width="9.2" height="12" fill="#f5f5f5"/><text x="560" y="224" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
 <rect x="814" y="275" width="9.2" height="12" fill="#f5f5f5"/><text x="816" y="284" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
 <rect x="815" y="262" width="40.4" height="12" fill="#f5f5f5"/><text x="817" y="271" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">PLUGINS</text>
-<rect x="814" y="383" width="9.2" height="12" fill="#f5f5f5"/><text x="816" y="392" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
-<rect x="814" y="419" width="24.8" height="12" fill="#f5f5f5"/><text x="816" y="428" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
-<rect x="815" y="402" width="35.2" height="12" fill="#f5f5f5"/><text x="817" y="411" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">LIST()</text>
+<rect x="814" y="399" width="9.2" height="12" fill="#f5f5f5"/><text x="816" y="408" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
+<rect x="814" y="435" width="24.8" height="12" fill="#f5f5f5"/><text x="816" y="444" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
+<rect x="815" y="418" width="35.2" height="12" fill="#f5f5f5"/><text x="817" y="427" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">LIST()</text>
 <!-- Entities -->
 <g>
 <rect x="40" y="48" width="224" height="60" rx="6" fill="#f5f5f5"/>
@@ -146,35 +147,36 @@ classDiagram
 <text x="348" y="437" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">snapshot: index, name</text>
 </g>
 <g>
-<rect x="696" y="296" width="224" height="80" rx="6" fill="#f5f5f5"/>
-<rect x="696" y="296" width="224" height="80" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+<rect x="696" y="296" width="224" height="96" rx="6" fill="#f5f5f5"/>
+<rect x="696" y="296" width="224" height="96" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
 <rect x="704" y="304" width="32" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
 <text x="720.0" y="313" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
 <text x="808.0" y="332" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PluginsApi</text>
 <text x="808.0" y="345" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">client.device.plugins</text>
 <line x1="696" y1="352" x2="920" y2="352" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
-<text x="708" y="367" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">list()</text>
+<text x="708" y="367" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">list() · get(uri)</text>
+<text x="708" y="381" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">getDefaultTemplates()</text>
 </g>
 <g>
-<rect x="696" y="440" width="224" height="60" rx="6" fill="#f5f5f5"/>
-<rect x="696" y="440" width="224" height="60" rx="6" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="4,3"/>
-<rect x="704" y="448" width="24" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.30)" stroke-width="0.8"/>
-<text x="716.0" y="457" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SEE</text>
-<text x="808.0" y="476" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Plugin</text>
-<text x="808.0" y="492" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugin diagram</text>
+<rect x="696" y="456" width="224" height="60" rx="6" fill="#f5f5f5"/>
+<rect x="696" y="456" width="224" height="60" rx="6" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="4,3"/>
+<rect x="704" y="464" width="24" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.30)" stroke-width="0.8"/>
+<text x="716.0" y="473" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SEE</text>
+<text x="808.0" y="492" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Plugin</text>
+<text x="808.0" y="508" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugin diagram</text>
 </g>
-<line x1="40" y1="548" x2="920" y2="548" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
-<text x="40" y="568" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
-<rect x="40" y="576" width="14" height="10" rx="2" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
-<text x="60" y="584" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Client class</text>
-<rect x="139.2" y="576" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
-<text x="159.2" y="584" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data / enum</text>
-<rect x="261.4" y="576" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
-<text x="281.4" y="584" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
-<rect x="425.0" y="576" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
-<text x="445.0" y="584" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
-<line x1="602.4" y1="581" x2="630.4" y2="581" stroke="#5c4a64" stroke-width="1.2"/>
-<text x="636.4" y="584" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Owns / contains (cardinality at each end)</text>
-<line x1="40" y1="601" x2="68" y2="601" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#domain-device-arrow)"/>
-<text x="74" y="604" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Creates / reads / refers to</text>
+<line x1="40" y1="564" x2="920" y2="564" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+<text x="40" y="584" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+<rect x="40" y="592" width="14" height="10" rx="2" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+<text x="60" y="600" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Client class</text>
+<rect x="139.2" y="592" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+<text x="159.2" y="600" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data, enum or interface</text>
+<rect x="316.59999999999997" y="592" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
+<text x="336.59999999999997" y="600" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
+<rect x="480.19999999999993" y="592" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+<text x="500.19999999999993" y="600" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
+<line x1="657.5999999999999" y1="597" x2="685.5999999999999" y2="597" stroke="#5c4a64" stroke-width="1.2"/>
+<text x="691.5999999999999" y="600" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Owns / contains (cardinality at each end)</text>
+<line x1="40" y1="617" x2="68" y2="617" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#domain-device-arrow)"/>
+<text x="74" y="620" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Creates / reads / refers to</text>
 </svg>

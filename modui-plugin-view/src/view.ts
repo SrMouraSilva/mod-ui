@@ -7,7 +7,7 @@
  * @module
  */
 
-import type { PatchValue, PluginInfo, PluginInstance, PluginPresetInfo } from 'modui-client';
+import type { PatchValue, PluginGui, PluginInfo, PluginInstance, PluginPresetInfo } from 'modui-client';
 import type { BackendListener, ViewBackend } from './binding';
 import { Emitter, type Off } from './emitter';
 import type { MustacheRender } from './mustache';
@@ -16,7 +16,7 @@ import { sprintf } from './sprintf';
 import type { ControlSpec, PreparedPlugin, ScalePoint } from './template-data';
 import type { JQueryLike, ViewErrorContext, ViewEvents, ViewOrigin } from './types';
 import { PluginViewError } from './types';
-import { customFileUrl, rebaseUrls } from './urls';
+import { rebaseUrls } from './urls';
 import { BypassWidget, createWidget, type Widget, type WidgetHost } from './widgets';
 
 /** Classes of icons made for the first MOD UI, which the classic UI refuses (it draws the default pedal instead). */
@@ -55,7 +55,8 @@ export interface ViewContext {
   document: Document;
   baseUrl: string;
   info: PluginInfo;
-  version: string;
+  /** The files of the plugin: its version and the URLs the plugin script asks for. */
+  gui: PluginGui;
   prepared: PreparedPlugin;
   iconTemplate: string;
   settingsTemplate: string;
@@ -862,7 +863,7 @@ export class PluginView {
       patch_set: (uri, _valuetype, value) => {
         void this.setPatch(uri, value as number | string, null, 'script').catch(() => undefined);
       },
-      get_custom_resource_filename: (filename) => customFileUrl(this.context.baseUrl, filename, this.uri, this.context.version),
+      get_custom_resource_filename: (filename) => this.context.gui.getCustomFileUrl(filename),
       get_port_index_for_symbol: (symbol) => controlPorts().find((port) => port.symbol === symbol)?.index ?? -1,
       get_port_symbol_for_index: (index) => controlPorts().find((port) => port.index === index)?.symbol ?? null,
     };

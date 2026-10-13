@@ -21,6 +21,20 @@ export class HttpTransport {
     return this.request<T>(this.url(path, query), { method: 'GET' });
   }
 
+  /**
+   * `GET path?query`, decoded as text. Unlike {@link HttpTransport.getJson} it leaves the cache to the browser: it is meant for files whose
+   * URL carries a version (modgui files, shared resources), which the server marks as cacheable.
+   */
+  async getText(path: string, query?: Query): Promise<string> {
+    const url = this.url(path, query);
+    const response = await this.fetchImpl(url, { method: 'GET' });
+    const text = await response.text();
+    if (!response.ok) {
+      throw new ModUiHttpError(response.status, url, text);
+    }
+    return text;
+  }
+
   /** `POST path` with an `application/x-www-form-urlencoded` body, decoded as JSON. */
   postForm<T>(path: string, form: Query): Promise<T> {
     return this.request<T>(this.url(path), {

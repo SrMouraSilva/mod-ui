@@ -202,7 +202,24 @@ export interface PluginSummary {
   licensed: number;
   /** `0` none, `1` mono audio, `2` stereo audio, `3` instrument, `4` MIDI. */
   iotype: number;
-  gui?: { resourcesDirectory?: string; screenshot?: string; thumbnail?: string };
+  /**
+   * The modgui of the plugin. `GET /effect/list` sends only `resourcesDirectory`, `screenshot` and `thumbnail`; `GET /effect/get` sends the
+   * file names too (empty when the plugin does not have that file). Read the files through {@link PluginGui} instead of using the names.
+   */
+  gui?: PluginGuiInfo;
+}
+
+/** The `gui` object of a plugin description (schemas `PluginSummary` and `PluginInfo`). Only the keys this client uses are typed. */
+export interface PluginGuiInfo {
+  resourcesDirectory?: string;
+  iconTemplate?: string;
+  settingsTemplate?: string;
+  stylesheet?: string;
+  javascript?: string;
+  documentation?: string;
+  screenshot?: string;
+  thumbnail?: string;
+  [other: string]: unknown;
 }
 
 /** A port of a plugin (schema `PluginPort`). */
@@ -291,6 +308,29 @@ export type PortType = 'audio' | 'midi' | 'cv';
 
 /** Direction of a port, seen from the graph: an `output` is a signal source, an `input` a sink. */
 export type PortDirection = 'input' | 'output';
+
+// ---------------------------------------------------------------------------------------------------------------------
+// User files
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** A user file (schema `UserFile`): a sample, an impulse response, a model, ... that a plugin path parameter can point at. */
+export interface UserFile {
+  /** Absolute path on the device: the value to write to a path parameter. */
+  fullname: string;
+  /** Sub-directory below the type folder (may be empty). */
+  dirname: string;
+  basename: string;
+  /** Type folder, e.g. `/data/user-files/NAM Models`. */
+  basepath: string;
+  /** One of the types of `client.files.list()`. */
+  filetype: string;
+}
+
+/** `GET /files/list` answer. */
+export interface UserFileListResponse {
+  ok: boolean;
+  files: UserFile[];
+}
 
 // ---------------------------------------------------------------------------------------------------------------------
 // Snapshots and banks

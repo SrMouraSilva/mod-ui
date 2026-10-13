@@ -25,15 +25,15 @@ flowchart LR
     hmi["HMI · Control Chain<br/>serial · pedals<br/>knobs and screens"]
   end
   app --> client
-  client -->|uses| http
-  client -->|uses| chan
-  http -->|fetch| web
-  chan <-->|ws| web
-  classic -->|ajax · ws| web
-  web -->|calls| host
-  host -->|broadcast| web
-  host -->|tcp| mh
-  host -->|serial| hmi
+  client -->|"uses"| http
+  client -->|"uses"| chan
+  http -->|"fetch"| web
+  chan <-->|"ws"| web
+  classic -->|"ajax · ws"| web
+  web -->|"calls"| host
+  host -->|"broadcast"| web
+  host -->|"tcp"| mh
+  host -->|"serial"| hmi
 ]]></metadata>
 <defs>
 <style>@import url('https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&amp;family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500;600&amp;display=swap');</style>

@@ -7,7 +7,7 @@ The architecture and data-model diagrams of [`docs/modui-client.md`](../../modui
 | `*.svg` | One diagram each. **Generated, never edited by hand.** Each SVG carries `<title>`, `<desc>` and a `<metadata>` block with the content of the diagram as Mermaid (entities, fields, relations, notes), for readers and AI tools that only see the SVG. |
 | `index.html` | A gallery that shows every SVG (through `<object>`, so the web fonts load). Generated too. |
 | `src/specs.py` | **The source.** One function per diagram: boxes, lines, positions, legend. |
-| `src/engine.py` | The drawing code (boxes, orthogonal connectors, label masks, legend, geometry checks, Mermaid summary). |
+| `src/engine.py` | The drawing code (boxes, orthogonal connectors, label masks, legend, geometry checks, Mermaid summary, gallery). Shared with the diagrams of [modui-plugin-view](../../modui-plugin-view/diagrams/README.md). |
 | `src/build.py` | Regenerates the SVGs and `index.html`. Python 3 standard library only. |
 
 ## Changing a diagram

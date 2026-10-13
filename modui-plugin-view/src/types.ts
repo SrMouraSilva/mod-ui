@@ -13,7 +13,7 @@ import type { MustacheRender } from './mustache';
 export type ViewTarget = PluginInstance | Plugin | PluginInfo | string;
 
 /** The client the library works with. Only these members are used, so a test can pass a lighter object. */
-export type ViewClient = Pick<ModUiClient, 'baseUrl' | 'events' | 'device'>;
+export type ViewClient = Pick<ModUiClient, 'baseUrl' | 'events' | 'device' | 'files'>;
 
 /** A jQuery-like function: the plugin scripts receive `event.icon` / `event.settings` wrapped by it. */
 export type JQueryLike = (element: Element) => unknown;
@@ -40,7 +40,10 @@ export interface PluginViewsOptions {
   jQuery?: JQueryLike | null;
   /** Mustache renderer, e.g. `Mustache.render` of mustache.js. Default: the built-in one (see `renderMustache`). */
   mustache?: MustacheRender;
-  /** `fetch` used for the modgui files. Default: the global `fetch`. */
+  /**
+   * `fetch` used for the one file of the classic page the library reads, `css/main.css` (for its `@font-face` rules). Everything of the
+   * plugins goes through the client. Default: the global `fetch`.
+   */
   fetch?: FetchLike;
   /**
    * Global stylesheets added to {@link PluginViewsOptions.document}, once. `false` adds none (the page brings its own). Default: all of

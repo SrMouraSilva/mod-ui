@@ -11,6 +11,7 @@ import { Emitter, type ListenOptions, type Unsubscribe } from './emitter';
 import { Device } from './device';
 import { ModUiError } from './errors';
 import { defaultSchedule, type Schedule } from './snapshot';
+import { FilesApi } from './files';
 import { EventChannel, type ConnectionState, type ReconnectOptions, type StateEvent } from './events';
 import { HttpTransport } from './http';
 import type { ErrorEvent } from './pedalboard-events';
@@ -87,6 +88,8 @@ export class ModUiClient {
   readonly pedalboards: PedalboardsApi;
   /** The banks: ordered collections of pedalboards. */
   readonly banks: BanksApi;
+  /** The files the user put on the device (samples, impulse responses, models). */
+  readonly files: FilesApi;
   /** Main WebSocket: raw subscriptions and waits. */
   readonly events: EventChannel;
 
@@ -113,6 +116,7 @@ export class ModUiClient {
     this.events = new EventChannel(wsUrl, factory, options.webSocket, connectTimeoutMs, reconnect);
     this.pedalboards = new PedalboardsApi(http);
     this.banks = new BanksApi(http, this.pedalboards);
+    this.files = new FilesApi(http);
     this.device = new Device(http, this.events, this.pedalboards, new PluginsApi(http), options.loadTimeoutMs ?? 60000, {
       confirmTimeoutMs: options.graphTimeoutMs ?? 10000,
       schedule: () => options.schedule ?? defaultSchedule,

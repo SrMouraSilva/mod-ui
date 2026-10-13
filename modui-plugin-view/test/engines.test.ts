@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: AGPL-3.0-or-later
 
 import { describe, expect, it } from 'vitest';
-import { customFileUrl, guiFileUrl, imageUrl, namespace, rebaseUrls, renderMustache, renderedVersion, resourceUrl, sprintf } from '../src';
+import { namespace, rebaseUrls, renderMustache, sprintf } from '../src';
 
 describe('renderMustache', () => {
   it('escapes variables and leaves {{{triple}}} and {{& x}} raw', () => {
@@ -60,27 +60,13 @@ describe('sprintf', () => {
 });
 
 describe('URLs', () => {
-  const info = { uri: 'http://example.org/plugins/fuzz#1', builder: 7, microVersion: 2, minorVersion: 1, release: 0, buildEnvironment: 'prod' };
+  const uri = 'http://example.org/plugins/fuzz#1';
 
-  it('builds the version and ns / cns exactly like modgui.js', () => {
-    expect(renderedVersion(info)).toBe('7_2_1_0');
-    expect(renderedVersion({ ...info, buildEnvironment: '' }, 99)).toBe('7_2_1_0_99');
-    expect(renderedVersion(info, 99)).toBe('7_2_1_0');
-    expect(namespace(info.uri, '7_2_1_0')).toEqual({
+  it('builds ns / cns exactly like modgui.js', () => {
+    expect(namespace(uri, '7_2_1_0')).toEqual({
       ns: '?uri=http%3A//example.org/plugins/fuzz%231&v=7_2_1_0',
       cns: '_http_3A__example_org_plugins_fuzz_2317_2_1_0',
     });
-  });
-
-  it('builds the file, resource and image URLs', () => {
-    const base = 'http://modduo.local';
-    expect(guiFileUrl(base, 'iconTemplate', info.uri, 'v')).toBe('http://modduo.local/effect/file/iconTemplate?uri=http%3A//example.org/plugins/fuzz%231&v=v');
-    expect(customFileUrl(base, 'img/a b.png', info.uri, 'v')).toBe(
-      'http://modduo.local/effect/file/custom?filename=img%2Fa%20b.png&uri=http%3A//example.org/plugins/fuzz%231&v=v',
-    );
-    expect(resourceUrl(base, '/pedals/x.png', info.uri, 'v')).toBe('http://modduo.local/resources/pedals/x.png?uri=http%3A//example.org/plugins/fuzz%231&v=v');
-    expect(resourceUrl(base, 'settings.html')).toBe('http://modduo.local/resources/settings.html');
-    expect(imageUrl(base, 'thumbnail', info.uri)).toBe('http://modduo.local/effect/image/thumbnail.png?uri=http%3A%2F%2Fexample.org%2Fplugins%2Ffuzz%231');
   });
 
   it('rebases root-relative src, href and url() onto the base URL, and nothing else', () => {

@@ -15,14 +15,6 @@ C = [40, 368, 696]   # x of the three columns of a 960-wide domain diagram (224 
 
 
 
-def zone(x, y, w, h, label):
-    lw = len(label) * 6.2 + 16
-    cx = x + w / 2
-    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>'
-            f'<rect x="{cx-lw/2:g}" y="{y+4}" width="{lw:g}" height="12" rx="2" fill="{PAPER}"/>'
-            f'<text x="{cx:g}" y="{y+13}" fill="{SOFT}" font-size="8" font-family="{MONO}" text-anchor="middle" letter-spacing="0.14em">{label}</text>')
-
-
 def architecture():
     W = 1040
     NW, NH = 160, 80
@@ -142,7 +134,7 @@ def d_device():
     lr = at(Ent('lr', 'data', 'LoadResult', fields=['bundlepath: string', 'name: string', 'snapshotId: number'], w=224), C[0], y2)
     ds = at(Ent('ds', 'data', 'Device reports', sub='last value; null until reported', w=288,
                 fields=['stats: cpuLoad, xruns', 'sysStats: memLoad, cpuFreqKhz, cpuTempMilli', 'transport: rolling, beatsPerBar, bpm, syncMode', 'bufferSize: frames', 'trueBypass: left, right', 'snapshot: index, name']), 336, y2)
-    pa = at(Ent('pa', 'class', 'PluginsApi', sub='client.device.plugins', ops=['list()'], w=224), C[2], y2)
+    pa = at(Ent('pa', 'class', 'PluginsApi', sub='client.device.plugins', ops=['list() · get(uri)', 'getDefaultTemplates()'], w=224), C[2], y2)
     pl = at(Ent('pl', 'stub', 'Plugin', note='plugin diagram', w=224), C[2], pa.b + 64)
     ents = [ref, dev, cp, lr, ds, pa, pl]
     ym = dev.b + 32
@@ -189,7 +181,7 @@ def d_current():
 
 
 def d_plugin():
-    plugin = at(Ent('plugin', 'class', 'Plugin', sub='client.device.plugins.list()', w=224, fields=['uri · name: string', 'brand · label: string', 'category: string[]'], ops=['info()']), C[0], 48)
+    plugin = at(Ent('plugin', 'class', 'Plugin', sub='client.device.plugins.list()', w=224, fields=['uri · name: string', 'brand · label: string', 'category: string[]', 'gui: PluginGui'], ops=['info()']), C[0], 48)
     pinfo = at(Ent('pinfo', 'wire', 'PluginInfo', sub='GET /effect/get?uri=', w=224,
                    fields=['…the PluginSummary fields', 'version · stability: string', 'ports: audio · midi · cv · control', 'parameters?: patch params', 'presets?: stale after a save']), C[1], 48)
     y2 = max(plugin.b, pinfo.b) + 88
@@ -212,11 +204,57 @@ def d_plugin():
         Conn(pi, 'B', port, 'T', 'own', at_a=480, at_b=480, ca='1', cb='0..*', label='ports', lside='R'),
         Conn(pi, 'B', pres, 'T', 'own', at_a=548, at_b=pres.cx, mid=ym, ca='1', cb='1', label='presets', seg=2, lside='R'),
     ]
-    callouts = [(C[2], 56, ['Params come from the control ports of', 'PluginInfo; Ports from audio, midi and cv.'])]
+    callouts = [(C[2], 56, ['Params come from the control ports of', 'PluginInfo; Ports from audio, midi and cv.', 'plugin.gui: see the plugin GUI diagram.'])]
     return dict(slug='domain-plugin', title='Plugin', eyebrow='Data model · plugin',
                 h1='A plugin and its instance: ports, parameters, patch parameters and presets',
                 desc='A Plugin from the installed catalogue is described by PluginInfo; a PluginInstance in the running pedalboard has ports, control parameters, patch parameters and presets.',
                 ents=ents, conns=conns, callouts=callouts, kinds=['class', 'wire', 'stub', 'focal'], lines=['own', 'ref'], W=960)
+
+
+def d_plugin_gui():
+    plugin = at(Ent('plugin', 'stub', 'Plugin', note='plugin diagram', w=224), C[0], 48)
+    gui = at(Ent('gui', 'class', 'PluginGui', sub='plugin.gui', focal=True, w=224,
+                 fields=['uri: string', 'version: "7_2_1_0"'],
+                 ops=['getFileUrl · getCustomFileUrl', 'getResourceUrl(path)', 'getThumbnailUrl · getScreenshotUrl', 'get(file) · getAll()']), C[1], 48)
+    files = at(Ent('files', 'data', 'GuiFiles', sub='gui.getAll()', w=224,
+                   fields=['iconTemplate: string | null', 'settingsTemplate: string | null', 'stylesheet · javascript', 'errors: file, error']), C[2], 48)
+    y2 = gui.b + 88
+    api = at(Ent('api', 'class', 'PluginsApi', sub='client.device.plugins', w=224,
+                 ops=['get(uri | summary)', 'getDefaultTemplates()', 'clearGuiCache()']), C[0], y2)
+    assets = at(Ent('assets', 'internal', 'GuiAssets', w=224, fields=['stamp: number'], ops=['text(path): cached', 'info(uri)']), C[1], y2)
+    ginfo = at(Ent('ginfo', 'wire', 'PluginGuiInfo', sub='PluginInfo.gui', w=224,
+                   fields=['resourcesDirectory: string', 'iconTemplate · settingsTemplate', 'stylesheet · javascript', 'documentation · screenshot', 'thumbnail: string']), C[2], y2)
+    ents = [plugin, gui, files, api, assets, ginfo]
+    conns = [
+        Conn(plugin, 'R', gui, 'L', 'own', at_a=78, at_b=78, ca='1', cb='1', label='gui', lside='B'),
+        Conn(gui, 'R', files, 'L', 'ref', at_a=78, at_b=78, label='getAll()', lside='B'),
+        Conn(gui, 'B', assets, 'T', 'ref', at_a=gui.cx, at_b=assets.cx, ca='0..*', cb='1', label='shares', lside='R'),
+        Conn(api, 'R', assets, 'L', 'own', at_a=y2 + 40, at_b=y2 + 40, ca='1', cb='1', label='owns', lside='B'),
+        Conn(assets, 'R', ginfo, 'L', 'ref', at_a=y2 + 40, at_b=y2 + 40, label='reads', lside='B'),
+        Conn(api, 'T', plugin, 'B', 'ref', at_a=api.cx, at_b=plugin.cx, ca='1', cb='0..*', label='get()', lside='R'),
+    ]
+    y3 = max(api.b, assets.b, ginfo.b) + 40
+    callouts = [(C[0], y3, ['The summary of GET /effect/list does not say which files a plugin has:', 'get() reads PluginInfo.gui first and answers null for a file it lacks.'])]
+    return dict(slug='domain-plugin-gui', title='Plugin GUI files', eyebrow='Data model · plugin GUI files',
+                h1='The files of a plugin\'s GUI: URLs, texts and the cache they share',
+                desc='A Plugin has a PluginGui that builds the URLs of its thumbnail, screenshot and modgui files from its summary and reads their text through the GuiAssets cache that PluginsApi owns; the files it has are named by PluginInfo.gui.',
+                ents=ents, conns=conns, callouts=callouts, kinds=['class', 'data', 'wire', 'internal', 'stub', 'focal'], lines=['own', 'ref'], W=960)
+
+
+def d_files():
+    patch = at(Ent('patch', 'stub', 'PatchParam', note='patch params diagram', w=224), C[0], 48)
+    api = at(Ent('api', 'class', 'FilesApi', sub='client.files', focal=True, w=224, ops=['list(types)']), C[1], 48)
+    ufile = at(Ent('ufile', 'wire', 'UserFile', sub='GET /files/list', w=224,
+                   fields=['fullname: absolute path', 'dirname · basename: string', 'basepath: type folder', 'filetype: string']), C[2], 48)
+    ents = [patch, api, ufile]
+    conns = [
+        Conn(patch, 'R', api, 'L', 'ref', at_a=78, at_b=78, label='fileTypes', lside='B'),
+        Conn(api, 'R', ufile, 'L', 'ref', at_a=78, at_b=78, ca='1', cb='0..*', label='list()', lside='B'),
+    ]
+    return dict(slug='domain-files', title='User files', eyebrow='Data model · user files',
+                h1='The files the user put on the device',
+                desc='FilesApi lists the user files of one or more types as UserFile values; the types a path parameter accepts are the fileTypes of its PatchParam.',
+                ents=ents, conns=conns, callouts=[], kinds=['class', 'wire', 'stub', 'focal'], lines=['ref'], W=960)
 
 
 def d_patch():
@@ -352,4 +390,4 @@ def d_overview():
 
 
 # order = order of the gallery (index.html)
-SPECS = [architecture, d_overview, d_pedalboard, d_bundle, d_device, d_current, d_plugin, d_patch, d_presets, d_snapshots, d_banks]
+SPECS = [architecture, d_overview, d_pedalboard, d_bundle, d_device, d_current, d_plugin, d_plugin_gui, d_patch, d_presets, d_snapshots, d_banks, d_files]

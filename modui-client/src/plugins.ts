@@ -8,6 +8,7 @@
 
 import { ModUiError } from './errors';
 import type { HttpTransport } from './http';
+import { GuiAssets, PluginGui, type DefaultGuiTemplates } from './plugin-gui';
 import { PresetCatalog } from './plugin-presets';
 import type { PluginInfo, PluginSummary } from './types';
 
@@ -21,14 +22,20 @@ export class Plugin {
   readonly brand: string;
   readonly label: string;
   readonly category: string[];
+  /**
+   * The files of the plugin's GUI: URLs for the thumbnail, the screenshot and the modgui files, and their text. Built from the summary, so
+   * it is available at once (no request).
+   */
+  readonly gui: PluginGui;
 
-  /** @internal Use {@link PluginsApi.list}. */
+  /** @internal Use {@link PluginsApi.list} or {@link PluginsApi.get}. */
   constructor(readonly summary: PluginSummary, private readonly api: PluginsApi) {
     this.uri = summary.uri;
     this.name = summary.name;
     this.brand = summary.brand;
     this.label = summary.label;
     this.category = summary.category;
+    this.gui = api.guiOf(summary);
   }
 
   /**
@@ -58,9 +65,13 @@ export class PluginsApi {
   private readonly arriving = new Map<string, Promise<void>>();
   /** The presets of each plugin, shared by its instances. */
   private readonly catalogs = new Map<string, PresetCatalog>();
+  /** The GUI files (cached text) and the version stamp, shared by every {@link PluginGui}. */
+  private readonly guiAssets: GuiAssets;
 
   /** @internal Use `client.device.plugins`. */
-  constructor(private readonly http: HttpTransport) {}
+  constructor(private readonly http: HttpTransport) {
+    this.guiAssets = new GuiAssets(http, (uri) => this.info(uri));
+  }
 
   /**
    * Lists every installed plugin (summaries only).
@@ -73,6 +84,53 @@ export class PluginsApi {
   async list(): Promise<Plugin[]> {
     const summaries = await this.http.getJson<PluginSummary[]>('/effect/list');
     return summaries.map((summary) => new Plugin(summary, this));
+  }
+
+  /**
+   * The plugin with this URI, for when you have the URI of a plugin (a pedalboard's plugin, a saved setting) and not the {@link Plugin}
+   * from {@link PluginsApi.list}. Pass a summary or a description you already have to get the {@link Plugin} without a request (a full
+   * description is also remembered, so `plugin.info()` and `plugin.gui` do not ask for it again).
+   *
+   * Backend: `GET /effect/get?uri=…` (operationId `getPlugin`, cached) when given a URI.
+   * @throws {ModUiHttpError} `404` when the plugin is not installed.
+   * @example
+   * const plugin = await client.device.plugins.get('http://moddevices.com/plugins/mod-devel/BigMuffPi');
+   * img.src = plugin.gui.getThumbnailUrl();
+   */
+  async get(plugin: string | PluginSummary | PluginInfo): Promise<Plugin> {
+    if (typeof plugin === 'string') {
+      return new Plugin(await this.info(plugin), this);
+    }
+    if ('ports' in plugin && !this.infos.has(plugin.uri)) {
+      this.remember(plugin as PluginInfo);
+    }
+    return new Plugin(plugin, this);
+  }
+
+  /**
+   * The templates mod-ui draws a plugin with when it has no modgui (an icon like a generic pedal, and a settings panel). Cached.
+   *
+   * Backend: `GET /resources/templates/pedal-default.html` and `GET /resources/settings.html` (operationId `getResource`).
+   * @example
+   * const files = await plugin.gui.getAll();
+   * const icon = files.iconTemplate ?? (await client.device.plugins.getDefaultTemplates()).iconTemplate;
+   */
+  async getDefaultTemplates(): Promise<DefaultGuiTemplates> {
+    const [iconTemplate, settingsTemplate] = await Promise.all([
+      this.guiAssets.text('/resources/templates/pedal-default.html'),
+      this.guiAssets.text('/resources/settings.html'),
+    ]);
+    return { iconTemplate, settingsTemplate };
+  }
+
+  /** Forgets the cached text of the GUI files, e.g. after installing a new version of a plugin. URLs already handed out stay valid. */
+  clearGuiCache(): void {
+    this.guiAssets.clear();
+  }
+
+  /** @internal The GUI of a plugin, for {@link Plugin.gui}. */
+  guiOf(summary: PluginSummary): PluginGui {
+    return new PluginGui(summary, this.guiAssets);
   }
 
   /** @internal Full description of one plugin, cached. */

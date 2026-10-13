@@ -33,6 +33,8 @@
  * | `device.ts` | {@link Device} (`client.device`) — load / reset the running pedalboard |
  * | `current-pedalboard.ts` | {@link CurrentPedalboard} (`client.device.currentPedalboard`) — get / save / saveAs |
  * | `plugins.ts` | {@link PluginsApi} (`client.device.plugins`), {@link Plugin} — installed plugins |
+ * | `plugin-gui.ts` | {@link PluginGui} (`plugin.gui`) — URLs and text of a plugin's modgui files, thumbnail and screenshot |
+ * | `files.ts` | {@link FilesApi} (`client.files`) — the user's samples, impulse responses and models |
  * | `pedalboard-plugins.ts` | {@link PedalboardPlugins} (`currentPedalboard.plugins`) — list / add / remove |
  * | `pedalboard-connections.ts` | {@link PedalboardConnections} (`currentPedalboard.connections`), {@link PedalboardPorts} (`currentPedalboard.ports.list()`, `.audio.input()` …) |
  * | `pedalboard-snapshots.ts` | {@link PedalboardSnapshots} (`currentPedalboard.snapshots`), {@link Snapshot} — saved sets of plugin values |
@@ -70,6 +72,8 @@ import { PluginPresets, Preset } from './plugin-presets';
 import { PedalboardPlugins } from './pedalboard-plugins';
 import { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
 import { PedalboardReference, PedalboardsApi } from './pedalboards';
+import { FilesApi } from './files';
+import { PluginGui } from './plugin-gui';
 import { Plugin, PluginsApi } from './plugins';
 
 export { Bank, BanksApi } from './banks';
@@ -104,6 +108,9 @@ export { PedalboardPlugins } from './pedalboard-plugins';
 export { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
 export type { SnapshotCurrentEvent, SnapshotEvents, SnapshotListEvent } from './pedalboard-snapshots';
 export { PedalboardReference, PedalboardsApi } from './pedalboards';
+export { FilesApi } from './files';
+export { GUI_FILES, PluginGui } from './plugin-gui';
+export type { DefaultGuiTemplates, GuiFile, GuiFiles } from './plugin-gui';
 export { Plugin, PluginsApi } from './plugins';
 export type { FetchLike, WebSocketFactory, WebSocketLike } from './runtime';
 export type * from './types';
@@ -128,6 +135,8 @@ if (typeof window !== 'undefined') {
     EventChannel,
     Plugin,
     PluginsApi,
+    PluginGui,
+    FilesApi,
     PluginInstance,
     Param,
     PluginParams,

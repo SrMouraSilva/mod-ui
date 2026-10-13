@@ -40,7 +40,8 @@ Non-goals (first version; see "Future work"):
 | 3 | Mustache | Built-in subset (`mustache.ts`): variables (escaped), `{{{x}}}` / `{{& x}}`, sections over lists / objects / truthy values, inverted sections, comments, dotted names, `{{.}}`, context stack. Enough for every modgui template; `options.mustache` accepts `Mustache.render` for exotic templates. |
 | 4 | sprintf | Built-in (`sprintf.ts`): `%d %i %f %e %g %s %x %c %%` with flags, width and precision. Unit formats (`%.1f dB`, `%d %%`) come from the plugin. |
 | 5 | jQuery | Required by the plugin JavaScript contract (`event.icon.find(...)`); some scripts also use the jQuery plugins the classic page loads (`jquery.svg.js` for x42). The script text is compiled like the classic `eval('method = ' + code)`, because some files put helper declarations after the function. Injected (`options.jQuery`, default `window.jQuery`). Without it the script is not run and the view emits `error` once (`context: 'script'`). The widgets themselves never use jQuery. |
-| 6 | Plugins without modgui | The default templates of the classic UI are public static files: `GET /resources/templates/pedal-default.html` and `GET /resources/settings.html`. **No backend change.** (Answers open question 3 of the plugin-GUI plan.) |
+| 6 | Plugins without modgui | The default templates of the classic UI are public static files: `GET /resources/templates/pedal-default.html` and `GET /resources/settings.html`. **No backend change.** (Answers open question 3 of the plugin-GUI plan.) Since 2026-10-13 the client reads them: `plugins.getDefaultTemplates()`. |
+| 6b | Who knows the backend's URLs | **`modui-client`** (revised 2026-10-13, `2026-10-modui-client-plugin-assets.md`): the files, URLs, version and cache of a plugin are `plugin.gui`; the user files are `client.files`. The view builds no backend URL and its `fetch` option is only for `css/main.css`. |
 | 7 | Root-relative URLs | Templates and stylesheets use `/resources/…` and `/effect/…`. They are rebased onto `client.baseUrl` (`src`, `href`, CSS `url()`); `get_custom_resource_filename` returns an absolute URL. No backend change. |
 | 8 | CORS | Unchanged backend: a page on another origin cannot `fetch` the templates. Same origin, or a dev-server proxy (Vite `server.proxy`), is the supported way; documented. |
 | 9 | Global stylesheets | `PluginViews` adds `<link>`s to `baseUrl/css/pedals.css`, `baseUrl/resources/pedals/default.css` and `baseUrl/css/fonts.css` once per document (`options.styles: false` turns it off). `css/main.css` (normalize + bootstrap + the plugin fonts Nexa, Questrial, …) is **not** linked: it restyles the whole page. Its `@font-face` rules are extracted and injected (`styles.fonts`, default on), and its `* { box-sizing: border-box }` (Bootstrap) is re-created scoped to the library's elements with `:where()` (no specificity), because pedals are laid out with it (x42 fil4 breaks without it). |
@@ -94,7 +95,7 @@ preview.setValue('gain', 0.5);                          // local only
 ## Files
 `modui-plugin-view/`: `package.json`, `tsconfig.json`, `vitest.config.ts`, `src/index.ts`, `src/views.ts` (`PluginViews`), `src/view.ts`
 (`PluginView`), `src/binding.ts` (live / preview backends), `src/controls.ts` (one control: value, format, widgets, fields),
-`src/widgets.ts`, `src/template-data.ts`, `src/assets.ts`, `src/styles.ts`, `src/script.ts`, `src/urls.ts`, `src/mustache.ts`,
+`src/widgets.ts`, `src/template-data.ts`, `src/image.ts`, `src/styles.ts`, `src/script.ts`, `src/urls.ts` (`ns` / `cns`, rebasing), `src/mustache.ts`,
 `src/sprintf.ts`, `src/emitter.ts`, `src/types.ts`; tests in `test/` (happy-dom). Docs: `docs/modui-plugin-view.md`, README section,
 CLAUDE.md, `.gitignore`, rows of `docs/modui-client/implementation-progress.md`.
 
@@ -130,5 +131,8 @@ compile form, the scoped `box-sizing`.
 - A small React wrapper (`<PluginIcon instance={…} />`) as an example, not as a dependency.
 
 ## Revisions
+- **2026-10-13** — The plugin's files, URLs, version stamp and cache, and the user files, moved to `modui-client` (`plugin.gui`, `plugins.getDefaultTemplates()`,
+  `client.files.list()`). Removed from the view: `assets.ts` (`AssetLoader`), the URL builders and `renderedVersion` of `urls.ts` (and their exports),
+  `PluginViews.thumbnailUrl/screenshotUrl/resourceUrl`. `ViewClient` gained `files`.
 - **2026-10-11** — First version, implemented. After the browser test: scoped `box-sizing`, classic script compile form, `jquery.svg`
   note, proxy Origin rewrite. Known difference left: the bottom row of x42 fil4 overflows its panel (another rule of `main.css`).

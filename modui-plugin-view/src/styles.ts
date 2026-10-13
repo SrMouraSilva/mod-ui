@@ -6,7 +6,6 @@
  * @module
  */
 
-import type { AssetLoader } from './assets';
 import type { StyleOptions } from './types';
 
 /** Marks every element the library adds to `<head>`. */
@@ -45,7 +44,8 @@ export class StyleManager {
   private readonly plugins = new Map<string, HTMLStyleElement>();
   private globals: Promise<void> | null = null;
 
-  constructor(private readonly document: Document, private readonly baseUrl: string, private readonly assets: AssetLoader) {}
+  /** @param text Reads a text file of the classic page (`css/main.css`), by URL. */
+  constructor(private readonly document: Document, private readonly baseUrl: string, private readonly text: (url: string) => Promise<string>) {}
 
   /**
    * Adds the global stylesheets once: `<link>`s to `css/pedals.css`, `resources/pedals/default.css`, `css/fonts.css` and the extra
@@ -74,7 +74,7 @@ export class StyleManager {
       this.globals =
         options.fonts === false
           ? Promise.resolve()
-          : this.assets.text(`${this.baseUrl}/css/main.css`).then(
+          : this.text(`${this.baseUrl}/css/main.css`).then(
               (css) => {
                 const faces = css.match(FONT_FACE);
                 if (faces) {

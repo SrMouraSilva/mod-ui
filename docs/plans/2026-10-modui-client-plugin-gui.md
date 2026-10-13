@@ -1,6 +1,8 @@
 # Plan: `ModUiClient` – plugin GUI (modgui) for external frontends, and pedalboard metadata
 
-Status: **plugin GUI part superseded** (2026-10-11) by `2026-10-modui-plugin-view.md`: the rendering and the runtime live in a
+Status: **plugin GUI part superseded** (2026-10-11) by `2026-10-modui-plugin-view.md`, **except Phase 1 (assets), which came back to the client on 2026-10-13**
+(`2026-10-modui-client-plugin-assets.md`: `plugin.gui` with URLs and files, `client.files`; the names there replace `getFileUrl`/`load()`/`render()` proposed below,
+and `render()` stays out of the client): the rendering and the runtime live in a
 separate package, `modui-plugin-view/`, which answers open questions 1-3 (phases 1-3 implemented there; jQuery injected; default templates
 read from `/resources/`). The pedalboard metadata part below is still a proposal. Original status: proposal (2026-10-07). Builds on `2026-10-modui-client-pedalboard.md` (client, `Device`, `events`)
 and on `2026-10-modui-client-pedalboard-graph.md`, which already proposes `device.plugins.list()` and `Plugin.info()`.

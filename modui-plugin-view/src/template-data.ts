@@ -64,7 +64,7 @@ export interface FileEntry {
   icon?: string;
 }
 
-/** `GET /files/list` answer. */
+/** The user files a path parameter accepts (`client.files.list()`, wrapped as `GET /files/list` answers). */
 export interface FileList {
   ok?: boolean;
   files: FileEntry[];
@@ -166,7 +166,7 @@ export interface WireParameter {
 export interface TemplateInputs {
   /** The plugin description (not modified). */
   info: PluginInfo;
-  /** The version used in `ns` / `cns` (see `renderedVersion`). */
+  /** The version used in `ns` / `cns`: `plugin.gui.version` of `modui-client`, the same as in the URLs of the plugin's files. */
   version: string;
   /** The presets to list (default: `info.presets`). */
   presets?: readonly PluginPresetInfo[];
@@ -417,7 +417,7 @@ function parameterSpec(parameter: WireParameter): ControlSpec | null {
  * - `presets`: `{ factory, user }` (user presets are the ones with a `path`).
  *
  * @example
- * const { data, controls } = buildTemplateData({ info, version: renderedVersion(info) });
+ * const { data, controls } = buildTemplateData({ info, version: plugin.gui.version });
  * const html = renderMustache(iconTemplate, data);
  * controls.get('gain')?.format;   // "%.2f dB"
  */

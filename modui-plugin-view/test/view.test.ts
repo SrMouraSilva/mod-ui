@@ -3,7 +3,7 @@
 
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { PluginInfo } from 'modui-client';
-import { PluginViewError, type ViewChangeEvent, type ViewErrorEvent } from '../src';
+import { PluginViewError, namespace, type ViewChangeEvent, type ViewErrorEvent } from '../src';
 import { fuzzFrame, fuzzInfo, fuzzUri, labelUri, liveSetup, loopUri, mouse, sentWith, settle, stepsUri } from './helpers';
 
 declare global {
@@ -367,10 +367,15 @@ describe('preview', () => {
     expect(again.getValue('gain')).toBe(0.5);
   });
 
-  it('gives image and resource URLs', async () => {
-    const { views, info } = await liveSetup({ frames: [] });
-    expect(views.thumbnailUrl(fuzzUri)).toBe(`http://modduo.local/effect/image/thumbnail.png?uri=${encodeURIComponent(fuzzUri)}`);
-    expect(views.screenshotUrl({ uri: fuzzUri })).toContain('/effect/image/screenshot.png?uri=');
-    expect(views.resourceUrl(info as unknown as PluginInfo, 'knob.png')).toBe(`http://modduo.local/resources/knob.png?uri=${escape(fuzzUri)}&v=7_2_1_0`);
+  it('reads the plugin files through the client, with the version of plugin.gui in every URL and template', async () => {
+    const { client, views, calls } = await liveSetup({ frames: [] });
+    const plugin = await client.device.plugins.get(fuzzUri);
+    const view = await views.create(plugin);
+
+    const fileCalls = calls.filter((call) => call.url.includes('/effect/file/')).map((call) => call.url);
+    expect(fileCalls).toContain(plugin.gui.getFileUrl('iconTemplate'));
+    expect(fileCalls).toContain(plugin.gui.getFileUrl('stylesheet'));
+    expect(plugin.gui.version).toBe('7_2_1_0');
+    expect(view.icon.innerHTML).toContain(namespace(fuzzUri, plugin.gui.version).cns);
   });
 });

@@ -280,7 +280,7 @@ def check(name, ents, conns, W, H):
 LEGEND = {
     'class':  ('Client class', ('rgba(136,57,150,0.07)', LINK, None)),
     'wire':   ('Wire type (backend JSON)', ('#ffffff', INK, None)),
-    'data':   ('Plain data / enum', ('rgba(46,31,51,0.03)', 'rgba(46,31,51,0.30)', None)),
+    'data':   ('Plain data, enum or interface', ('rgba(46,31,51,0.03)', 'rgba(46,31,51,0.30)', None)),
     'internal': ('Internal (not exported)', ('rgba(136,57,150,0.03)', LINK, '3,2')),
     'stub':   ('Defined in another diagram', ('#ffffff', 'rgba(46,31,51,0.45)', '3,2')),
     'focal':  ('Aggregate root of this domain', ('rgba(168,78,10,0.08)', ACCENT, None)),
@@ -288,6 +288,7 @@ LEGEND = {
     'client': ('TypeScript library', ('rgba(136,57,150,0.07)', LINK, None)),
     'legacy': ('Legacy browser code', ('rgba(46,31,51,0.03)', 'rgba(46,31,51,0.30)', None)),
     'backend': ('Backend module', ('#ffffff', INK, None)),
+    'http':   ('Server (mod/)', ('#ffffff', INK, None)),
     'app':    ('Your code', ('#ffffff', INK, '3,2')),
 }
 LINE_LEGEND = {
@@ -300,14 +301,14 @@ LINE_LEGEND = {
 }
 
 
-def legend(y, W, kinds, lines):
+def legend(y, W, kinds, lines, line_labels=None):
     o = [f'<line x1="40" y1="{y}" x2="{W-40}" y2="{y}" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>',
          f'<text x="40" y="{y+20}" fill="{MUTED}" font-size="8" font-family="{MONO}" letter-spacing="0.18em">LEGEND</text>']
     x, row = 40, 0
     ky = y + 28
     items = [('box', k) for k in kinds] + [('line', k) for k in lines]
     for typ, k in items:
-        label = (LEGEND[k][0] if typ == 'box' else LINE_LEGEND[k][0])
+        label = (LEGEND[k][0] if typ == 'box' else (line_labels or {}).get(k, LINE_LEGEND[k][0]))
         w = (14 if typ == 'box' else 28) + 6 + len(label) * 4.6 + 24
         if x + w > W - 40:
             x, ky = 40, ky + 20
@@ -344,7 +345,8 @@ def mermaid_class(d):
     """Mermaid classDiagram with the content of a domain diagram (entities, fields, operations, relations, notes). Not the layout."""
     def clean(t):
         t = t.replace('·', ',').replace('|', 'or').replace('&', 'and')
-        return re.sub(r'[{}<>"`]', '', t).strip()
+        t = re.sub(r'[{}<>"`]', '', t.replace('=>', 'returns')).strip()
+        return 'fn' + t if t.startswith('(') else t
     out = ['classDiagram', '  direction LR']
     for en in d['ents']:
         out.append(f'  class {ident(en.name)} {{')
@@ -380,7 +382,7 @@ def mermaid_flow(d):
             out.append(f'  {en.key}["{en.name}<br/>{"<br/>".join(en.subs)}"]')
     for c in d['conns']:
         arrow = '<-->' if c.kind == 'ws' else '-->'
-        out.append(f'  {c.a.key} {arrow}' + (f'|{c.label}|' if c.label else '') + f' {c.b.key}')
+        out.append(f'  {c.a.key} {arrow}' + (f'|"{c.label}"|' if c.label else '') + f' {c.b.key}')
     return '\n'.join(out)
 
 
@@ -390,7 +392,7 @@ def render_svg(d):
     callouts = d.get('callouts', ())
     bot = d.get('bottom') or max([e.b for e in ents] + [c[1] + 14 * len(c[2]) for c in callouts])
     ly = up4(bot + 48)
-    leg, lend = legend(ly, W, d['kinds'], d['lines'])
+    leg, lend = legend(ly, W, d['kinds'], d['lines'], d.get('line_labels'))
     H = up4(lend + 24)
     check(slug, ents, conns, W, H)
     md = mermaid_flow(d) if 'groups' in d else mermaid_class(d)
@@ -425,3 +427,61 @@ def render_svg(d):
 def at(e, x, y):
     e.x, e.y = x, y
     return e
+
+
+def zone(x, y, w, h, label):
+    """A labelled region drawn behind the boxes of an architecture diagram."""
+    lw = len(label) * 6.2 + 16
+    cx = x + w / 2
+    return (f'<rect x="{x}" y="{y}" width="{w}" height="{h}" rx="8" fill="rgba(46,31,51,0.02)" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>'
+            f'<rect x="{cx-lw/2:g}" y="{y+4}" width="{lw:g}" height="12" rx="2" fill="{PAPER}"/>'
+            f'<text x="{cx:g}" y="{y+13}" fill="{SOFT}" font-size="8" font-family="{MONO}" text-anchor="middle" letter-spacing="0.14em">{label}</text>')
+
+
+INDEX = '''<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{title}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Geist:wght@400;500;600&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after {{ box-sizing: border-box; margin: 0; padding: 0; }}
+    body {{ font-family: 'Geist', system-ui, sans-serif; background: #f5f5f5; color: #2e1f33; padding: 3rem 2rem; }}
+    .frame {{ max-width: 1100px; margin: 0 auto; }}
+    .note {{ font-size: 0.85rem; color: #5c4a64; margin-bottom: 3rem; max-width: 60ch; }}
+    .eyebrow {{ font-family: 'Geist Mono', ui-monospace, monospace; font-size: 0.66rem; letter-spacing: 0.18em; text-transform: uppercase; color: #5c4a64; margin-bottom: 0.5rem; }}
+    h1 {{ font-family: 'Instrument Serif', serif; font-size: clamp(1.5rem, 2.4vw + 0.75rem, 2rem); font-weight: 400; letter-spacing: -0.02em; line-height: 1.15; margin-bottom: 1.5rem; }}
+    section {{ margin-bottom: 4rem; }}
+    .diagram-container {{ width: 100%; overflow-x: auto; }}
+    object {{ display: block; width: 100%; }}
+    @media print {{ .diagram-container {{ overflow-x: visible; }} object {{ min-width: 0 !important; }} }}
+  </style>
+</head>
+<body>
+  <div class="frame">
+    <p class="note">Generated by <code>{build}</code> from <code>src/specs.py</code>. Every diagram is the SVG next to this file; this page only shows them (with the web fonts).</p>
+{sections}
+  </div>
+</body>
+</html>
+'''
+
+
+def run(specs, out, index_title, argv, build_py):
+    """Draws every spec: writes <out>/<slug>.svg and <out>/index.html (a gallery), or only prints the geometry warnings with --check."""
+    check_only = '--check' in argv
+    sections = []
+    for make in specs:
+        d = make()
+        svg, w, h = render_svg(d)
+        print(f"{d['slug']}: {w}x{h}")
+        if check_only:
+            continue
+        (out / f"{d['slug']}.svg").write_text(svg + '\n', encoding='utf-8')
+        sections.append(
+            f'    <section id="{d["slug"]}">\n      <p class="eyebrow">{html.escape(d["eyebrow"])}</p>\n      <h1>{html.escape(d["h1"])}</h1>\n'
+            f'      <div class="diagram-container"><object type="image/svg+xml" data="{d["slug"]}.svg" style="min-width:{w}px;aspect-ratio:{w}/{h}" '
+            f'aria-label="{html.escape(d["title"])}"></object></div>\n    </section>')
+    if not check_only:
+        (out / 'index.html').write_text(INDEX.format(title=html.escape(index_title), build=build_py, sections='\n'.join(sections)), encoding='utf-8')

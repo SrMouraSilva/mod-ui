@@ -13,8 +13,8 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
 
-Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, delete, reorder, add / remove / move pedalboards), the **presets** of a plugin instance (list, load, create, save, delete) plus raw WebSocket access.
-Plan of the last two: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md).
+Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, delete, reorder, add / remove / move pedalboards), the **presets** of a plugin instance (list, load, create, save, delete), the **GUI files of a plugin** (`plugin.gui`: thumbnail, screenshot and modgui URLs and texts) and the user's **files** (`client.files.list`), plus raw WebSocket access.
+Plan of snapshots and banks: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md); of the plugin GUI files: [`docs/plans/2026-10-modui-client-plugin-assets.md`](plans/2026-10-modui-client-plugin-assets.md).
 
 ---
 
@@ -400,7 +400,37 @@ anything. The list is always read from `GET /effect/get_non_cached` (the one ins
 `gain.info.presets` up to date after its own writes). The backend sends no frame for a save, so the client records the new current preset itself.
 Changes by other clients are found by calling `list()` again. See 5.11.
 
-### 1.18 Listen to raw WebSocket messages
+### 1.18 Plugin GUI files and user files
+
+The client knows **where** the files of a plugin's GUI (its *modgui*) are and how to read them; drawing and driving that GUI (Mustache, knobs, the plugin's
+script) is [`modui-plugin-view`](modui-plugin-view.md), which gets everything below from the client.
+
+```js
+const plugin = (await client.device.plugins.list()).find((p) => p.label === 'Big Muff');   // or: await client.device.plugins.get(uri)
+const gui = plugin.gui;                                  // PluginGui, available at once (built from the summary)
+
+img.src  = gui.getThumbnailUrl();                        // URLs only, no request: getScreenshotUrl(), getFileUrl('stylesheet'),
+link.href = gui.getFileUrl('stylesheet');                //   getCustomFileUrl('img/logo.png'), getResourceUrl('knob.png')
+gui.version;                                             // "7_2_1_0": in every URL, and the `ns` / `cns` of the templates
+
+const css  = await gui.get('stylesheet');                // string, or null when the plugin does not have that file
+const all  = await gui.getAll();                         // { iconTemplate, settingsTemplate, stylesheet, javascript, errors }
+const { iconTemplate } = all.iconTemplate === null ? await client.device.plugins.getDefaultTemplates() : all;   // what mod-ui uses without a modgui
+
+const samples = await client.files.list(['audiosample']);   // UserFile[]: fullname, basename, dirname, basepath, filetype
+await instance.patchParams.get(sampleUri).setValue(samples[0].fullname);
+```
+
+- The URLs have the same bytes as the classic UI's, with the plugin version in `v`, so the browser keeps the files until the plugin is updated (and shares
+  them with the classic page). A plugin that does not come from the store (no `buildEnvironment`) also gets the time the client was created in its
+  version: a plugin being developed is never served from an old copy.
+- `get()` asks for the plugin description first (`GET /effect/get`, cached) and does not request a file the plugin does not declare. Texts are cached per URL;
+  a failed read is not. `getAll()` reads the four files in parallel and **does not throw** for one of them: it is `null` and listed in `errors`.
+  `client.device.plugins.clearGuiCache()` forgets the texts.
+- `client.files.list()` is never cached (the user can add files at any time) and makes no request for an empty list of types. A path parameter's types are
+  `patchParam.fileTypes`. Upload is not covered yet.
+
+### 1.19 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -413,7 +443,7 @@ await client.connect();
 off();
 ```
 
-### 1.19 Notes
+### 1.20 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -469,6 +499,8 @@ modui-client/
 │   ├── device.ts        # Device
 │   ├── current-pedalboard.ts  # CurrentPedalboard (client.device.currentPedalboard)
 │   ├── plugins.ts       # PluginsApi (client.device.plugins), Plugin
+│   ├── plugin-gui.ts    # PluginGui (plugin.gui): modgui, image and resource URLs and texts; GuiAssets (internal cache)
+│   ├── files.ts         # FilesApi (client.files): the user's files
 │   ├── pedalboard-plugins.ts      # PedalboardPlugins (currentPedalboard.plugins)
 │   ├── pedalboard-connections.ts  # PedalboardConnections, PedalboardPorts, PedalboardPortGroup (currentPedalboard.connections / .ports)
 │   ├── pedalboard-graph.ts        # PluginInstance, Port, PedalboardConnection + the internal engine
@@ -495,6 +527,8 @@ modui-client/
     ├── device.test.ts
     ├── current-pedalboard.test.ts
     ├── plugins.test.ts
+    ├── plugin-gui.test.ts
+    ├── files.test.ts
     ├── pedalboard-graph.test.ts
     ├── patch-params.test.ts
     ├── pedalboard-snapshots.test.ts
@@ -583,14 +617,14 @@ from an output to an input of the same type. `get()` reads `GET /pedalboard/curr
 
 A `Plugin` is what is *installed*; a `PluginInstance` is one block of the running pedalboard, found by its path (`/graph/Gain`). Control ports are `Param`s, not `Port`s
 (a `Port` is audio, MIDI or CV, the only kinds you can connect). The description (`PluginInfo`) is read once per URI and cached; an instance whose description is
-still unknown has `info === null`. When the plugin is removed, the pedalboard is reset or another one is loaded, the object stops standing for a plugin (`alive === false`).
+still unknown has `info === null`. `plugin.gui` (`PluginGui`) gives the URLs and the text of the plugin's thumbnail and modgui files (1.18). When the plugin is removed, the pedalboard is reset or another one is loaded, the object stops standing for a plugin (`alive === false`).
 
 ### 4.7 Patch parameters
 
 ![Patch parameters: a plugin instance exposes PluginPatchParams; each PatchParam has a type and a live value and is built from the parameter description in PluginInfo](modui-client/diagrams/domain-patch-params.svg)
 
 Typed values that are not control ports: strings, file paths, URIs, booleans, integers (1.8). `setValue()` is validated by type and is fire-and-forget (`patch_set`);
-`refresh()` asks the plugin (`patch_get`) and waits for its answer (1.19).
+`refresh()` asks the plugin (`patch_get`) and waits for its answer (1.20).
 
 ### 4.8 Plugin presets
 
@@ -612,6 +646,19 @@ only in `list()` (1.15, 5.9).
 
 A `Bank` is a **value**: it does not follow changes made by others. The backend stores one list of banks and `POST /banks/save` replaces it, so each edit reads the list,
 changes the copy and writes it all back (1.16, 5.10).
+
+### 4.11 Plugin GUI files
+
+![Plugin GUI files: a Plugin has a PluginGui that builds URLs from its summary and reads texts through the GuiAssets cache owned by PluginsApi; the files a plugin has are named by PluginInfo.gui](modui-client/diagrams/domain-plugin-gui.svg)
+
+`plugin.gui` is built from the summary of `GET /effect/list` (it carries the version fields), so the URLs need no request. The texts are read through `GuiAssets`, the cache
+that `PluginsApi` owns and every `PluginGui` shares; `get()` consults the (cached) `PluginInfo.gui` first, because the summary does not say which files exist (1.18).
+
+### 4.12 User files
+
+![User files: FilesApi lists UserFile values by type; the types a path parameter accepts are the fileTypes of its PatchParam](modui-client/diagrams/domain-files.svg)
+
+Samples, impulse responses and models the user put on the device. `client.files.list(types)` is never cached; the types of a path parameter are its `fileTypes` (1.18).
 
 ---
 
@@ -1045,7 +1092,10 @@ sequenceDiagram
   `client.events`, `client.banks`). New areas follow the same shape.
 - **All HTTP goes through `HttpTransport`**: `fetch` with `cache: 'no-store'`, JSON decoding, non-2xx →
   `ModUiHttpError`. Use `getJson` for `GET` and `postForm` for form posts; add a method there if a new body
-  type is needed (e.g. JSON or binary).
+  type is needed (e.g. JSON or binary). `getText` is the exception to `no-store`: it is for files whose URL carries a
+  version (modgui files, shared resources), so the browser may keep them.
+- **The client owns every URL and file of the backend**, packages that build on it (`modui-plugin-view`) do not build
+  URLs or call `fetch` for the backend themselves.
 - **Never use globals directly**: `fetch` and `WebSocket` are injected through `ModUiClientOptions`, which is
   what makes the tests possible.
 - **Await the backend's confirmation** when it arrives over the WebSocket: register `events.waitFor()` *before*
@@ -1128,4 +1178,7 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - Banks: only user banks exist for the web (factory banks are the HMI's). `client.banks.list()` is not read-only on the device: pedalboards that are missing or broken are dropped from the banks for good. Every edit rewrites the whole list, so two writers at the same moment are last-write-wins; a bank is found by its title (unique ignoring case). Properties of a bank pedalboard entry other than `bundle` and `title` are not preserved (the read replaces them with the library summary). Whether an HMI that is already running sees a bank saved from the web was not verified on a device.
 - Presets: the backend sends no `preset` frame for a save, only for a load and a delete; `save()` and `delete()` work only on the instance's current user preset and fail silently otherwise (the client checks first); `save()` overwrites the preset with the live values (there is no rename-only call) and a failed one can delete the preset's bundle (the list is read again, so `alive` tells the truth). `load()` answers `false` on the 10 s hardware timeout although the preset was applied. Names with a control character or a backslash are refused because only `"` is escaped on the way to mod-host. Changes other clients make to the list are found only by calling `list()` again. Whether a preset holds patch-parameter values (and so whether `patch_set` frames follow a load) was not verified on a device.
 - `reference.copy()` cannot choose the title of the copy and refuses titles with quotes, `/`, `&`, `\`, `*`, `[` or control characters, because of how the backend renames the copy.
+- The GUI file URLs use the same `v` as the classic UI; for a plugin without `buildEnvironment` it ends in the time the client was created, so a page that stays open
+  while such a plugin is rebuilt keeps the old files until the client is created again (or the plugin version changes). `plugins.clearGuiCache()` forgets the texts, not the browser's copies.
+- `plugin.gui.get()` / `getAll()` need the plugin to be installed (they read its description first) and ask for the file names there: the summary of `GET /effect/list` does not say which files a plugin has.
 - A thumbnail URL is a snapshot: after another client regenerates the images, call `status()` (or `generate()`) on a reference to learn the new creation time, otherwise the URL may still hit the browser's one-year cache.

@@ -7,10 +7,10 @@
  * @module
  */
 
-import type { Plugin, PluginInfo, PluginInstance, PluginPresetInfo } from 'modui-client';
-import { AssetLoader, loadImageSize } from './assets';
+import type { Plugin, PluginGui, PluginInfo, PluginInstance, PluginPresetInfo } from 'modui-client';
 import { LiveBackend, PreviewBackend, type ViewBackend } from './binding';
 import { Emitter, type Off } from './emitter';
+import { loadImageSize } from './image';
 import { renderMustache, type MustacheRender } from './mustache';
 import { compileScript, type ScriptCallback } from './script';
 import { StyleManager } from './styles';
@@ -27,7 +27,7 @@ import {
   type ViewErrorContext,
   type ViewTarget,
 } from './types';
-import { imageUrl, namespace, rebaseUrls, renderedVersion, resourceUrl } from './urls';
+import { namespace, rebaseUrls } from './urls';
 import { PluginView } from './view';
 
 const ATOM_PATH = 'http://lv2plug.in/ns/ext/atom#Path';
@@ -42,7 +42,8 @@ function isCatalogPlugin(target: ViewTarget): target is Plugin {
 
 /**
  * Creates the GUIs of plugins: `views.create(instance)` for a plugin of the running pedalboard, `views.create(plugin)` for a preview of an
- * installed plugin. Make one per client; it caches the modgui files per plugin version and adds the stylesheets to the page once.
+ * installed plugin. Make one per client; it adds the stylesheets to the page once. The plugin's files (templates, stylesheet, script, images)
+ * come from `plugin.gui` of `modui-client`, which caches them per plugin version.
  *
  * Needs the page to reach mod-ui with `fetch`: same origin, or a proxy (the backend sends no CORS headers for these files).
  *
@@ -59,7 +60,7 @@ function isCatalogPlugin(target: ViewTarget): target is Plugin {
  * }
  */
 export class PluginViews {
-  private readonly assets: AssetLoader;
+  private readonly cssTexts = new Map<string, Promise<string>>();
   private readonly styles: StyleManager | null;
   private readonly styleOptions: StyleOptions;
   private readonly document: Document;
@@ -72,26 +73,19 @@ export class PluginViews {
   private readonly outputListeners = new Map<string, Set<(symbol: string, value: number) => void>>();
   private readonly warnedNoJQuery = new Set<string>();
   private readonly offs: (() => void)[] = [];
-  /** Stamps the URLs of plugins that are not from the store, once per session (see `renderedVersion`). */
-  private readonly stamp = Date.now();
 
   /**
-   * @param client The `ModUiClient` of the device. The views use `client.baseUrl`, `client.device` (plugins, the running pedalboard) and
-   *   `client.events` (`output_set`).
+   * @param client The `ModUiClient` of the device. The views use `client.baseUrl`, `client.device` (plugins and their `gui`, the running
+   *   pedalboard), `client.files` and `client.events` (`output_set`).
    */
   constructor(private readonly client: ViewClient, private readonly options: PluginViewsOptions = {}) {
-    const fetchImpl: FetchLike | undefined = options.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
-    if (!fetchImpl) {
-      throw new PluginViewError('No fetch implementation available; pass options.fetch');
-    }
     const doc = options.document ?? (typeof document !== 'undefined' ? document : undefined);
     if (!doc) {
       throw new PluginViewError('No document available; pass options.document');
     }
     this.document = doc;
-    this.assets = new AssetLoader(client.baseUrl, fetchImpl);
     this.styleOptions = typeof options.styles === 'object' ? options.styles : {};
-    this.styles = options.styles === false ? null : new StyleManager(doc, client.baseUrl, this.assets);
+    this.styles = options.styles === false ? null : new StyleManager(doc, client.baseUrl, (url) => this.cssText(url));
     this.mustache = options.mustache ?? renderMustache;
     const globalJQuery = (doc.defaultView as unknown as { jQuery?: JQueryLike } | null)?.jQuery;
     this.jQuery = options.jQuery === undefined ? globalJQuery ?? null : options.jQuery;
@@ -127,11 +121,9 @@ export class PluginViews {
    *   pedalboard. It destroys itself when the plugin leaves the pedalboard.
    * - From a `Plugin` (`device.plugins.list()`), a `PluginInfo` or a plugin URI: a **preview** with local values; nothing is sent.
    *
-   * Requests (all cached per plugin version, except the volatile ones):
-   * `GET /effect/get` (operationId `getPlugin`; the client's cached description), `GET /effect/file/{iconTemplate|settingsTemplate|stylesheet|javascript}`
-   * (`getPluginGuiFile`; only the files the plugin has), `GET /resources/templates/pedal-default.html` and `GET /resources/settings.html`
-   * (`getResource`; for a plugin without modgui), and for a live view `GET /effect/get_non_cached` (`getPluginNonCached`, the presets) and
-   * `GET /files/list` (`listUserFiles`, for each path parameter).
+   * Requests, all made by the client (cached per plugin version, except the volatile ones): `plugin.gui.getAll()` (`getPlugin`,
+   * `getPluginGuiFile`; only the files the plugin has), `plugins.getDefaultTemplates()` (`getResource`; for a plugin without modgui), and for
+   * a live view `instance.presets.list()` (`getPluginNonCached`) and `client.files.list()` (`listUserFiles`, for each path parameter).
    *
    * Problems that do not prevent the view (a modgui file that cannot be read, a script that does not compile, no jQuery for a script) are
    * reported to `views.on('error')` and the view is built without them.
@@ -143,42 +135,33 @@ export class PluginViews {
    */
   async create(target: ViewTarget, options: CreateViewOptions = {}): Promise<PluginView> {
     const live = isInstance(target);
+    let plugin: Plugin;
     let info: PluginInfo;
+    const plugins = this.client.device.plugins;
     if (live) {
       if (!target.alive) {
         throw new PluginViewError(`There is no plugin "${target.instance}" in the running pedalboard`);
       }
-      const known = target.info ?? (await this.client.device.plugins.info(target.uri).catch(() => null));
+      const known = target.info ?? (await plugins.get(target.uri).then((found) => found.info()).catch(() => null));
       if (!known) {
         throw new PluginViewError(`The description of ${target.uri} is unknown (is the plugin installed?)`);
       }
       info = known;
+      plugin = await plugins.get(info);
     } else if (isCatalogPlugin(target)) {
+      plugin = target;
       info = await target.info();
     } else if (typeof target === 'string') {
-      info = await this.client.device.plugins.info(target);
+      plugin = await plugins.get(target);
+      info = await plugin.info();
     } else {
       info = target;
+      plugin = await plugins.get(info);
     }
 
     return live
-      ? this.createLive(target, info, options)
-      : this.build(info, new PreviewBackend(options.values, options.bypassed), !!options.bypassed, null, options);
-  }
-
-  /** URL of the plugin's thumbnail (the backend answers a default image when it has none). `GET /effect/image/thumbnail.png` (`getPluginImage`). */
-  thumbnailUrl(target: string | { uri: string }): string {
-    return imageUrl(this.client.baseUrl, 'thumbnail', typeof target === 'string' ? target : target.uri);
-  }
-
-  /** URL of the plugin's screenshot (the whole pedal; a default image when none). `GET /effect/image/screenshot.png` (`getPluginImage`). */
-  screenshotUrl(target: string | { uri: string }): string {
-    return imageUrl(this.client.baseUrl, 'screenshot', typeof target === 'string' ? target : target.uri);
-  }
-
-  /** URL of a resource of a plugin (falls back to mod-ui's shared resources). `GET /resources/{path}` (`getResource`). */
-  resourceUrl(info: PluginInfo, path: string): string {
-    return resourceUrl(this.client.baseUrl, path, info.uri, this.version(info));
+      ? this.createLive(target, info, plugin.gui, options)
+      : this.build(info, plugin.gui, new PreviewBackend(options.values, options.bypassed), !!options.bypassed, null, options);
   }
 
   /** The views that exist (created and not destroyed). */
@@ -191,10 +174,11 @@ export class PluginViews {
     return this.emitter.on(event, handler);
   }
 
-  /** Forgets the cached modgui files and scripts (after installing a new version of a plugin, for instance). */
+  /** Forgets the cached modgui files (`plugins.clearGuiCache()` of the client) and scripts, e.g. after installing a new version of a plugin. */
   clearCache(): void {
-    this.assets.clear();
+    this.client.device.plugins.clearGuiCache();
     this.scripts.clear();
+    this.cssTexts.clear();
   }
 
   /** Destroys every view, removes the stylesheets the library added and stops listening to the client. */
@@ -208,11 +192,24 @@ export class PluginViews {
 
   // ---- internals ---------------------------------------------------------------------------------------------------------------
 
-  private version(info: PluginInfo): string {
-    return renderedVersion(info, this.stamp);
+  /** A file of the classic page (`css/main.css`) as text, cached. */
+  private cssText(url: string): Promise<string> {
+    let pending = this.cssTexts.get(url);
+    if (!pending) {
+      const fetchImpl: FetchLike | undefined = this.options.fetch ?? (typeof fetch !== 'undefined' ? fetch.bind(globalThis) : undefined);
+      pending = (fetchImpl ? fetchImpl(url) : Promise.reject(new PluginViewError('No fetch implementation available; pass options.fetch'))).then((response) => {
+        if (!response.ok) {
+          throw new PluginViewError(`GET ${url} answered ${response.status}`);
+        }
+        return response.text();
+      });
+      pending.catch(() => this.cssTexts.delete(url));
+      this.cssTexts.set(url, pending);
+    }
+    return pending;
   }
 
-  private async createLive(instance: PluginInstance, info: PluginInfo, options: CreateViewOptions): Promise<PluginView> {
+  private async createLive(instance: PluginInstance, info: PluginInfo, gui: PluginGui, options: CreateViewOptions): Promise<PluginView> {
     // The view's writes carry this object as `source`, so the view does not hear back about them.
     const backend = new LiveBackend(instance, {});
     const pathParams = (info.parameters ?? []).filter((parameter) => parameter.type === ATOM_PATH && (parameter.fileTypes ?? []).length > 0);
@@ -225,7 +222,7 @@ export class PluginViews {
       Promise.all(
         pathParams.map(async (parameter): Promise<[string, FileList | null]> => {
           try {
-            return [parameter.uri, await this.assets.files(parameter.fileTypes!)];
+            return [parameter.uri, { ok: true, files: await this.client.files.list(parameter.fileTypes!) }];
           } catch (error) {
             this.report(error, 'files', info.uri);
             return [parameter.uri, null];
@@ -236,26 +233,27 @@ export class PluginViews {
     if (!instance.alive) {
       throw new PluginViewError(`There is no plugin "${instance.instance}" in the running pedalboard`);
     }
-    return this.build(info, backend, !active, { presets, files: new Map(files) }, options);
+    return this.build(info, gui, backend, !active, { presets, files: new Map(files) }, options);
   }
 
   private async build(
     info: PluginInfo,
+    gui: PluginGui,
     backend: ViewBackend,
     bypassed: boolean,
     live: { presets: PluginPresetInfo[]; files: Map<string, FileList | null> } | null,
     options: CreateViewOptions,
   ): Promise<PluginView> {
-    const version = this.version(info);
+    const version = gui.version;
     const key = `${info.uri}|${version}`;
     const globals = this.styles?.ensureGlobals(this.styleOptions);
-    const files = await this.assets.guiFiles(info, version);
+    const files = await gui.getAll();
     for (const { error } of files.errors) {
       this.report(error, 'files', info.uri);
     }
-    const defaults = await this.assets.defaultTemplates().catch((error) => {
+    const defaults = await this.client.device.plugins.getDefaultTemplates().catch((error) => {
       this.report(error, 'files', info.uri);
-      return { icon: 'Template missing', settings: 'Template missing' };
+      return { iconTemplate: 'Template missing', settingsTemplate: 'Template missing' };
     });
 
     if (files.stylesheet !== null && this.styles) {
@@ -274,11 +272,11 @@ export class PluginViews {
       document: this.document,
       baseUrl: this.client.baseUrl,
       info,
-      version,
+      gui,
       prepared,
-      iconTemplate: files.iconTemplate ?? defaults.icon,
-      settingsTemplate: files.settingsTemplate ?? defaults.settings,
-      defaultIconTemplate: defaults.icon,
+      iconTemplate: files.iconTemplate ?? defaults.iconTemplate,
+      settingsTemplate: files.settingsTemplate ?? defaults.settingsTemplate,
+      defaultIconTemplate: defaults.iconTemplate,
       mustache: this.mustache,
       backend,
       bypassed,

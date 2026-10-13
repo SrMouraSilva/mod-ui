@@ -154,11 +154,11 @@ classDiagram
 <rect x="139.2" y="568" width="14" height="10" rx="2" fill="#ffffff" stroke="#2e1f33" stroke-width="1"/>
 <text x="159.2" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Wire type (backend JSON)</text>
 <rect x="293.59999999999997" y="568" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
-<text x="313.59999999999997" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data / enum</text>
-<rect x="415.79999999999995" y="568" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
-<text x="435.79999999999995" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
-<rect x="579.4" y="568" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
-<text x="599.4" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
+<text x="313.59999999999997" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data, enum or interface</text>
+<rect x="470.99999999999994" y="568" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
+<text x="490.99999999999994" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
+<rect x="634.5999999999999" y="568" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+<text x="654.5999999999999" y="576" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
 <line x1="40" y1="593" x2="68" y2="593" stroke="#5c4a64" stroke-width="1.2"/>
 <text x="74" y="596" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Owns / contains (cardinality at each end)</text>
 <line x1="286.6" y1="593" x2="314.6" y2="593" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#domain-patch-params-arrow)"/>

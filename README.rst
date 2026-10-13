@@ -130,7 +130,7 @@ In the page it is available as ``window.ModUiClient``; from another origin or fr
     client.device.currentPedalboard.on('plugin:added', ({ plugin }) => view.add(plugin));
     instance.params.get('gain').on('change', ({ value }) => knob.set(value));
 
-For more details (connections, snapshots, banks, presets, patch parameters, UI frameworks, architecture and diagrams),
+For more details (connections, snapshots, banks, presets, patch parameters, plugin GUI files, UI frameworks, architecture and diagrams),
 see ``docs/modui-client.md``.
 
 Plugin GUIs outside mod-ui (modui-plugin-view)

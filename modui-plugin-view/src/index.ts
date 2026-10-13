@@ -11,9 +11,9 @@
  * | `binding.ts` | internal: where a view reads and writes (a `PluginInstance`, or local memory) |
  * | `widgets.ts` | the `mod-widget` widgets (filmstrip knobs, switches, footswitch, selects, file lists) |
  * | `template-data.ts` | {@link buildTemplateData}: the data the templates are rendered with |
- * | `assets.ts`, `styles.ts` | internal: modgui files and stylesheets |
+ * | `styles.ts`, `image.ts` | internal: stylesheets in the document, image size |
  * | `script.ts` | internal: the plugins' own JavaScript (`api_version` 3) |
- * | `urls.ts` | URL helpers, `ns` / `cns`, URL rebasing |
+ * | `urls.ts` | `ns` / `cns` of the templates, URL rebasing (the plugin's files and their URLs are `plugin.gui` of `modui-client`) |
  * | `mustache.ts`, `sprintf.ts` | the small template and number-format engines |
  *
  * The build (`npm run build`) is an IIFE that sets `window.ModUiPluginView`; bundlers import `src/index.ts`.
@@ -24,7 +24,7 @@ import { renderMustache } from './mustache';
 import { sprintf } from './sprintf';
 import { buildTemplateData } from './template-data';
 import { PluginViewError } from './types';
-import { customFileUrl, guiFileUrl, imageUrl, namespace, rebaseUrls, renderedVersion, resourceUrl } from './urls';
+import { namespace, rebaseUrls } from './urls';
 import { PluginView } from './view';
 import { PluginViews } from './views';
 
@@ -57,8 +57,7 @@ export type { ControlSpec, FileEntry, FileList, PreparedPlugin, ScalePoint, Temp
 export { renderMustache } from './mustache';
 export type { MustacheRender } from './mustache';
 export { sprintf } from './sprintf';
-export { customFileUrl, guiFileUrl, imageUrl, namespace, rebaseUrls, renderedVersion, resourceUrl } from './urls';
-export type { GuiFile } from './urls';
+export { namespace, rebaseUrls } from './urls';
 export { StepModel } from './widgets';
 export type { Off } from './emitter';
 
@@ -71,6 +70,6 @@ if (typeof window !== 'undefined') {
     buildTemplateData,
     renderMustache,
     sprintf,
-    urls: { customFileUrl, guiFileUrl, imageUrl, namespace, rebaseUrls, renderedVersion, resourceUrl },
+    urls: { namespace, rebaseUrls },
   };
 }

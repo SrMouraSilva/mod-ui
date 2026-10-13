@@ -27,10 +27,14 @@ mod-ui is the web interface of MOD audio devices.
   `currentIndex`, `on('current' | 'list')`) and the user banks (`client.banks`: list/get/create/move/replaceAll, `Bank.rename/delete/add/
   remove/move/setPedalboards`) (`docs/plans/2026-10-modui-client-snapshots-banks.md`), and the presets of a plugin instance (`instance.presets`:
   list/get/load/create/save/delete, `Preset.load/save/delete`, `current`, `on('list')`) (`docs/plans/2026-10-modui-client-presets.md`).
+  Also the files of a plugin's GUI (`plugin.gui`: `getThumbnailUrl/getScreenshotUrl/getFileUrl/getCustomFileUrl/getResourceUrl`, `get/getAll`,
+  `version`; `client.device.plugins.get/getDefaultTemplates/clearGuiCache`) and the user's files (`client.files.list`)
+  (`docs/plans/2026-10-modui-client-plugin-assets.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plugin GUIs**: `modui-plugin-view/` (sources in `src/`, tests in `test/`), renders and drives a plugin's modgui (icon, settings,
-  widgets, plugin JavaScript) in any page on top of `modui-client` (type-only dependency; the app passes its client). Entry point
+  widgets, plugin JavaScript) in any page on top of `modui-client` (type-only dependency; the app passes its client). It reads the plugin's files and
+  user files only through the client (`plugin.gui`, `client.files`) and builds no backend URL itself. Entry point
   `new PluginViews(client).create(instance | plugin | uri)`. Guide: `docs/modui-plugin-view.md`; plan: `docs/plans/2026-10-modui-plugin-view.md`.
   It ports `html/js/modgui.js`: when that file changes (template data, widgets, the script API), check the port.
 - **Plans**: `docs/plans/` (see "Plans" below).
@@ -76,10 +80,10 @@ or a WebSocket message (`msg_callback`/`write_message` in `mod/host.py`, `mod/se
    `implementation-progress.html`; never edit those by hand).
 5. Update `docs/modui-client.md` (including its Mermaid flow diagrams) and the README section
    "TypeScript client (modui-client)" when the API or its usage changes.
-6. Keep the architecture and data-model diagrams of the guide in step (`docs/modui-client/diagrams/`). They are **generated SVG files, never edited by hand**:
-   change the diagram in `docs/modui-client/diagrams/src/specs.py` (a new class, field, operation or relation; a new domain gets its own function and a
-   section in the guide), run `python3 docs/modui-client/diagrams/src/build.py`, fix the warnings it prints and commit the `.svg` files with `specs.py`.
-   Each SVG has a Mermaid summary of its content in `<metadata>`; read `diagrams/README.md` first.
+6. Keep the architecture and data-model diagrams of both guides in step: `docs/modui-client/diagrams/` and `docs/modui-plugin-view/diagrams/`. They are
+   **generated SVG files, never edited by hand**: change the diagram in the `src/specs.py` next to them (a new class, field, operation or relation; a new domain gets
+   its own function and a section in the guide), run `python3 docs/modui-client/diagrams/src/build.py` (or the one of `docs/modui-plugin-view/`), fix the warnings
+   it prints and commit the `.svg` files with `specs.py`. Each SVG has a Mermaid summary of its content in `<metadata>`; read `docs/modui-client/diagrams/README.md` first.
 
 ### Do not change the backend without asking
 The goal is to leave the Python backend as it is. When building `modui-client`, work around backend limits in the client
@@ -112,7 +116,7 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `plugin-gui.ts`, `files.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
   `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
@@ -122,7 +126,8 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
   (The repository ignores `package-lock.json`.)
 - Classes per feature area, reachable from `ModUiClient`: `client.pedalboards` (library), `client.device`
   (what is running), `client.events` (raw WebSocket). Future areas follow the same shape.
-- All HTTP goes through `HttpTransport` (`fetch`, `cache: 'no-store'`, non-2xx → `ModUiHttpError`).
+- All HTTP goes through `HttpTransport` (`fetch`, `cache: 'no-store'`, non-2xx → `ModUiHttpError`; `getText` is for versioned files and leaves the cache
+  to the browser). The client owns every backend URL and file: packages built on it (`modui-plugin-view`) never build one.
   Inject `fetch`/`WebSocket` through `ModUiClientOptions`, never use them directly, so tests can fake them.
 - Operations that the backend confirms over the WebSocket must be awaited until the confirmation arrives.
   Register `events.waitFor(...)` **before** sending the HTTP request: mod-ui often pushes the WebSocket
@@ -150,6 +155,10 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 - Snapshots and banks: `PedalboardSnapshots` keeps the names only from `list()` and from its own writes (applying the backend's rules for
   the current index) plus the `pedal_snapshot` report; no event makes a request. `Snapshot` objects are told apart by name. Bank edits
   are read-modify-write of the whole list inside a queue private to `BanksApi`; a `Bank` is a value that updates itself after its own write.
+- Plugin GUI files: `PluginGui` (`plugin.gui`) is built synchronously from the summary; `PluginsApi` owns the `GuiAssets` (text cache per URL, the stamp that
+  goes in the version of a plugin without `buildEnvironment`), shared by every `PluginGui`. URLs are built with `escape()` like `modgui.js` so the classic page and
+  the client share the browser cache. `get()` reads `GET /effect/get` (cached) to know which files exist; `getAll()` never throws for one file (`errors`).
+  `plugins.get(uri | summary | info)` is the way to a `Plugin` without `list()`; a full description given to it is remembered. `client.files.list()` is never cached.
 - Presets: one `PresetCatalog` per plugin URI (owned by `PluginsApi`, shared by the instances) is the source of `presets.list()`, always read from
   `GET /effect/get_non_cached`. A user preset is told apart by its bundle path, a factory one by its URI. The backend sends no `preset` frame for a
   save, so `create` / `save` record the new current preset with `GraphState.applyLocal()`; `load` and `delete` hold a `store.expect()` for the frames.
