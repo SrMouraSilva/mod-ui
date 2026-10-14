@@ -97,7 +97,8 @@ TypeScript client (modui-client)
 It hides the HTTP endpoints and WebSocket messages behind a few classes, so you can build new interfaces
 for the device, beyond the classic mod-ui, in the browser or in Node.js. It is optional: the classic UI does not need it.
 
-Build it with Node.js 22.12 or newer:
+Build it with Node.js 22.12 or newer and npm 11.6 or newer (the npm of Node.js 22, 10.9, crashes on ``npm install`` of vitest 5; run
+``npm install -g npm@11``, or use Node.js 24):
 
 .. code-block:: bash
 

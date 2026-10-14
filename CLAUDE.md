@@ -46,7 +46,8 @@ mod-ui is the web interface of MOD audio devices.
 pip3 install -r requirements.txt && make -C utils
 MOD_DEV_HOST=1 MOD_DEV_ENVIRONMENT=0 python3 ./server.py      # http://localhost:8888/
 
-# TypeScript client (Node.js >= 22.12)
+# TypeScript client (Node.js >= 22.12 and npm >= 11.6: the npm of Node.js 22, 10.9, crashes on `npm install` of vitest 5 with
+# "Cannot read properties of null (reading 'edgesOut')", and so does npm 11.0; Node.js 24 bundles a good one, on 22 run `npm install -g npm@11`)
 cd modui-client
 npm install
 npm test          # tsc --noEmit + vitest
@@ -185,12 +186,12 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 
 ### Publishing (`modui-client`, `modui-plugin-view`)
 Both are npm packages (plan: `docs/plans/2026-10-modui-publishing.md`), distributed as **GitHub pre-releases**, not on the npm registry:
-`.github/workflows/modui-packages.yml` runs `tools/pack-modui-packages.sh` (install, test, `build:lib`, `npm pack` of the client then the view) on every push
+`.github/workflows/modui-packages.yml` (Node 22 plus `npm install -g npm@11`) runs `tools/pack-modui-packages.sh` (install, test, `build:lib`, `npm pack` of the client then the view; it writes the tag to `<outdir>/tag.txt`) on every push
 that touches the packages (and by hand), and creates the release with `gh release create`. The tag is made by the pipeline: `YYYYMMDD-HHMMSS-<commit>` (UTC),
 and the version inside the tarballs is `<package.json version>-<YYYYMMDDHHMMSS>.g<commit>` (the `g` keeps an all-digit hash from being an invalid semver
 identifier). Both packages go in one release, marked pre-release; there is no "latest" download link on purpose (lockfile integrity). Do not add a
 step that commits, pushes branches or publishes to the registry without asking. `npm publish` stays a manual decision of the maintainers
-(`prepublishOnly` runs the tests and `build:lib`).
+(`prepublishOnly` runs the tests and `build:lib`). In the workflow never pipe the script into another command (`| tail`): the GitHub shell runs without `pipefail` and a pipe hides its failure.
 - What is published is `dist/` only (`files`): `index.js` (ES module, one file, no dependencies), `index.d.ts` (+ one per module, relative
   imports with `.js`, added by `tools/add-dts-extensions.mjs`) and `<name>.global.js` (the IIFE for a `<script>`). `exports` points at `dist/`;
   tests and tooling use the sources (`tsconfig` `paths`, vitest alias), so tests never need a build.

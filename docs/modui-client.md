@@ -1172,7 +1172,7 @@ For a page without a bundler, `modui-client/global` is the same IIFE as the clas
 what a tarball contains (only `dist/`, `package.json`, the README and the license). `tools/pack-modui-packages.sh <outdir>` does what the workflow does:
 test, build and pack both packages with the stamped version. Plan: `docs/plans/2026-10-modui-publishing.md`.
 
-Requires Node.js 22.12 or newer to develop. The generated `html/js/lib/modui-client.js` is git-ignored; release builds
+Requires Node.js 22.12 or newer to develop, with npm 11.6 or newer: the npm of Node.js 22 (10.9) crashes on `npm install` of vitest 5 (`Cannot read properties of null (reading 'edgesOut')`; npm 11.0 too). Node.js 24 bundles a good one; on 22 run `npm install -g npm@11`. The generated `html/js/lib/modui-client.js` is git-ignored; release builds
 must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pick it up from `html/js/lib/*.js`).
 
 ---
