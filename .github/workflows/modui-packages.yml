@@ -45,8 +45,8 @@ jobs:
     permissions:
       contents: write # creates the release and its tag
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
         with:
           node-version: '22'
 
@@ -65,8 +65,12 @@ jobs:
         if: github.event_name != 'pull_request'
         env:
           GH_TOKEN: ${{ github.token }}
+          # Say which repository: without it gh guesses from the git remotes (and, in a fork, may pick the parent repository).
+          GH_REPO: ${{ github.repository }}
           TAG: ${{ steps.pack.outputs.tag }}
         run: |
+          set -x
+          gh --version
           base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
           client="$(basename "$(ls "$RUNNER_TEMP"/modui-packages/modui-client-*.tgz)")"
           view="$(basename "$(ls "$RUNNER_TEMP"/modui-packages/modui-plugin-view-*.tgz)")"

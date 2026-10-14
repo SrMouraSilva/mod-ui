@@ -44,7 +44,7 @@ FORBIDDEN = {
 }
 
 # Directories and files that never reach the device.
-EXCLUDE_PREFIXES = ('test/', '.github/', 'mod/old/')
+EXCLUDE_PREFIXES = ('test/', '.github/', 'mod/old/', 'docs/')
 EXCLUDE_FILES    = {
     'tools/check_py34.py',
     # Python 2 leftovers, broken since the 2015 migration and not shipped as
