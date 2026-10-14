@@ -108,6 +108,9 @@ Build it with Node.js 22.12 or newer:
 
 Release builds must run ``npm install && npm run build`` in that folder before installing ``html/``.
 
+It is also an npm package (``modui-client``, an ES module with its type declarations): see "Installing the TypeScript libraries from GitHub"
+below to use it from another project.
+
 In the page it is available as ``window.ModUiClient``; from another origin or from Node, pass
 ``new ModUiClient({ baseUrl: 'http://modduo.local' })``.
 
@@ -147,6 +150,9 @@ JavaScript runs (with jQuery). With the two libraries a new frontend, a React SP
     $ npm test
     $ npm run build      # writes html/js/lib/modui-plugin-view.js (generated, not versioned)
 
+It is an npm package too (``modui-plugin-view``; install it with ``modui-client``, see below). It has no runtime dependency: the Mustache and
+sprintf it needs are the ``html/js/lib/mustache.js`` and ``sprintf-0.6.js`` of this repository, inlined by the build.
+
 .. code-block:: javascript
 
     const views = new PluginViews(client, { jQuery: window.jQuery });
@@ -156,3 +162,34 @@ JavaScript runs (with jQuery). With the two libraries a new frontend, a React SP
 
 The page must be served from mod-ui's origin or through a proxy (no CORS). Guide: ``docs/modui-plugin-view.md``;
 example page: ``modui-plugin-view/examples/``; plan: ``docs/plans/2026-10-modui-plugin-view.md``.
+
+Installing the TypeScript libraries from GitHub
+-----------------------------------------------
+
+The two libraries are not on the npm registry. Every push to ``master`` that changes them (``modui-client/``, ``modui-plugin-view/``, or the
+``mustache.js`` / ``sprintf-0.6.js`` the view bundles) runs the tests and publishes a **pre-release** with both packages as tarballs
+(``.github/workflows/modui-packages.yml``), so they install without cloning the repository. The release is named after the UTC date, time
+and commit of the build, ``YYYYMMDD-HHMMSS-<commit>``, and so is the version inside the tarballs (``0.1.0-YYYYMMDDHHMMSS.g<commit>``).
+
+Open `the releases <https://github.com/mod-audio/mod-ui/releases>`_, pick one (the newest is the first) and install both packages with the
+two links under *Assets*; the release text has the command ready (``modui-plugin-view`` imports only the types of ``modui-client``, so
+install them together):
+
+.. code-block:: bash
+
+    $ npm install \
+        https://github.com/mod-audio/mod-ui/releases/download/20261013-225031-abc1234/modui-client-0.1.0-20261013225031.gabc1234.tgz \
+        https://github.com/mod-audio/mod-ui/releases/download/20261013-225031-abc1234/modui-plugin-view-0.1.0-20261013225031.gabc1234.tgz
+
+.. code-block:: javascript
+
+    import { ModUiClient } from 'modui-client';
+    import { PluginViews } from 'modui-plugin-view';
+
+The links name one build, so ``package.json`` and the lockfile pin it. There is deliberately no "latest" link: a lockfile stores the integrity
+of the file, and a link whose content changes would make ``npm install`` fail. To update, install the links of a newer release. Both are
+ES modules with their type declarations; without a bundler, ``dist/modui-client.global.js`` and ``dist/modui-plugin-view.global.js`` inside
+the tarballs are script builds that set ``window.ModUiClient`` and ``window.ModUiPluginView``.
+
+To make a release of another branch, run the *modui-packages* workflow by hand (*Actions* tab, *Run workflow*). Details and the reasons for
+this layout: ``docs/plans/2026-10-modui-publishing.md``.

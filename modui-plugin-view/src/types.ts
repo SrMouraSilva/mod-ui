@@ -7,7 +7,7 @@
  */
 
 import type { ModUiClient, Plugin, PluginInfo, PluginInstance, PatchValue } from 'modui-client';
-import type { MustacheRender } from './mustache';
+import type { MustacheRender } from './vendor';
 
 /** What a view is created from: a plugin of the running pedalboard (live), or a catalogue plugin (preview). */
 export type ViewTarget = PluginInstance | Plugin | PluginInfo | string;
@@ -38,7 +38,7 @@ export interface PluginViewsOptions {
    * `window.jQuery` when the page has it. Without it, the scripts are skipped (and `view.on('error')` says so once per view).
    */
   jQuery?: JQueryLike | null;
-  /** Mustache renderer, e.g. `Mustache.render` of mustache.js. Default: the built-in one (see `renderMustache`). */
+  /** Mustache renderer, e.g. `Mustache.render` of mustache.js. Default: `renderMustache`, the mustache.js of the classic UI. */
   mustache?: MustacheRender;
   /**
    * `fetch` used for the one file of the classic page the library reads, `css/main.css` (for its `@font-face` rules). Everything of the

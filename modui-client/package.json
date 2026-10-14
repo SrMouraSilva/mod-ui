@@ -1,18 +1,55 @@
 {
   "name": "modui-client",
-  "private": true,
   "version": "0.1.0",
-  "description": "Typed browser client for the mod-ui backend (HTTP + WebSocket). See docs/openapi.yml.",
+  "description": "Typed browser client for the MOD audio devices' web interface backend (mod-ui): pedalboards, plugins, live editing and device events over HTTP and WebSocket.",
   "license": "AGPL-3.0-or-later",
   "type": "module",
-  "engines": {
-    "node": ">=22.12"
+  "sideEffects": false,
+  "main": "./dist/index.js",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    },
+    "./global": "./dist/modui-client.global.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "keywords": [
+    "mod-audio",
+    "mod-ui",
+    "lv2",
+    "audio",
+    "pedalboard",
+    "websocket"
+  ],
+  "homepage": "https://github.com/mod-audio/mod-ui/blob/master/docs/modui-client.md",
+  "bugs": "https://github.com/mod-audio/mod-ui/issues",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mod-audio/mod-ui.git",
+    "directory": "modui-client"
+  },
+  "publishConfig": {
+    "access": "public"
   },
   "scripts": {
-    "build": "esbuild src/index.ts --bundle --format=iife --target=es2018 --outfile=../html/js/lib/modui-client.js",
-    "watch": "esbuild src/index.ts --bundle --format=iife --target=es2018 --sourcemap=inline --outfile=../html/js/lib/modui-client.js --watch",
+    "build": "esbuild src/browser.ts --bundle --format=iife --target=es2018 --outfile=../html/js/lib/modui-client.js",
+    "watch": "esbuild src/browser.ts --bundle --format=iife --target=es2018 --sourcemap=inline --outfile=../html/js/lib/modui-client.js --watch",
     "typecheck": "tsc --noEmit",
-    "test": "tsc --noEmit && vitest run"
+    "test": "tsc --noEmit && vitest run",
+    "clean": "node -e \"require('node:fs').rmSync('dist', { recursive: true, force: true })\"",
+    "build:esm": "esbuild src/index.ts --bundle --format=esm --target=es2018 --sourcemap --legal-comments=inline --outfile=dist/index.js",
+    "build:global": "esbuild src/browser.ts --bundle --format=iife --target=es2018 --sourcemap --legal-comments=inline --outfile=dist/modui-client.global.js",
+    "build:types": "tsc -p tsconfig.build.json && node ../tools/add-dts-extensions.mjs dist",
+    "build:lib": "npm run clean && npm run build:esm && npm run build:global && npm run build:types",
+    "prepack": "node -e \"require('node:fs').copyFileSync('../LICENSE', 'LICENSE')\"",
+    "prepublishOnly": "npm test && npm run build:lib"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

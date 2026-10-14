@@ -1,0 +1,81 @@
+# Builds modui-client and modui-plugin-view and publishes them as a GitHub pre-release, so they install without cloning:
+#
+#   npm install https://github.com/mod-audio/mod-ui/releases/download/<tag>/modui-client-<version>.tgz
+#
+# A pull request only tests and builds. A push (or a manual run, from any branch) also creates the release. Its tag is made here, from the
+# UTC date and time and the commit: YYYYMMDD-HHMMSS-<commit>. Both packages go in the same release. It is a pre-release on purpose, so the
+# "latest release" of the repository is never one of these. There is no "latest" download URL either: a lockfile pins the integrity of the
+# file, and a URL whose content changes would fail it.
+
+name: modui-packages
+
+on:
+  push:
+    branches: [master, feature/docs-api] # drop feature/docs-api once the branch is merged
+    paths:
+      - modui-client/**
+      - modui-plugin-view/**
+      - html/js/lib/mustache.js
+      - html/js/lib/sprintf-0.6.js
+      - tools/**
+      - LICENSE
+      - .github/workflows/modui-packages.yml
+  pull_request:
+    paths:
+      - modui-client/**
+      - modui-plugin-view/**
+      - html/js/lib/mustache.js
+      - html/js/lib/sprintf-0.6.js
+      - tools/**
+      - LICENSE
+      - .github/workflows/modui-packages.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: modui-packages-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  packages:
+    runs-on: ubuntu-22.04
+    name: test, build and release
+    permissions:
+      contents: write # creates the release and its tag
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test and build only (pull request)
+        if: github.event_name == 'pull_request'
+        run: tools/pack-modui-packages.sh
+
+      - name: Test, build and pack
+        id: pack
+        if: github.event_name != 'pull_request'
+        run: |
+          tag="$(tools/pack-modui-packages.sh "$RUNNER_TEMP/modui-packages" | tail -n 1)"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
+      - name: Create the pre-release
+        if: github.event_name != 'pull_request'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ steps.pack.outputs.tag }}
+        run: |
+          base="https://github.com/${GITHUB_REPOSITORY}/releases/download/${TAG}"
+          client="$(basename "$(ls "$RUNNER_TEMP"/modui-packages/modui-client-*.tgz)")"
+          view="$(basename "$(ls "$RUNNER_TEMP"/modui-packages/modui-plugin-view-*.tgz)")"
+          cat > "$RUNNER_TEMP/notes.md" <<NOTES
+          Built from ${GITHUB_SHA} (${GITHUB_REF_NAME}). Install both packages (the view imports only the types of the client):
+
+          \`\`\`sh
+          npm install ${base}/${client} ${base}/${view}
+          \`\`\`
+          NOTES
+          gh release create "$TAG" "$RUNNER_TEMP"/modui-packages/*.tgz \
+            --target "$GITHUB_SHA" --prerelease --title "$TAG" --notes-file "$RUNNER_TEMP/notes.md"

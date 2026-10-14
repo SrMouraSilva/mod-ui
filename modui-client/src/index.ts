@@ -21,13 +21,16 @@
  * await client.device.loadDefault();                // empty "Untitled" pedalboard
  * ```
  *
- * In the classic mod-ui page the build output (`html/js/lib/modui-client.js`) is loaded with a
+ * Installed from npm it is a plain ES module (`import { ModUiClient } from 'modui-client'`); importing it has no side effect.
+ * In the classic mod-ui page the build output (`html/js/lib/modui-client.js`, from `src/browser.ts`) is loaded with a
  * `<script>` tag and exposes `window.ModUiClient` (plus `window.ModUi` with the other classes).
  *
  * ## Modules
  *
  * | Module | Content |
  * |--------|---------|
+ * | `index.ts` | the public API: exports only, no side effect (the npm entry) |
+ * | `browser.ts` | entry of the `<script>` build: sets `window.ModUiClient` and `window.ModUi` |
  * | `client.ts` | {@link ModUiClient}, {@link ModUiClientOptions} — entry point, wires everything |
  * | `pedalboards.ts` | {@link PedalboardsApi} (`client.pedalboards`), {@link PedalboardReference} |
  * | `device.ts` | {@link Device} (`client.device`) — load / reset the running pedalboard |
@@ -57,24 +60,6 @@
  *
  * @module
  */
-
-import { Bank, BanksApi } from './banks';
-import { ModUiClient } from './client';
-import { CurrentPedalboard } from './current-pedalboard';
-import { Device } from './device';
-import { ModUiError, ModUiHttpError, ModUiTimeoutError } from './errors';
-import { EventChannel } from './events';
-import { ImageStatus, PedalboardImages } from './pedalboard-images';
-import { PedalboardConnections, PedalboardPortGroup, PedalboardPorts } from './pedalboard-connections';
-import { Param, PedalboardConnection, PluginInstance, PluginParams, Port } from './pedalboard-graph';
-import { PatchParam, PluginPatchParams } from './patch-params';
-import { PluginPresets, Preset } from './plugin-presets';
-import { PedalboardPlugins } from './pedalboard-plugins';
-import { PedalboardSnapshots, Snapshot } from './pedalboard-snapshots';
-import { PedalboardReference, PedalboardsApi } from './pedalboards';
-import { FilesApi } from './files';
-import { PluginGui } from './plugin-gui';
-import { Plugin, PluginsApi } from './plugins';
 
 export { Bank, BanksApi } from './banks';
 export type { AddToBankOptions, BankData } from './banks';
@@ -114,43 +99,3 @@ export type { DefaultGuiTemplates, GuiFile, GuiFiles } from './plugin-gui';
 export { Plugin, PluginsApi } from './plugins';
 export type { FetchLike, WebSocketFactory, WebSocketLike } from './runtime';
 export type * from './types';
-
-// Browser globals: the build is an IIFE loaded with a <script> tag.
-if (typeof window !== 'undefined') {
-  const globals = window as unknown as Record<string, unknown>;
-  globals.ModUiClient = ModUiClient;
-  globals.ModUi = {
-    ModUiClient,
-    ModUiError,
-    ModUiHttpError,
-    ModUiTimeoutError,
-    PedalboardReference,
-    PedalboardsApi,
-    BanksApi,
-    Bank,
-    PedalboardImages,
-    ImageStatus,
-    Device,
-    CurrentPedalboard,
-    EventChannel,
-    Plugin,
-    PluginsApi,
-    PluginGui,
-    FilesApi,
-    PluginInstance,
-    Param,
-    PluginParams,
-    PatchParam,
-    PluginPatchParams,
-    PluginPresets,
-    Preset,
-    PedalboardPlugins,
-    PedalboardSnapshots,
-    Snapshot,
-    PedalboardConnection,
-    PedalboardConnections,
-    PedalboardPorts,
-    PedalboardPortGroup,
-    Port,
-  };
-}

@@ -14,19 +14,13 @@
  * | `styles.ts`, `image.ts` | internal: stylesheets in the document, image size |
  * | `script.ts` | internal: the plugins' own JavaScript (`api_version` 3) |
  * | `urls.ts` | `ns` / `cns` of the templates, URL rebasing (the plugin's files and their URLs are `plugin.gui` of `modui-client`) |
- * | `mustache.ts`, `sprintf.ts` | the small template and number-format engines |
+ * | `vendor.ts` | `renderMustache` and `sprintf`: the very `mustache.js` and `sprintf-0.6.js` files of the classic UI, inlined by the build |
+ * | `browser.ts` | entry of the `<script>` build: sets `window.ModUiPluginView` |
  *
- * The build (`npm run build`) is an IIFE that sets `window.ModUiPluginView`; bundlers import `src/index.ts`.
+ * Installed from npm it is a plain ES module with no side effect and no runtime dependency (`modui-client` is only a type peer). The
+ * IIFE build (`npm run build`, from `browser.ts`) sets `window.ModUiPluginView` for a `<script>` tag.
  * @module
  */
-
-import { renderMustache } from './mustache';
-import { sprintf } from './sprintf';
-import { buildTemplateData } from './template-data';
-import { PluginViewError } from './types';
-import { namespace, rebaseUrls } from './urls';
-import { PluginView } from './view';
-import { PluginViews } from './views';
 
 export { PluginViews } from './views';
 export { PluginView } from './view';
@@ -54,22 +48,8 @@ export type {
 } from './types';
 export { buildTemplateData, fileEntries, resolvePortGroups, shouldSkipPort } from './template-data';
 export type { ControlSpec, FileEntry, FileList, PreparedPlugin, ScalePoint, TemplateInputs } from './template-data';
-export { renderMustache } from './mustache';
-export type { MustacheRender } from './mustache';
-export { sprintf } from './sprintf';
+export { renderMustache, sprintf } from './vendor';
+export type { MustacheRender } from './vendor';
 export { namespace, rebaseUrls } from './urls';
 export { StepModel } from './widgets';
 export type { Off } from './emitter';
-
-// Browser global: the build is an IIFE loaded with a <script> tag, after modui-client.js.
-if (typeof window !== 'undefined') {
-  (window as unknown as Record<string, unknown>).ModUiPluginView = {
-    PluginViews,
-    PluginView,
-    PluginViewError,
-    buildTemplateData,
-    renderMustache,
-    sprintf,
-    urls: { namespace, rebaseUrls },
-  };
-}

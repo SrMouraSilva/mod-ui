@@ -163,7 +163,7 @@ sequenceDiagram
 | Option | Default | What it does |
 |---|---|---|
 | `jQuery` | `window.jQuery` when the page has it | jQuery (or a compatible function) for the plugins' own JavaScript, whose contract hands them jQuery objects. Without it the scripts are skipped and `error` (`context: 'script'`) is emitted once per view |
-| `mustache` | built-in | A Mustache renderer, e.g. `Mustache.render`, for exotic templates |
+| `mustache` | `renderMustache` (the classic UI's mustache.js 0.5) | A Mustache renderer, e.g. another `Mustache.render`, for exotic templates |
 | `fetch` | global `fetch` | `fetch` used for `css/main.css` of the classic page (its `@font-face` rules); the plugins' files go through the client |
 | `styles` | all | `false` adds no global stylesheet (the page brings its own); `{ base, fonts, extra }` picks them: `base` = `css/pedals.css` and `resources/pedals/default.css`, `fonts` = `css/fonts.css` and the `@font-face` rules of `css/main.css`, `extra` = more URLs |
 | `document` | global `document` | The document the elements and styles are created in |
@@ -280,7 +280,9 @@ privileges (section 11).
 | `widgets.ts` | the widgets and `StepModel` (the step arithmetic of `baseWidget`) |
 | `template-data.ts` | `buildTemplateData`, `resolvePortGroups`, `fileEntries`, `shouldSkipPort` (pure) |
 | `styles.ts`, `image.ts`, `script.ts` | stylesheets, image size, plugin scripts |
-| `urls.ts`, `mustache.ts`, `sprintf.ts` | `ns` / `cns` and URL rebasing, the template and number-format engines (no dependencies) |
+| `urls.ts` | `ns` / `cns` and URL rebasing |
+| `vendor.ts` | `renderMustache` and `sprintf`: **the files of the classic UI** (`html/js/lib/mustache.js`, `sprintf-0.6.js`), imported from the repository and inlined by the build. One copy in version control, no dependency, identical output (`&#x2F;`, `%d` truncates, `%f` unpadded) |
+| `index.ts`, `browser.ts` | the public exports (no side effect), and the entry of the `<script>` build that sets `window.ModUiPluginView` |
 
 The library imports **only types** from `modui-client` (`tsconfig.json` `paths`), so the application's client is the only copy: no second
 socket, `instanceof` keeps working. The tests use the real client from its sources (`vitest.config.ts` alias) over a fake socket and a
@@ -309,7 +311,26 @@ cd modui-plugin-view
 npm install
 npm test          # tsc --noEmit + vitest (happy-dom)
 npm run build     # writes html/js/lib/modui-plugin-view.js (generated, git-ignored)
+npm run build:lib # the publication build, into dist/ (build modui-client's first)
 ```
+
+### Installing the package
+Not on the npm registry: every build of the repository is a GitHub pre-release with both tarballs (`.github/workflows/modui-packages.yml`). Install the
+two links of a release together (the README of the repository explains where to find them):
+
+```sh
+npm install https://github.com/mod-audio/mod-ui/releases/download/<tag>/modui-client-<version>.tgz \
+           https://github.com/mod-audio/mod-ui/releases/download/<tag>/modui-plugin-view-<version>.tgz
+```
+
+```ts
+import { ModUiClient } from 'modui-client';
+import { PluginViews } from 'modui-plugin-view';
+```
+
+`modui-plugin-view` has no runtime dependency and imports only types from `modui-client` (an optional peer dependency: the application passes its
+client). `dist/index.js` is one ES module that already contains the Mustache and sprintf of the classic UI (`vendor.ts`); there is no path into `html/`.
+`modui-plugin-view/global` is the IIFE of the `<script>` build (after `modui-client/global`). Plan: `docs/plans/2026-10-modui-publishing.md`.
 
 ## 10. Troubleshooting
 

@@ -11,7 +11,7 @@ import type { Plugin, PluginGui, PluginInfo, PluginInstance, PluginPresetInfo } 
 import { LiveBackend, PreviewBackend, type ViewBackend } from './binding';
 import { Emitter, type Off } from './emitter';
 import { loadImageSize } from './image';
-import { renderMustache, type MustacheRender } from './mustache';
+import { renderMustache, type MustacheRender } from './vendor';
 import { compileScript, type ScriptCallback } from './script';
 import { StyleManager } from './styles';
 import { buildTemplateData, type FileList } from './template-data';

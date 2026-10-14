@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true,
+    "outDir": "dist",
+    "rootDir": "src",
+    // The published .d.ts files import the types of modui-client: here they come from its publication build (npm run build:lib there).
+    "paths": { "modui-client": ["../modui-client/dist/index.d.ts"] }
+  },
+  "include": ["src"],
+  "exclude": ["src/browser.ts"]
+}

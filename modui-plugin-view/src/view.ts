@@ -10,9 +10,8 @@
 import type { PatchValue, PluginGui, PluginInfo, PluginInstance, PluginPresetInfo } from 'modui-client';
 import type { BackendListener, ViewBackend } from './binding';
 import { Emitter, type Off } from './emitter';
-import type { MustacheRender } from './mustache';
 import { ScriptRunner, type ScriptCallback, type ScriptFuncs } from './script';
-import { sprintf } from './sprintf';
+import { sprintf, type MustacheRender } from './vendor';
 import type { ControlSpec, PreparedPlugin, ScalePoint } from './template-data';
 import type { JQueryLike, ViewErrorContext, ViewEvents, ViewOrigin } from './types';
 import { PluginViewError } from './types';

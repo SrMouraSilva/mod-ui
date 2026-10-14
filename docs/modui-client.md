@@ -489,10 +489,12 @@ classic UI, other tabs and this client stay in sync.
 
 ```
 modui-client/
-├── package.json         # devDependencies only: typescript, esbuild, vitest (exact versions)
+├── package.json         # devDependencies only (typescript, esbuild, vitest, exact versions); exports → dist/
 ├── tsconfig.json        # strict, noEmit, ES2018 + DOM
+├── tsconfig.build.json  # the publication build: only the .d.ts files, into dist/
 ├── src/
-│   ├── index.ts         # public exports + window.ModUiClient / window.ModUi (build entry)
+│   ├── index.ts         # public exports only (no side effect: the npm entry)
+│   ├── browser.ts       # sets window.ModUiClient / window.ModUi (entry of the <script> build)
 │   ├── client.ts        # ModUiClient, ModUiClientOptions
 │   ├── pedalboards.ts   # PedalboardsApi, PedalboardReference
 │   ├── pedalboard-images.ts   # PedalboardImages (reference.images), ImageStatus
@@ -1105,7 +1107,7 @@ sequenceDiagram
 - **Guard destructive calls in the client** (`PedalboardReference.delete()` refuses factory and default pedalboards) because the backend does not validate paths.
 - **Remember the backend conventions** (see `docs/openapi.yml`): many handlers answer `200` with a bare
   `false` on failure; turn that into a `ModUiError`. Trailing slashes in paths matter.
-- **No runtime dependencies.** The output is one IIFE file (ES2018) loaded by a `<script>` tag.
+- **No runtime dependencies.** The output is one IIFE file (ES2018) loaded by a `<script>` tag, or an ES module when installed from npm.
 - **Documentation**: every public symbol has TSDoc in English, naming the backend calls and their
   `operationId`, the errors thrown, and an `@example`.
 
@@ -1130,7 +1132,7 @@ Checklist for a new area (example: banks, `src/banks.ts`):
 1. Wire types in `src/types.ts`, copied from the matching schemas in `docs/openapi.yml`.
 2. A class in its own module (`src/banks.ts`) taking `HttpTransport` (and `EventChannel` if it waits for
    WebSocket confirmations) in its constructor.
-3. Wire it in `ModUiClient` (`client.banks`), export it from `src/index.ts` and add it to `window.ModUi`.
+3. Wire it in `ModUiClient` (`client.banks`), export it from `src/index.ts` and add it to `window.ModUi` (`src/browser.ts`).
 4. A test file `test/banks.test.ts` using the helpers: `makeClient(routes)` fakes HTTP routes as
    `"METHOD /path"` → JSON, `connected(client)` opens the fake socket and plays the initial replay, and
    `socket.emit('...')` pushes server messages.
@@ -1144,11 +1146,33 @@ Checklist for a new area (example: banks, `src/banks.ts`):
 cd modui-client
 npm install
 npm test          # tsc --noEmit (strict, no unused locals) + vitest
-npm run build     # esbuild src/index.ts → ../html/js/lib/modui-client.js (IIFE, ES2018, not minified)
+npm run build     # esbuild src/browser.ts → ../html/js/lib/modui-client.js (IIFE, ES2018, not minified)
 npm run watch     # rebuild on change, inline source map
+npm run build:lib # the publication build, into dist/ (see below)
 ```
 
-Requires Node.js 22.12 or newer. The generated `html/js/lib/modui-client.js` is git-ignored; release builds
+### Installing the package
+The package is an ES module (`dist/index.js`) with its type declarations; importing it has no side effect. It is not on the npm registry: every build
+of the repository is a GitHub pre-release with the tarball (`.github/workflows/modui-packages.yml`), installed by its link:
+
+```sh
+npm install https://github.com/mod-audio/mod-ui/releases/download/<tag>/modui-client-<version>.tgz
+```
+
+The tag is the UTC date, time and commit of the build (`20261013-225031-abc1234`) and the version in the tarball carries the same stamp
+(`0.1.0-20261013225031.gabc1234`). The links of the releases are in the README of the repository.
+
+```ts
+import { ModUiClient } from 'modui-client';
+const client = new ModUiClient({ baseUrl: 'http://modduo.local' });
+```
+
+For a page without a bundler, `modui-client/global` is the same IIFE as the classic UI's (`window.ModUiClient`, `window.ModUi`).
+`npm run build:lib` writes `dist/` (`index.js`, `modui-client.global.js`, one `.d.ts` per module, source maps) and `npm pack --dry-run` lists
+what a tarball contains (only `dist/`, `package.json`, the README and the license). `tools/pack-modui-packages.sh <outdir>` does what the workflow does:
+test, build and pack both packages with the stamped version. Plan: `docs/plans/2026-10-modui-publishing.md`.
+
+Requires Node.js 22.12 or newer to develop. The generated `html/js/lib/modui-client.js` is git-ignored; release builds
 must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pick it up from `html/js/lib/*.js`).
 
 ---

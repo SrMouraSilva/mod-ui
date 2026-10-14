@@ -56,6 +56,10 @@ npm run watch     # rebuild on change
 # plugin GUIs (same toolchain)
 cd modui-plugin-view && npm install && npm test && npm run build   # writes html/js/lib/modui-plugin-view.js (git-ignored)
 
+# publication builds (both packages; the client first, the view's .d.ts files import its types): dist/ is git-ignored
+cd modui-client && npm run build:lib && npm pack --dry-run     # dist/index.js (ESM), dist/*.d.ts, dist/modui-client.global.js
+cd modui-plugin-view && npm run build:lib && npm pack --dry-run
+
 # API contract
 npx @redocly/cli lint docs/openapi.yml
 ```
@@ -116,12 +120,12 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 
 ### TypeScript client conventions
 - One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
-  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `plugin-gui.ts`, `files.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` is the build entry, re-exports the public API and sets
-  `window.ModUiClient` / `window.ModUi`. New areas get their own module and test file.
+  `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `plugin-gui.ts`, `files.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` only re-exports the public API (no side effect: it is the npm entry); `src/browser.ts` imports it and sets
+  `window.ModUiClient` / `window.ModUi` (entry of the `<script>` build). New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
   `FakeWebSocket`, `flush`, `connectedWith` for a replay that carries graph frames).
-- The build (esbuild, IIFE, ES2018) produces a single `html/js/lib/modui-client.js` that is **never committed**.
-  `index.html` loads it.
+- The build (esbuild, IIFE from `src/browser.ts`, ES2018) produces a single `html/js/lib/modui-client.js` that is **never committed**.
+  `index.html` loads it. `npm run build:lib` makes the publication build in `dist/` (see "Publishing").
 - No runtime dependencies. Dev dependencies only: `typescript`, `esbuild`, `vitest`, pinned to exact versions.
   (The repository ignores `package-lock.json`.)
 - Classes per feature area, reachable from `ModUiClient`: `client.pedalboards` (library), `client.device`
@@ -178,6 +182,28 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 ### General
 - Code, comments and docs in English.
 - Do not commit generated files (`html/js/lib/modui-client.js`, `html/js/lib/modui-plugin-view.js`, `node_modules/`).
+
+### Publishing (`modui-client`, `modui-plugin-view`)
+Both are npm packages (plan: `docs/plans/2026-10-modui-publishing.md`), distributed as **GitHub pre-releases**, not on the npm registry:
+`.github/workflows/modui-packages.yml` runs `tools/pack-modui-packages.sh` (install, test, `build:lib`, `npm pack` of the client then the view) on every push
+that touches the packages (and by hand), and creates the release with `gh release create`. The tag is made by the pipeline: `YYYYMMDD-HHMMSS-<commit>` (UTC),
+and the version inside the tarballs is `<package.json version>-<YYYYMMDDHHMMSS>.g<commit>` (the `g` keeps an all-digit hash from being an invalid semver
+identifier). Both packages go in one release, marked pre-release; there is no "latest" download link on purpose (lockfile integrity). Do not add a
+step that commits, pushes branches or publishes to the registry without asking. `npm publish` stays a manual decision of the maintainers
+(`prepublishOnly` runs the tests and `build:lib`).
+- What is published is `dist/` only (`files`): `index.js` (ES module, one file, no dependencies), `index.d.ts` (+ one per module, relative
+  imports with `.js`, added by `tools/add-dts-extensions.mjs`) and `<name>.global.js` (the IIFE for a `<script>`). `exports` points at `dist/`;
+  tests and tooling use the sources (`tsconfig` `paths`, vitest alias), so tests never need a build.
+- `src/index.ts` must stay free of side effects (`sideEffects: false`): anything that touches `window` goes in `src/browser.ts`.
+- `modui-plugin-view` imports `modui-client` **types only**; in `package.json` it is an optional peer dependency. Its `.d.ts` files are built
+  against the client's (`tsconfig.build.json` `paths` → `../modui-client/dist/index.d.ts`), so build the client first.
+- The view's `mustache.js` and `sprintf-0.6.js` are the files of the classic UI (`html/js/lib/`), imported as `modui-vendor/mustache` and
+  `modui-vendor/sprintf` (`src/vendor.ts`; `vendor-plugins.mjs` is the esbuild and Vite plugin that gives them an `export default`) and inlined by
+  the build. Do not copy them, re-implement them, or add npm packages for them; do not edit them for the view's sake (they are the classic
+  UI's). If `html/js/lib/mustache.js` or `sprintf-0.6.js` is replaced by another version, run `npm test` in `modui-plugin-view/` (the tests
+  pin the classic behaviour: `&#x2F;`, `%d` truncates, `%f` unpadded).
+- Runtime dependencies stay at none. The license file is the repository's (`prepack` copies `LICENSE`; the copy is git-ignored).
+- The packages are ES modules only (`"type": "module"`). `engines` is not set (browsers and Node >= 18 with `fetch` work; developing needs 22.12).
 
 ## Plans
 

@@ -41,8 +41,8 @@ describe('live view', () => {
 
     expect(q(view.icon, '.knob').style.transform).toBe('rotate(135deg)');
     expect(q(view.icon, '.gain-value').textContent).toBe('1.00 dB');
-    expect(q(view.icon, '[mod-role=input-control-minimum]').textContent).toBe('0.000000 dB'.length > 8 ? '0.00 dB' : '0.000000 dB');
-    expect(q(view.icon, '[mod-role=input-control-maximum]').textContent).toBe('1.00 dB');
+    expect(q(view.icon, '[mod-role=input-control-minimum]').textContent).toBe('0 dB');
+    expect(q(view.icon, '[mod-role=input-control-maximum]').textContent).toBe('1 dB');
     expect(q(view.icon, '.mode .selected').textContent).toBe('Hard');
     expect(q(view.icon, '.mode [mod-role=input-control-value]').textContent).toBe('Hard');
     expect(q(view.icon, '.steps-value').textContent).toBe('8');

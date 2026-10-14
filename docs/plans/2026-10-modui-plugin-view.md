@@ -24,7 +24,7 @@ Goals:
   `instance.presets`).
 - Run the plugin's own JavaScript (modgui `api_version` 3) when the page provides jQuery.
 - Also render a **preview** of a catalogue plugin (no instance): local values only, for a plugin browser.
-- No runtime dependencies (like `modui-client`): small built-in Mustache and sprintf, jQuery only injected.
+- No runtime dependencies (like `modui-client`): Mustache and sprintf are the classic UI's own files, inlined by the build (revised 2026-10-13), jQuery only injected.
 
 Non-goals (first version; see "Future work"):
 - Hardware addressing (`mod-address`, `presets-address`, momentary modes driven by an addressing).
@@ -35,10 +35,10 @@ Non-goals (first version; see "Future work"):
 ## Decisions
 | # | Question | Decision |
 |---|----------|----------|
-| 1 | Package | `modui-plugin-view/` at the root, same layout and toolchain as `modui-client/` (TypeScript, esbuild IIFE, vitest). Build output `html/js/lib/modui-plugin-view.js` (git-ignored), global `window.ModUiPluginView`. `package.json` `exports` points at `src/index.ts`, so a bundler (Vite, webpack) can import the sources directly. |
+| 1 | Package | `modui-plugin-view/` at the root, same layout and toolchain as `modui-client/` (TypeScript, esbuild IIFE, vitest). Build output `html/js/lib/modui-plugin-view.js` (git-ignored), global `window.ModUiPluginView`. `package.json` `exports` pointed at `src/index.ts` in the first version; since 2026-10-13 it points at the publication build in `dist/` (`2026-10-modui-publishing.md`). |
 | 2 | Dependency on `modui-client` | **Type-only** (`import type`). The application passes its `ModUiClient`; the view never bundles a second copy of the client (instanceof checks and the shared socket keep working). Resolved with a `paths` alias in `tsconfig.json` / `vitest.config.ts`. |
-| 3 | Mustache | Built-in subset (`mustache.ts`): variables (escaped), `{{{x}}}` / `{{& x}}`, sections over lists / objects / truthy values, inverted sections, comments, dotted names, `{{.}}`, context stack. Enough for every modgui template; `options.mustache` accepts `Mustache.render` for exotic templates. |
-| 4 | sprintf | Built-in (`sprintf.ts`): `%d %i %f %e %g %s %x %c %%` with flags, width and precision. Unit formats (`%.1f dB`, `%d %%`) come from the plugin. |
+| 3 | Mustache | **Revised 2026-10-13**: the classic UI's own `html/js/lib/mustache.js` (0.5), imported by `src/vendor.ts` and inlined by the build (first version: a built-in subset, `mustache.ts`, which differed in blank lines and in escaping `/`). `options.mustache` still accepts any `Mustache.render`. |
+| 4 | sprintf | **Revised 2026-10-13**: the classic UI's `html/js/lib/sprintf-0.6.js`, same mechanism (first version: a built-in `sprintf.ts`, whose `%d` rounded where the classic truncates and whose `%f` padded to six decimals, so a port limit read `0.00 dB` instead of `0 dB`). Unit formats (`%.1f dB`, `%d %%`) come from the plugin. The wrapper returns the value as text where the original throws. |
 | 5 | jQuery | Required by the plugin JavaScript contract (`event.icon.find(...)`); some scripts also use the jQuery plugins the classic page loads (`jquery.svg.js` for x42). The script text is compiled like the classic `eval('method = ' + code)`, because some files put helper declarations after the function. Injected (`options.jQuery`, default `window.jQuery`). Without it the script is not run and the view emits `error` once (`context: 'script'`). The widgets themselves never use jQuery. |
 | 6 | Plugins without modgui | The default templates of the classic UI are public static files: `GET /resources/templates/pedal-default.html` and `GET /resources/settings.html`. **No backend change.** (Answers open question 3 of the plugin-GUI plan.) Since 2026-10-13 the client reads them: `plugins.getDefaultTemplates()`. |
 | 6b | Who knows the backend's URLs | **`modui-client`** (revised 2026-10-13, `2026-10-modui-client-plugin-assets.md`): the files, URLs, version and cache of a plugin are `plugin.gui`; the user files are `client.files`. The view builds no backend URL and its `fetch` option is only for `css/main.css`. |
@@ -95,8 +95,8 @@ preview.setValue('gain', 0.5);                          // local only
 ## Files
 `modui-plugin-view/`: `package.json`, `tsconfig.json`, `vitest.config.ts`, `src/index.ts`, `src/views.ts` (`PluginViews`), `src/view.ts`
 (`PluginView`), `src/binding.ts` (live / preview backends), `src/controls.ts` (one control: value, format, widgets, fields),
-`src/widgets.ts`, `src/template-data.ts`, `src/image.ts`, `src/styles.ts`, `src/script.ts`, `src/urls.ts` (`ns` / `cns`, rebasing), `src/mustache.ts`,
-`src/sprintf.ts`, `src/emitter.ts`, `src/types.ts`; tests in `test/` (happy-dom). Docs: `docs/modui-plugin-view.md`, README section,
+`src/widgets.ts`, `src/template-data.ts`, `src/image.ts`, `src/styles.ts`, `src/script.ts`, `src/urls.ts` (`ns` / `cns`, rebasing), `src/vendor.ts`,
+`src/emitter.ts`, `src/types.ts`; tests in `test/` (happy-dom). Docs: `docs/modui-plugin-view.md`, README section,
 CLAUDE.md, `.gitignore`, rows of `docs/modui-client/implementation-progress.md`.
 
 ## Backend change policy
@@ -131,6 +131,7 @@ compile form, the scoped `box-sizing`.
 - A small React wrapper (`<PluginIcon instance={…} />`) as an example, not as a dependency.
 
 ## Revisions
+- **2026-10-13** — Prepared for publication (`2026-10-modui-publishing.md`): `mustache.ts` and `sprintf.ts` removed in favour of the classic UI's files (`vendor.ts`), `index.ts` / `browser.ts` split, `dist/` builds.
 - **2026-10-13** — The plugin's files, URLs, version stamp and cache, and the user files, moved to `modui-client` (`plugin.gui`, `plugins.getDefaultTemplates()`,
   `client.files.list()`). Removed from the view: `assets.ts` (`AssetLoader`), the URL builders and `renderedVersion` of `urls.ts` (and their exports),
   `PluginViews.thumbnailUrl/screenshotUrl/resourceUrl`. `ViewClient` gained `files`.

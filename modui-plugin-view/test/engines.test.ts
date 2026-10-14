@@ -4,9 +4,9 @@
 import { describe, expect, it } from 'vitest';
 import { namespace, rebaseUrls, renderMustache, sprintf } from '../src';
 
-describe('renderMustache', () => {
-  it('escapes variables and leaves {{{triple}}} and {{& x}} raw', () => {
-    expect(renderMustache('{{a}}|{{{a}}}|{{& a}}', { a: '<b>&"\'' })).toBe('&lt;b&gt;&amp;&quot;&#39;|<b>&"\'|<b>&"\'');
+describe('renderMustache (mustache.js 0.5 of the classic UI)', () => {
+  it('escapes variables, "/" included, and leaves {{{triple}}} and {{& x}} raw', () => {
+    expect(renderMustache('{{a}}|{{{a}}}|{{& a}}', { a: '<b>&"\'/' })).toBe('&lt;b&gt;&amp;&quot;&#39;&#x2F;|<b>&"\'/|<b>&"\'/');
   });
 
   it('prints 0 and false, and nothing for null or missing names', () => {
@@ -39,23 +39,37 @@ describe('renderMustache', () => {
   });
 
   it('ignores comments and keeps a } that follows a tag (CSS)', () => {
-    expect(renderMustache('.a{{{cns}}} {x}{{! note }}.b{{cns}}}', { cns: '_1' })).toBe('.a_1 {x}.b_1}');
+    expect(renderMustache('.a{{{cns}}} {x}{{! note }}.b{{{cns}}}}', { cns: '_1' })).toBe('.a_1 {x}.b_1}');
+  });
+
+  it('drops the line of a section tag that stands alone, as the classic UI does', () => {
+    expect(renderMustache('<ul>\n  {{#a}}\n  <li>{{.}}</li>\n  {{/a}}\n</ul>', { a: [1, 2] })).toBe('<ul>\n  <li>1</li>\n  <li>2</li>\n</ul>');
   });
 });
 
-describe('sprintf', () => {
+describe('sprintf (sprintf-0.6.js of the classic UI)', () => {
   it('formats the unit renders of LV2 ports', () => {
     expect(sprintf('%.2f dB', -3.14159)).toBe('-3.14 dB');
-    expect(sprintf('%d %%', 42.6)).toBe('43 %');
-    expect(sprintf('%f', 1)).toBe('1.000000');
+    expect(sprintf('%d %%', 42.6)).toBe('42 %');
     expect(sprintf('%s Hz', 'abc')).toBe('abc Hz');
     expect(sprintf('%.1f', -0.01)).toBe('-0.0');
     expect(sprintf('%d', -0.2)).toBe('0');
   });
 
-  it('supports flags, width and the other conversions', () => {
-    expect(sprintf('%5.1f|%-4d|%04d|%+d|%x|%#X|%e', 1.25, 7, -7, 3, 255, 255, 1234.5)).toBe('  1.3|7   |-007|+3|ff|0XFF|1.234500e+3');
-    expect(sprintf('%g %c %.2s', 0.0001234, 65, 'abc')).toBe('0.0001234 A ab');
+  it('prints %f without padding the decimals, so a port limit reads "0 dB" like in the classic UI', () => {
+    expect(sprintf('%f', 1)).toBe('1');
+    expect(sprintf('%f dB', 0)).toBe('0 dB');
+    expect(sprintf('%f dB', 0.5)).toBe('0.5 dB');
+  });
+
+  it('supports flags, width and %c / %s precision', () => {
+    expect(sprintf('%5.1f|%-4d|%04d|%+d|%x', 1.25, 7, 7, 3, 255)).toBe('  1.3|7   |0007|+3|ff');
+    expect(sprintf('%c %.2s', 65, 'abc')).toBe('A ab');
+  });
+
+  it('shows the value instead of throwing when a conversion is not supported or gets a non-number', () => {
+    expect(sprintf('%g', 0.5)).toBe('0.5');
+    expect(sprintf('%.2f dB', 'abc')).toBe('abc');
   });
 });
 
