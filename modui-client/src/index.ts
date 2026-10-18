@@ -37,6 +37,8 @@
  * | `current-pedalboard.ts` | {@link CurrentPedalboard} (`client.device.currentPedalboard`) — get / save / saveAs |
  * | `plugins.ts` | {@link PluginsApi} (`client.device.plugins`), {@link Plugin} — installed plugins |
  * | `plugin-gui.ts` | {@link PluginGui} (`plugin.gui`) — URLs and text of a plugin's modgui files, thumbnail and screenshot |
+ * | `system.ts` | {@link SystemApi} (`client.system`), {@link SystemDanger} (`client.system.danger`) — the device, its system settings and the operations that need a person's decision |
+ * | `config.ts` | {@link ConfigApi} (`client.config`): {@link ModConfig} (`config.mod`, mod-ui's preferences) and {@link AppConfig} (`config.app`, your application's) |
  * | `files.ts` | {@link FilesApi} (`client.files`) — the user's samples, impulse responses and models |
  * | `pedalboard-plugins.ts` | {@link PedalboardPlugins} (`currentPedalboard.plugins`) — list / add / remove |
  * | `pedalboard-connections.ts` | {@link PedalboardConnections} (`currentPedalboard.connections`), {@link PedalboardPorts} (`currentPedalboard.ports.list()`, `.audio.input()` …) |
@@ -54,7 +56,7 @@
  * | `pedalboard-images.ts` | {@link PedalboardImages} (`reference.images`), {@link ImageStatus} — screenshot and thumbnail |
  * | `events.ts` | {@link EventChannel} (`client.events`) — the main WebSocket |
  * | `http.ts` | `HttpTransport` — internal `fetch` wrapper |
- * | `errors.ts` | {@link ModUiError}, {@link ModUiHttpError}, {@link ModUiTimeoutError} |
+ * | `errors.ts` | {@link ModUiError}, {@link ModUiHttpError}, {@link ModUiTimeoutError}, {@link ModUiConfigTooLargeError} |
  * | `types.ts` | Wire types (`PedalboardSummary`, `PedalboardInfo`, ...) and shared option/result types |
  * | `runtime.ts` | `FetchLike`, `WebSocketLike`, `WebSocketFactory` — injectable runtime surfaces |
  *
@@ -66,7 +68,11 @@ export type { AddToBankOptions, BankData } from './banks';
 export { ModUiClient } from './client';
 export type { ClientEvents, ModUiClientOptions } from './client';
 export { CurrentPedalboard } from './current-pedalboard';
-export { Device } from './device';
+export { BufferSize, Device } from './device';
+export { AppConfig, APP_CONFIG_KEY, APP_CONFIG_MAX_BYTES, ConfigApi, ModConfig, ModConfigKey } from './config';
+export type { AppConfigData, JsonValue, ModConfigData, ModConfigValue } from './config';
+export { SystemApi, SystemBackup, SystemDanger, SystemDangerSettings, SystemSettingsApi } from './system';
+export type { BackupOptions, CleanupOptions, PingResult, SystemSettings, SystemSettingsPatch } from './system';
 export type { ConnectionSnapshot, PedalboardSnapshot, PluginSnapshot, PortSnapshot, Schedule } from './snapshot';
 export type {
   BufferSizeEvent,
@@ -77,7 +83,7 @@ export type {
   TransportEvent,
   TrueBypassEvent,
 } from './device-state';
-export { ModUiError, ModUiHttpError, ModUiTimeoutError } from './errors';
+export { ModUiConfigTooLargeError, ModUiError, ModUiHttpError, ModUiTimeoutError } from './errors';
 export type { EventMeta, ListenOptions, Origin, Unsubscribe } from './emitter';
 export { EventChannel } from './events';
 export type { ConnectionState, MessageHandler, ReconnectOptions, StateEvent, StateReason, Waiting } from './events';

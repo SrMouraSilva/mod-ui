@@ -8,14 +8,20 @@
  */
 
 import {
+  AppConfig,
   Bank,
   BanksApi,
+  BufferSize,
+  ConfigApi,
   CurrentPedalboard,
   Device,
   EventChannel,
   FilesApi,
   ImageStatus,
+  ModConfig,
+  ModConfigKey,
   ModUiClient,
+  ModUiConfigTooLargeError,
   ModUiError,
   ModUiHttpError,
   ModUiTimeoutError,
@@ -40,6 +46,8 @@ import {
   Port,
   Preset,
   Snapshot,
+  SystemApi,
+  SystemDanger,
 } from './index';
 
 if (typeof window !== 'undefined') {
@@ -50,6 +58,7 @@ if (typeof window !== 'undefined') {
     ModUiError,
     ModUiHttpError,
     ModUiTimeoutError,
+    ModUiConfigTooLargeError,
     PedalboardReference,
     PedalboardsApi,
     BanksApi,
@@ -78,5 +87,12 @@ if (typeof window !== 'undefined') {
     PedalboardPorts,
     PedalboardPortGroup,
     Port,
+    BufferSize,
+    SystemApi,
+    SystemDanger,
+    ConfigApi,
+    ModConfig,
+    ModConfigKey,
+    AppConfig,
   };
 }

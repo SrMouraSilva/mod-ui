@@ -29,6 +29,19 @@ import type { Schedule } from './snapshot';
 import type { LoadOptions, LoadResult, PedalboardTarget, WriteOptions } from './types';
 
 /**
+ * Buffer sizes of the audio engine that mod-ui accepts (`POST /set_buffersize/{size}` only takes these two). A smaller buffer lowers the
+ * latency and loads the CPU more.
+ */
+export enum BufferSize {
+  /** 128 frames: lowest latency. */
+  Frames128 = 128,
+  /** 256 frames: more room for heavy pedalboards. */
+  Frames256 = 256,
+}
+
+const BUFFER_SIZES: readonly number[] = [BufferSize.Frames128, BufferSize.Frames256];
+
+/**
  * What runs on the device right now (`client.device`).
  *
  * Operations are serialized: a second `load()` starts only after the previous one finished, and saves made
@@ -188,6 +201,86 @@ export class Device {
         release();
       }
     });
+  }
+
+  /**
+   * Changes the buffer size of the audio engine (JACK). On a real device the value is also kept for the next boot.
+   *
+   * The backend answers with the size in use; the client applies it to {@link Device.bufferSize} (and emits `bufferSize`) without waiting
+   * for the `bufsize` frame. Audio may glitch for a moment.
+   *
+   * Backend: `POST /set_buffersize/{size}` (operationId `setBufferSize`).
+   * @param size One of {@link BufferSize}. Any other value is refused before a request is made.
+   * @throws {ModUiError} when `size` is not a {@link BufferSize}, or when the engine did not take it.
+   * @example
+   * const { frames } = await client.device.setBufferSize(BufferSize.Frames256);
+   */
+  async setBufferSize(size: BufferSize): Promise<BufferSizeEvent> {
+    if (!BUFFER_SIZES.includes(size)) {
+      throw new ModUiError(`Unsupported buffer size ${String(size)}; use BufferSize.Frames128 or BufferSize.Frames256`);
+    }
+    const response = await this.http.postForm<{ ok: boolean; size: number }>(`/set_buffersize/${size}`, {});
+    if (!response || !response.ok) {
+      throw new ModUiError(`The audio engine did not take the buffer size ${size} (it uses ${response?.size})`);
+    }
+    this.deviceState.applyBufferSize(response.size);
+    return { frames: response.size };
+  }
+
+  /**
+   * Turns the hardware true bypass of one or both channels on or off (`true` = bypassed). A channel that is not given is not touched.
+   * Nothing is requested for `{}`. {@link Device.trueBypass} and the `trueBypass` event follow the answer.
+   *
+   * Backend: `GET /truebypass/{channel}/{bypassed}` (operationId `setTrueBypass`), once per channel given.
+   * @throws {ModUiError} when the backend refuses (for example a device without hardware true bypass).
+   * @example
+   * await client.device.setTrueBypass({ left: true, right: true });
+   */
+  async setTrueBypass(change: Partial<TrueBypassEvent>): Promise<void> {
+    const channels: Array<['Left' | 'Right', boolean | undefined]> = [
+      ['Left', change.left],
+      ['Right', change.right],
+    ];
+    for (const [channel, bypassed] of channels) {
+      if (bypassed === undefined) {
+        continue;
+      }
+      if (typeof bypassed !== 'boolean') {
+        throw new ModUiError(`The true bypass of ${channel} must be true or false`);
+      }
+      const ok = await this.http.getJson<boolean>(`/truebypass/${channel}/${bypassed}`);
+      if (ok !== true) {
+        throw new ModUiError(`The backend refused to set the true bypass of ${channel} (does this device have it?)`);
+      }
+      this.deviceState.applyTrueBypass(channel === 'Left' ? { left: bypassed } : { right: bypassed });
+    }
+  }
+
+  /**
+   * Sets the xrun counter (audio dropouts) back to zero. The next `stats` event, about a second later, carries `xruns: 0`.
+   *
+   * Backend: `POST /reset_xruns/` (operationId `resetXruns`).
+   * @example
+   * await client.device.resetXruns();
+   */
+  async resetXruns(): Promise<void> {
+    await this.http.postForm<boolean>('/reset_xruns/', {});
+  }
+
+  /**
+   * Moves the CPU to the next frequency the hardware offers (after the highest it wraps to the lowest). The new value shows up in
+   * {@link Device.sysStats} (`cpuFreqKhz`) in the next `sysStats` event.
+   *
+   * Backend: `POST /switch_cpu_freq/` (operationId `switchCpuFrequency`). Needs Linux `cpufreq`: on other hosts it fails.
+   * @throws {ModUiError} when the backend answers `false` (frequency unknown).
+   * @example
+   * await client.device.switchCpuFrequency();
+   */
+  async switchCpuFrequency(): Promise<void> {
+    const ok = await this.http.postForm<boolean>('/switch_cpu_freq/', {});
+    if (ok !== true) {
+      throw new ModUiError('The backend could not change the CPU frequency');
+    }
   }
 
   // ------------------------------------------------------------------------------------------------------------------

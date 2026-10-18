@@ -24,7 +24,7 @@ def architecture():
     classic = Node('classic', 'legacy', 'Classic UI', ['jQuery · host.js', '$.ajax + window.ws'], nx[0], r[0], NW, NH)
     app = Node('app', 'app', 'Application code', ['new UI · console · tests', 'browser or Node.js 22'], nx[0], r[1], NW, NH)
     http = Node('http', 'client', 'HttpTransport', ['fetch · JSON', 'non-2xx = HttpError'], nx[1], r[0], NW, NH)
-    client = Node('client', 'client', 'ModUiClient', ['client.pedalboards', 'client.device · .banks'], nx[1], r[1], NW, NH, focal=True)
+    client = Node('client', 'client', 'ModUiClient', ['.pedalboards · .banks', '.device · .system · .config'], nx[1], r[1], NW, NH, focal=True)
     chan = Node('chan', 'client', 'EventChannel', ['WebSocket · replay', 'waitFor() · reconnect'], nx[1], r[2], NW, NH)
     web = Node('web', 'http', 'Webserver', ['webserver.py · Tornado', 'handlers · /websocket'], nx[2], r[0], NW, NH)
     host = Node('host', 'backend', 'Session + Host', ['session.py · host.py', 'owns the running state'], nx[2], r[1], NW, NH)
@@ -128,7 +128,7 @@ def d_device():
     ref = at(Ent('ref', 'stub', 'PedalboardReference', note='pedalboard diagram', w=224), C[0], 48)
     dev = at(Ent('dev', 'class', 'Device', sub='client.device', focal=True, w=224,
                  fields=['stats · sysStats', 'transport · bufferSize', 'trueBypass · snapshot'],
-                 ops=['load(target)', 'loadDefault() · reset()', 'on(event) · once(event)']), C[1], 48)
+                 ops=['load(target)', 'loadDefault() · reset()', 'setBufferSize(BufferSize)', 'setTrueBypass({ left, right })', 'resetXruns() · switchCpuFrequency()', 'on(event) · once(event)']), C[1], 48)
     cp = at(Ent('cp', 'stub', 'CurrentPedalboard', note='current pedalboard diagram', w=224), C[2], 48)
     y2 = dev.b + 88
     lr = at(Ent('lr', 'data', 'LoadResult', fields=['bundlepath: string', 'name: string', 'snapshotId: number'], w=224), C[0], y2)
@@ -351,6 +351,54 @@ def d_banks():
                 ents=ents, conns=conns, callouts=callouts, kinds=['class', 'wire', 'stub', 'focal'], lines=['own', 'ref'], W=960)
 
 
+def d_system():
+    info = at(Ent('info', 'wire', 'SystemInfo', sub='GET /system/info', w=224,
+                  fields=['release · controller: string', 'hwname · model · platform', 'uptime: number | null', 'uname · python', 'host?: MOD Desktop only']), C[0], 48)
+    api = at(Ent('api', 'class', 'SystemApi', sub='client.system', focal=True, w=224, ops=['info()', 'ping() → online, roundTripMs', 'settings.get()', 'danger']), C[1], 48)
+    danger = at(Ent('danger', 'class', 'SystemDanger', sub='client.system.danger', w=224,
+                    ops=['settings.set(patch)', 'startHmiUpdate()', 'reboot() · restoreFactory()', 'backup.export · import(opts)', 'cleanup(options)', 'saveUserId(user)', 'uploadControlChainFirmware()', 'cancelControlChainUpdate()']), C[2], 48)
+    y2 = max(api.b, info.b, danger.b) + 88
+    sett = at(Ent('sett', 'data', 'SystemSettings', sub='GET /system/prefs', w=224,
+                  fields=['bluetoothName: string', 'jackBufferSize: number', 'jackMonoCopy · jackSyncMode', 'separateSpdifOuts · autorestartHmi', 'modPeakmeter · modSdk · netmanager']), C[1], y2)
+    clean = at(Ent('clean', 'data', 'CleanupOptions', sub='POST /system/cleanup', w=224,
+                   fields=['banks · favorites', 'hmiSettings · licenseKeys', 'pedalboards · plugins']), C[2], y2)
+    ents = [info, api, danger, sett, clean]
+    conns = [
+        Conn(api, 'L', info, 'R', 'ref', at_a=78, at_b=78, label='info()', lside='B'),
+        Conn(api, 'R', danger, 'L', 'own', at_a=78, at_b=78, ca='1', cb='1', label='danger', lside='B'),
+        Conn(api, 'B', sett, 'T', 'ref', at_a=api.cx, at_b=sett.cx, label='settings.get()', lside='R'),
+        Conn(danger, 'B', clean, 'T', 'ref', at_a=danger.cx, at_b=clean.cx, label='cleanup()', lside='R'),
+    ]
+    callouts = [(C[0], y2 + 20, ['Everything in danger can lose data,', 'stop the device or change its owner.', 'Ask a person first; AI tools must', 'always confirm with a human.'])]
+    return dict(slug='domain-system', title='System', eyebrow='Data model · system',
+                h1='The device itself, and the operations that need a person',
+                desc='SystemApi reads the device information, pings the HMI and reads the system settings; everything that changes the system or deletes data is behind SystemDanger, which must only be called after a person confirmed.',
+                ents=ents, conns=conns, callouts=callouts, kinds=['class', 'wire', 'data', 'focal'], lines=['own', 'ref'], W=960)
+
+
+def d_config():
+    capi = at(Ent('capi', 'class', 'ConfigApi', sub='client.config', w=224, fields=['mod: ModConfig', 'app: AppConfig']), C[0], 48)
+    mod = at(Ent('mod', 'class', 'ModConfig', sub='client.config.mod', w=224, ops=['getAll() → ModConfigData', 'get(key)', 'set(key, value)']), C[1], 48)
+    key = at(Ent('key', 'data', 'ModConfigKey', sub='enum: the keys mod-ui owns', w=224,
+                 fields=['dev-mode: on | off', 'plugins-folded · show-labs-plugins', 'pb-view-mode: grid | list', 'cloud-terms-accepted', 'update-channel: stable | testing']), C[2], 48)
+    y2 = max(capi.b, mod.b, key.b) + 88
+    app = at(Ent('app', 'class', 'AppConfig', sub='client.config.app', focal=True, w=224,
+                 fields=['at most 10 KiB of JSON'], ops=['getAll() · get(key)', 'set(key, value)', 'delete(key)', 'replaceAll(values)']), C[0], y2)
+    pref = at(Ent('pref', 'wire', 'Preferences', sub='GET /config/get · POST /config/set', w=224,
+                  fields=['key → value (text)', 'modui-client: JSON text', 'api-key, secret: never sent']), C[1], y2)
+    ents = [capi, mod, key, app, pref]
+    conns = [
+        Conn(capi, 'R', mod, 'L', 'own', at_a=60, at_b=60, ca='1', cb='1', label='mod', lside='B'),
+        Conn(capi, 'B', app, 'T', 'own', at_a=capi.cx, at_b=app.cx, ca='1', cb='1', label='app', lside='R'),
+        Conn(mod, 'R', key, 'L', 'ref', at_a=60, at_b=60, label='keys', lside='B'),
+        Conn(app, 'R', pref, 'L', 'ref', at_a=y2 + 30, at_b=y2 + 30, label='one key', lside='B'),
+    ]
+    callouts = [(C[2], y2 + 8, ['Not secret: anyone who can reach', 'the device reads it, and it is sent', 'again with every page load.'])]
+    return dict(slug='domain-config', title='Configuration', eyebrow='Data model · configuration',
+                h1="Two kinds of preferences: mod-ui's and your application's",
+                desc='ConfigApi separates ModConfig, the typed preferences that mod-ui reads, from AppConfig, a JSON object of at most 10 KiB that an application keeps in the single preference modui-client.',
+                ents=ents, conns=conns, callouts=callouts, kinds=['class', 'wire', 'data', 'focal'], lines=['own', 'ref'], W=960)
+
 def d_overview():
     X = [36, 276, 516, 756]
     Y = [48 + k * 144 for k in range(4)]
@@ -390,4 +438,4 @@ def d_overview():
 
 
 # order = order of the gallery (index.html)
-SPECS = [architecture, d_overview, d_pedalboard, d_bundle, d_device, d_current, d_plugin, d_plugin_gui, d_patch, d_presets, d_snapshots, d_banks, d_files]
+SPECS = [architecture, d_overview, d_pedalboard, d_bundle, d_device, d_current, d_plugin, d_plugin_gui, d_patch, d_presets, d_snapshots, d_banks, d_files, d_system, d_config]

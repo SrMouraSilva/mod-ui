@@ -164,6 +164,30 @@ export class DeviceState {
     });
   }
 
+  /** The buffer size that the backend answered to a write: applied like the `bufsize` frame (a repeated value emits nothing). */
+  applyBufferSize(frames: number): void {
+    if (frames !== this.bufferSize?.frames) {
+      this.bufferSize = { frames };
+      this.emitter.emit('bufferSize', this.bufferSize);
+    }
+  }
+
+  /**
+   * The true bypass that the backend accepted. Applied on top of the last known value; when none is known yet the frame that the
+   * backend sends (the replay of a connection) will give the other channel, so nothing is invented.
+   */
+  applyTrueBypass(change: Partial<TrueBypassEvent>): void {
+    const last = this.trueBypass;
+    if (!last) {
+      return;
+    }
+    const next: TrueBypassEvent = { left: change.left ?? last.left, right: change.right ?? last.right };
+    if (next.left !== last.left || next.right !== last.right) {
+      this.trueBypass = next;
+      this.emitter.emit('trueBypass', next);
+    }
+  }
+
   on<K extends keyof DeviceEvents>(event: K, handler: (event: DeviceEvents[K]) => void, options?: ListenOptions): Unsubscribe {
     return this.emitter.on(event, handler, options);
   }

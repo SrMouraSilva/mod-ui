@@ -403,3 +403,79 @@ export interface PresetSaveResponse {
   /** URI of the saved preset (only when `ok`). */
   uri?: string;
 }
+
+// ---------------------------------------------------------------------------------------------------------------------
+// System
+// ---------------------------------------------------------------------------------------------------------------------
+
+/** What the Desktop launcher logged (schema `SystemHostInfo.launcher`). */
+export interface SystemLauncherInfo {
+  /** Command line of the last `Starting jackd using:` line. */
+  jackd: string | null;
+  /** Up to 12 lines about problems since the last audio start. */
+  problems: string[];
+  /** Path of `launcher.log`, home folder shown as `~`. */
+  path: string;
+}
+
+/** The computer mod-ui runs on (schema `SystemHostInfo`). Present only on MOD Desktop. Every probe is `null` when it could not be made. */
+export interface SystemHostInfo {
+  os: string | null;
+  cpu: string | null;
+  /** Installed memory, in GB. */
+  memory_gb: number | null;
+  /** Seconds since the computer booted. */
+  uptime: number | null;
+  python: string;
+  /** Buffer size of the audio engine, in frames. */
+  buffer_size: number;
+  /** Sample rate of the audio engine, in Hz. */
+  sample_rate: number;
+  launcher: SystemLauncherInfo | null;
+}
+
+/**
+ * `GET /system/info` (schema `SystemInfo`). The names are the backend's. Values are `"Unknown"` when not available.
+ * On a MOD device `host` is absent; on MOD Desktop it describes the computer.
+ */
+export interface SystemInfo {
+  release: string;
+  controller: string;
+  /** Seconds since boot. */
+  uptime: number | null;
+  hwname: string;
+  architecture: string;
+  cpu: string;
+  platform: string;
+  bin_compat: string;
+  model: string;
+  sysdate: string;
+  python: { version: string };
+  uname: { machine: string; release: string; sysname: string; version: string };
+  host?: SystemHostInfo;
+}
+
+/** `GET /system/prefs` answer (schema `SystemPreferences`), the backend's names. */
+export interface SystemPreferencesResponse {
+  bluetooth_name: string;
+  jack_buffer_size: number;
+  jack_mono_copy: boolean;
+  jack_sync_mode: boolean;
+  separate_spdif_outs: boolean;
+  service_mod_peakmeter: boolean;
+  service_mod_sdk: boolean;
+  service_netmanager: boolean;
+  autorestart_hmi: boolean;
+}
+
+/** `GET /ping` answer. */
+export interface PingResponse {
+  ihm_online: boolean;
+  ihm_time: number;
+}
+
+/** `{ ok, error }` answer of the `backup-*` commands and `POST /system/cleanup` (schema `OkErrorResult`). */
+export interface OkErrorResponse {
+  ok: boolean;
+  error?: string;
+}

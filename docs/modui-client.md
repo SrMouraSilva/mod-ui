@@ -13,8 +13,8 @@ backend has *really* finished them (for example, until a pedalboard is fully loa
 - **Plan / roadmap**: [`docs/plans/2026-10-modui-client-pedalboard.md`](plans/2026-10-modui-client-pedalboard.md);
   live editing (plugins, connections): [`docs/plans/2026-10-modui-client-pedalboard-graph.md`](plans/2026-10-modui-client-pedalboard-graph.md)
 
-Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, delete, reorder, add / remove / move pedalboards), the **presets** of a plugin instance (list, load, create, save, delete), the **GUI files of a plugin** (`plugin.gui`: thumbnail, screenshot and modgui URLs and texts) and the user's **files** (`client.files.list`), plus raw WebSocket access.
-Plan of snapshots and banks: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md); of the plugin GUI files: [`docs/plans/2026-10-modui-client-plugin-assets.md`](plans/2026-10-modui-client-plugin-assets.md).
+Current scope: **pedalboards** (list, info, copy, delete, images, load, load default, reset, get / save / save-as of the running pedalboard), **live editing of the running pedalboard** (installed plugins; list / add / remove its plugins; list / connect / disconnect its connections; its own ports), the pedalboard's **snapshots** (list, save, save-as, load, rename, remove) and the device's **banks** (list, create, rename, delete, reorder, add / remove / move pedalboards), the **presets** of a plugin instance (list, load, create, save, delete), the **GUI files of a plugin** (`plugin.gui`: thumbnail, screenshot and modgui URLs and texts) the user's **files** (`client.files.list`), the **system** (`client.system`: information, ping, system settings, and the dangerous operations behind `client.system.danger`), the **audio engine's** writes (`client.device.setBufferSize`, `setTrueBypass`, `resetXruns`, `switchCpuFrequency`) and the **preferences** (`client.config.mod` for mod-ui's, `client.config.app` for your application's), plus raw WebSocket access.
+Plan of snapshots and banks: [`docs/plans/2026-10-modui-client-snapshots-banks.md`](plans/2026-10-modui-client-snapshots-banks.md); of the plugin GUI files: [`docs/plans/2026-10-modui-client-plugin-assets.md`](plans/2026-10-modui-client-plugin-assets.md); of the system and the preferences: [`docs/plans/2026-10-modui-client-system.md`](plans/2026-10-modui-client-system.md).
 
 ---
 
@@ -430,7 +430,86 @@ await instance.patchParams.get(sampleUri).setValue(samples[0].fullname);
 - `client.files.list()` is never cached (the user can add files at any time) and makes no request for an empty list of types. A path parameter's types are
   `patchParam.fileTypes`. Upload is not covered yet.
 
-### 1.19 Listen to raw WebSocket messages
+### 1.19 The audio engine and the system
+
+The engine's own settings are methods of `client.device`, beside the values it reports; what the device *is* and its system settings are in `client.system`.
+
+```js
+import { BufferSize } from 'modui-client';
+
+await client.device.setBufferSize(BufferSize.Frames256);          // an enum: 128 or 256, anything else is refused before a request
+await client.device.setTrueBypass({ left: true, right: true });   // the channels you give; device.trueBypass follows the answer
+await client.device.resetXruns();                                 // the next 'stats' event carries xruns: 0
+await client.device.switchCpuFrequency();                         // shows in device.sysStats.cpuFreqKhz
+
+const info = await client.system.info();                          // release, hwname, uptime, ...; info.host only on MOD Desktop
+const { online, roundTripMs } = await client.system.ping();       // does the HMI answer?
+const settings = await client.system.settings.get();              // { bluetoothName, jackMonoCopy, modSdk, ... }
+```
+
+- `setBufferSize` and `setTrueBypass` do **not** wait for the `bufsize` / `truebypass` frame: the HTTP answer already says what happened (`{ ok, size }`, `true`), the client
+  applies it to `device.bufferSize` / `device.trueBypass`, and the frame that follows changes nothing because a repeated value emits no event.
+- `ping()` waits up to 5 s for the HMI. `online` is `false` on a device without an initialised HMI and on MOD Desktop.
+
+#### Danger: `client.system.danger`
+
+> **Warning.** Everything in `client.system.danger` can lose data, stop or reboot the device, change what runs on it or change who it belongs to.
+>
+> - **AI tools** (LLM agents, MCP servers, code assistants) **must ask a human to confirm, every single time**, before calling anything in `client.system.danger` or the
+>   endpoints behind it (`POST /system/exechange`, `POST /system/cleanup`, `POST /save_user_id/`, `POST /controlchain/*`). An earlier "yes" in the conversation does not cover
+>   the next call, and "let me test it" is not a reason.
+> - **Applications** built on `modui-client` **must always ask the user explicitly** before calling it, for example with a confirmation modal that says what is about to
+>   happen (and, for `cleanup`, what will be deleted).
+
+```js
+// only after a person confirmed it (a modal that lists what will be deleted)
+await client.system.danger.cleanup({ banks: true, favorites: true });      // refuses an empty selection before any request
+await client.system.danger.settings.set({ bluetoothName: 'My pedal', jackMonoCopy: true, modSdk: false });
+await client.system.danger.backup.export({ data: true, pedalboards: true });
+await client.system.danger.reboot();                                       // the connection is lost: use the `reconnect` option
+await client.system.danger.saveUserId({ name: 'Ana', email: 'ana@example.com' });   // write only: the backend has no read
+```
+
+| Method | What it can do |
+|---|---|
+| `settings.set(patch)` | creates / removes marker files, writes small files under `/data`, starts and stops services (one request per key, in order; an earlier key stays applied if a later one fails) |
+| `startHmiUpdate()` | starts the update of the HMI firmware |
+| `reboot()` · `restoreFactory()` | reboots the device · restores the factory system |
+| `backup.export(opts)` · `backup.import(opts)` | writes a backup · **overwrites** data and pedalboards and restarts services |
+| `cleanup(options)` | **deletes** banks, favourites, license keys, pedalboards, plugins, HMI settings for good, and restarts mod-ui |
+| `saveUserId(user)` | overwrites the user's name and e-mail |
+| `uploadControlChainFirmware(blob)` · `cancelControlChainUpdate()` | stores / discards a firmware that is flashed to a Control Chain device |
+
+`poweroff`, which the classic settings page sends, is not known by the backend and is not exposed.
+
+### 1.20 Preferences: `client.config`
+
+The preferences of the device are split in two, so it is clear whose they are.
+
+```js
+import { ModConfigKey } from 'modui-client';
+
+// mod-ui's own interface preferences: a fixed set of keys, with the values checked
+await client.config.mod.set(ModConfigKey.PedalboardsViewMode, 'list');
+const { [ModConfigKey.DevMode]: devMode } = await client.config.mod.getAll();   // { 'dev-mode'?: 'on' | 'off', ... }; absent = never set
+
+// your application's settings: any JSON, kept on the device (every browser sees it)
+await client.config.app.set('zoom', 2);
+await client.config.app.set('layout', { left: ['gain'], right: [] });
+const { zoom } = await client.config.app.getAll();
+await client.config.app.delete('zoom');
+```
+
+- `config.mod` is **specific to mod-ui**: only the keys of the `ModConfigKey` enum exist, with typed values. The backend never sends keys with `api-key`, `api_key`, `apikey` or `secret`
+  in their name, and the settings the hardware keeps for itself (`tuner-*`, `display-brightness`, ...) are not exposed.
+- `config.app` is **yours**. The client keeps it in one preference, `modui-client` (a JSON object as text), so it cannot clash with mod-ui's; the class hides that.
+  It is limited to **10 KiB** (`APP_CONFIG_MAX_BYTES`): every write checks the size first and throws `ModUiConfigTooLargeError` (with `size` and `limit`) without sending anything
+  (`delete` is never refused, so an oversized object can shrink). The preferences are sent again with every page load, which is why it must stay small.
+- **Not secret.** Anyone who can reach the device reads `config.app` (`GET /config/get`, the HTML of the UI). Never store a password or a token.
+- A write reads the whole object, changes one key and writes it back, in a queue private to the client. Two browsers writing at the same moment can overwrite each other
+  (last write wins); no frame tells you that somebody else wrote.
+
+### 1.21 Listen to raw WebSocket messages
 
 Everything above is built on `client.events`, which you can also use directly.
 
@@ -443,7 +522,7 @@ await client.connect();
 off();
 ```
 
-### 1.20 Notes
+### 1.22 Notes
 
 - `PatchParam.setValue()` is also fire-and-forget (`patch_set`, not confirmed to the sender); `refresh()` is the only call
   with an answer (`patch_get` → `patch_set` to every socket). It waits outside the device queue, so a silent plugin does not
@@ -503,6 +582,8 @@ modui-client/
 │   ├── plugins.ts       # PluginsApi (client.device.plugins), Plugin
 │   ├── plugin-gui.ts    # PluginGui (plugin.gui): modgui, image and resource URLs and texts; GuiAssets (internal cache)
 │   ├── files.ts         # FilesApi (client.files): the user's files
+│   ├── system.ts        # SystemApi (client.system), SystemDanger (client.system.danger), SystemBackup
+│   ├── config.ts        # ConfigApi (client.config), ModConfig, AppConfig, ModConfigKey
 │   ├── pedalboard-plugins.ts      # PedalboardPlugins (currentPedalboard.plugins)
 │   ├── pedalboard-connections.ts  # PedalboardConnections, PedalboardPorts, PedalboardPortGroup (currentPedalboard.connections / .ports)
 │   ├── pedalboard-graph.ts        # PluginInstance, Port, PedalboardConnection + the internal engine
@@ -518,7 +599,7 @@ modui-client/
 │   ├── device-state.ts  # DeviceState (internal), DeviceEvents: stats, transport, ... (client.device.on)
 │   ├── events.ts        # EventChannel (connection state, reconnection), MessageHandler, Waiting, ConnectionState, StateEvent, ReconnectOptions
 │   ├── http.ts          # HttpTransport (internal)
-│   ├── errors.ts        # ModUiError, ModUiHttpError, ModUiTimeoutError
+│   ├── errors.ts        # ModUiError, ModUiHttpError, ModUiTimeoutError, ModUiConfigTooLargeError
 │   ├── types.ts         # wire types (mirror docs/openapi.yml schemas) + LoadOptions/LoadResult
 │   └── runtime.ts       # FetchLike, WebSocketLike, WebSocketFactory
 └── test/
@@ -531,6 +612,9 @@ modui-client/
     ├── plugins.test.ts
     ├── plugin-gui.test.ts
     ├── files.test.ts
+    ├── system.test.ts
+    ├── config.test.ts
+    ├── device-writes.test.ts
     ├── pedalboard-graph.test.ts
     ├── patch-params.test.ts
     ├── pedalboard-snapshots.test.ts
@@ -577,6 +661,8 @@ all with the web fonts. All diagrams use the same notation:
 | **PatchParam** | A typed value of an instance that is not a port (string, path, URI, ...) | `instance.patchParams` | [4.7](#47-patch-parameters) |
 | **Preset** | A named set of the port values of one plugin | `instance.presets` | [4.8](#48-plugin-presets) |
 | **Snapshot** | A saved set of values of the whole pedalboard | `currentPedalboard.snapshots` | [4.9](#49-pedalboard-snapshots) |
+| **SystemApi** | The device itself; its operations that need a person are in `SystemDanger` | `client.system`, `client.system.danger` | [4.13](#413-system) |
+| **ConfigApi** | The preferences: mod-ui's (`ModConfig`) and your application's (`AppConfig`) | `client.config` | [4.14](#414-configuration) |
 
 Read it as sentences: a *bank* holds *pedalboards*; the *device* loads a pedalboard, lists the installed *plugins* and runs the *current pedalboard*;
 the current pedalboard has *snapshots*, *connections* and *plugin instances*; an instance is an instance of a *plugin* and has *params*, *patch params* and *presets*.
@@ -601,7 +687,7 @@ What `GET /pedalboard/info/` returns for a saved pedalboard. The server sends no
 
 ![Device: owns the running pedalboard and the plugin catalogue, loads pedalboards and returns a LoadResult, and keeps the last values the device reported](modui-client/diagrams/domain-device.svg)
 
-`Device` is the root of everything that is *running*. `load()` resolves with a `LoadResult` once the backend confirmed it (5.1). The reports (`stats`, `transport`, ...)
+`Device` is the root of everything that is *running*, and holds the writes of the audio engine next to the values it reports (`setBufferSize(BufferSize)`, `setTrueBypass`, `resetXruns`, `switchCpuFrequency`: 1.19). `load()` resolves with a `LoadResult` once the backend confirmed it (5.1). The reports (`stats`, `transport`, ...)
 are periodic or change-driven, are kept as last values, and are seeded by the state replay, so a late subscriber can read them (1.14). Every operation that changes the
 running pedalboard goes through the device's queue (section 6).
 
@@ -626,7 +712,7 @@ still unknown has `info === null`. `plugin.gui` (`PluginGui`) gives the URLs and
 ![Patch parameters: a plugin instance exposes PluginPatchParams; each PatchParam has a type and a live value and is built from the parameter description in PluginInfo](modui-client/diagrams/domain-patch-params.svg)
 
 Typed values that are not control ports: strings, file paths, URIs, booleans, integers (1.8). `setValue()` is validated by type and is fire-and-forget (`patch_set`);
-`refresh()` asks the plugin (`patch_get`) and waits for its answer (1.20).
+`refresh()` asks the plugin (`patch_get`) and waits for its answer (1.22).
 
 ### 4.8 Plugin presets
 
@@ -661,6 +747,19 @@ that `PluginsApi` owns and every `PluginGui` shares; `get()` consults the (cache
 ![User files: FilesApi lists UserFile values by type; the types a path parameter accepts are the fileTypes of its PatchParam](modui-client/diagrams/domain-files.svg)
 
 Samples, impulse responses and models the user put on the device. `client.files.list(types)` is never cached; the types of a path parameter are its `fileTypes` (1.18).
+
+### 4.13 System
+
+![System: SystemApi reads the device information, pings the HMI and reads the system settings; everything that changes the system or deletes data is behind SystemDanger, which must only be called after a person confirmed](modui-client/diagrams/domain-system.svg)
+
+`SystemApi` only reads (`info()`, `ping()`, `settings.get()`). Everything that writes to the system, deletes data or flashes firmware is one level down, in `SystemDanger` (`client.system.danger`),
+so that using it is always a visible decision (1.19, and read the warning there). The audio engine's writes (`setBufferSize`, `setTrueBypass`, `resetXruns`, `switchCpuFrequency`) are in `Device`, next to the values they change (4.4).
+
+### 4.14 Configuration
+
+![Configuration: ConfigApi separates ModConfig, the typed preferences that mod-ui reads, from AppConfig, a JSON object of at most 10 KiB that an application keeps in the single preference modui-client](modui-client/diagrams/domain-config.svg)
+
+`ModConfig` is what mod-ui itself reads (the keys of the `ModConfigKey` enum); `AppConfig` is what the application keeps, stored as JSON text in the single preference `modui-client` and limited to 10 KiB (1.20).
 
 ---
 
@@ -1103,6 +1202,9 @@ sequenceDiagram
 - **Await the backend's confirmation** when it arrives over the WebSocket: register `events.waitFor()` *before*
   the HTTP call and cancel it on failure.
 - **Serialize operations that change the running pedalboard** through `Device`'s internal queue (`load`, `reset`, and everything in `currentPedalboard`).
+- **Dangerous operations go in `client.system.danger`** (anything that reboots, deletes, flashes, overwrites or starts and stops services). A new one never lands in `client.system` or `client.device`.
+  Its TSDoc says "Danger: ask a person to confirm first", and the guide, the README and `docs/openapi.yml` say that AI tools must always confirm with a human and applications with the user.
+- **Free-form values are enums**: where the backend accepts a closed set (`BufferSize`, `ModConfigKey` and its values), the client takes the enum and checks it again at run time for JavaScript callers.
 - **Reject, do not throw**: public methods return rejected promises for bad arguments, never synchronous exceptions.
 - **Guard destructive calls in the client** (`PedalboardReference.delete()` refuses factory and default pedalboards) because the backend does not validate paths.
 - **Remember the backend conventions** (see `docs/openapi.yml`): many handlers answer `200` with a bare
@@ -1206,3 +1308,5 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
   while such a plugin is rebuilt keeps the old files until the client is created again (or the plugin version changes). `plugins.clearGuiCache()` forgets the texts, not the browser's copies.
 - `plugin.gui.get()` / `getAll()` need the plugin to be installed (they read its description first) and ask for the file names there: the summary of `GET /effect/list` does not say which files a plugin has.
 - A thumbnail URL is a snapshot: after another client regenerates the images, call `status()` (or `generate()`) on a reference to learn the new creation time, otherwise the URL may still hit the browser's one-year cache.
+- System: `setBufferSize` and `setTrueBypass` apply the backend's answer without waiting for the `bufsize` / `truebypass` frame (it is not guaranteed when nothing changed). `settings.set` is one `exechange` request per key, so a failure in the middle leaves the earlier keys applied; most settings only act at the next boot. `exechange` and `cleanup` write to `/data` and run `systemctl`: do not run them against a development host. The classic page also sends `cmd=poweroff`, which the backend answers with `false`; it is not exposed. Nothing in `client.system.danger` was checked against a real device.
+- Configuration: `config.app` is last-write-wins across browsers (read, change, write whole), has no change event, is not secret and is limited to 10 KiB by the client only (the backend does not enforce it). `config.mod` exposes six keys; the preferences the hardware keeps in the same file are not readable through it. `saveUserId` has no read: the backend only embeds the name and e-mail in the HTML of `/`.

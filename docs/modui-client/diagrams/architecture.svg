@@ -13,7 +13,7 @@ flowchart LR
   end
   subgraph MODUICLIENT["MODUI-CLIENT"]
     http["HttpTransport<br/>fetch · JSON<br/>non-2xx = HttpError"]
-    client["ModUiClient<br/>client.pedalboards<br/>client.device · .banks"]
+    client["ModUiClient<br/>.pedalboards · .banks<br/>.device · .system · .config"]
     chan["EventChannel<br/>WebSocket · replay<br/>waitFor() · reconnect"]
   end
   subgraph MODUISERVER["MOD-UI SERVER"]
@@ -103,8 +103,8 @@ flowchart LR
 <rect x="320" y="240" width="20" height="12" rx="2" fill="transparent" stroke="rgba(168,78,10,0.50)" stroke-width="0.8"/>
 <text x="330.0" y="249" fill="#a84e0a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">TS</text>
 <text x="392.0" y="272" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">ModUiClient</text>
-<text x="392.0" y="288" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">client.pedalboards</text>
-<text x="392.0" y="302" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">client.device · .banks</text>
+<text x="392.0" y="288" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">.pedalboards · .banks</text>
+<text x="392.0" y="302" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">.device · .system · .config</text>
 </g>
 <g>
 <rect x="312" y="352" width="160" height="80" rx="6" fill="#f5f5f5"/>

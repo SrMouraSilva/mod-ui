@@ -7,6 +7,7 @@
  */
 
 import { BanksApi } from './banks';
+import { ConfigApi } from './config';
 import { Emitter, type ListenOptions, type Unsubscribe } from './emitter';
 import { Device } from './device';
 import { ModUiError } from './errors';
@@ -18,6 +19,7 @@ import type { ErrorEvent } from './pedalboard-events';
 import { PedalboardsApi } from './pedalboards';
 import { PluginsApi } from './plugins';
 import type { FetchLike, WebSocketFactory, WebSocketLike } from './runtime';
+import { SystemApi } from './system';
 
 /** Options of {@link ModUiClient}. All are optional in a mod-ui page. */
 export interface ModUiClientOptions {
@@ -90,6 +92,10 @@ export class ModUiClient {
   readonly banks: BanksApi;
   /** The files the user put on the device (samples, impulse responses, models). */
   readonly files: FilesApi;
+  /** The device itself: what it is, its system settings and (in `system.danger`) the operations that need a person's decision. */
+  readonly system: SystemApi;
+  /** The preferences kept on the device: `config.mod` (mod-ui's own) and `config.app` (your application's). */
+  readonly config: ConfigApi;
   /** Main WebSocket: raw subscriptions and waits. */
   readonly events: EventChannel;
 
@@ -117,6 +123,8 @@ export class ModUiClient {
     this.pedalboards = new PedalboardsApi(http);
     this.banks = new BanksApi(http, this.pedalboards);
     this.files = new FilesApi(http);
+    this.system = new SystemApi(http);
+    this.config = new ConfigApi(http);
     this.device = new Device(http, this.events, this.pedalboards, new PluginsApi(http), options.loadTimeoutMs ?? 60000, {
       confirmTimeoutMs: options.graphTimeoutMs ?? 10000,
       schedule: () => options.schedule ?? defaultSchedule,

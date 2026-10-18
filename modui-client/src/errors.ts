@@ -34,3 +34,15 @@ export class ModUiTimeoutError extends ModUiError {
     this.name = 'ModUiTimeoutError';
   }
 }
+
+/** A write to `client.config.app` would make its JSON larger than the limit (10 KiB); nothing was sent. */
+export class ModUiConfigTooLargeError extends ModUiError {
+  /**
+   * @param size Size in bytes that the JSON would have.
+   * @param limit Largest size allowed, in bytes.
+   */
+  constructor(readonly size: number, readonly limit: number) {
+    super(`The application settings would take ${size} bytes; the limit is ${limit} bytes`);
+    this.name = 'ModUiConfigTooLargeError';
+  }
+}

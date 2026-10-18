@@ -83,7 +83,15 @@ tags:
     description: >-
       Real-time channels. See the description of each operation for the complete message catalogue.
   - name: System
-    description: Device information, preferences, maintenance commands and audio engine settings.
+    description: |
+      Device information, preferences, maintenance commands and audio engine settings.
+
+      **Dangerous operations** (marked "Danger" in their description): `POST /system/exechange`, `POST /system/cleanup`,
+      `POST /save_user_id/` and the Control Chain firmware calls of the `Updates` tag. They reboot the device, delete user data, start
+      and stop services, write system files, flash firmware or overwrite the identity of the user. **An AI tool (LLM agent, MCP server,
+      code assistant) must always ask a human to confirm before calling them**, every time. An application that calls them must ask
+      the user explicitly (for example with a confirmation modal that says what will happen). In `modui-client` they live in
+      `client.system.danger`.
   - name: Updates
     description: Firmware (Control Chain) and MOD OS update uploads.
   - name: Plugins
@@ -591,6 +599,9 @@ paths:
       operationId: systemExecuteChange
       summary: Run a privileged maintenance action
       description: |
+        **Danger.** Reboots the device, restores the factory system, starts or stops services and writes system files. Ask a person
+        to confirm first; an AI tool must always confirm with a human.
+
         Dispatches on `type`:
 
         | `type` | Additional fields | Behaviour |
@@ -624,6 +635,9 @@ paths:
       operationId: systemCleanup
       summary: Delete user data selectively (factory-reset style)
       description: |
+        **Danger.** Deletes user data for good and restarts mod-ui. Ask a person to confirm first; an AI tool must always confirm
+        with a human.
+
         Deletes the selected data, optionally resets the HMI EEPROM and restarts services (JACK is restarted when
         pedalboards or plugins are removed; `mod-ui` always restarts). `hmiSettings` is ignored on devices whose
         hardware descriptor has no `hmi_eeprom`. If nothing is selected → `{ok:false,error:"Nothing to delete"}`.
@@ -761,6 +775,9 @@ paths:
       tags: [System]
       operationId: saveUserId
       summary: Store the user's name and e-mail
+      description: >-
+        **Danger.** Overwrites the identity of the user (it is sent with problem reports). Ask a person to confirm first; an AI tool
+        must always confirm with a human. There is no call to read it back: the name and e-mail only come embedded in the HTML of `GET /`.
       requestBody:
         required: true
         content:
@@ -776,6 +793,31 @@ paths:
           $ref: '#/components/responses/BooleanResult'
         "400":
           $ref: '#/components/responses/BadRequest'
+  /config/get:
+    get:
+      tags: [System]
+      operationId: getUserPreferences
+      summary: Read the preferences
+      description: |
+        The preferences JSON file as an object (`key` → value), the same data that `GET /` injects into the page as `preferences`.
+        Values written through `POST /config/set` are strings; the host itself also stores typed values (numbers, booleans) for its
+        own settings (`tuner-*`, `display-brightness`, `quick-bypass-mode`, ...).
+
+        Every key whose name contains `api-key`, `api_key`, `apikey` or `secret` (case-insensitive) is **left out**, e.g. `t3k-api-key`.
+        Do not store a secret under any other name: the rest is answered to anyone who can reach the device.
+
+        `modui-client` is the key the TypeScript client uses for the settings of the applications built on it (a JSON object in a
+        string, at most 10 KiB, enforced by the client only). Do not write it by hand.
+      responses:
+        "200":
+          description: The preferences without secrets.
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: true
+                examples:
+                  - { "dev-mode": "on", "plugins-folded": "false", "pb-view-mode": "grid", "modui-client": "{\"zoom\":2}" }
   /config/set:
     post:
       tags: [System]
@@ -784,8 +826,10 @@ paths:
       description: >-
         Stores `key` → `value` in the preferences JSON file (atomic write). Values are saved as received
         (strings; the frontend sends e.g. `"on"`, `"true"`). Keys used by the bundled UI include `dev-mode`,
-        `plugins-folded`, `pb-view-mode`, `cloud-terms-accepted`, `t3k-api-key`. The complete preference set is
-        injected into the pages as `preferences`.
+        `plugins-folded`, `show-labs-plugins`, `pb-view-mode`, `cloud-terms-accepted`, `update-channel`, `t3k-api-key`.
+        The complete preference set is injected into the pages as `preferences` and is read back with `GET /config/get`.
+        Do not write the typed keys of the host (`tuner-*`, `display-brightness`, ...) with this call: a string such as `"false"`
+        is truthy for the host.
       requestBody:
         required: true
         content:
@@ -892,6 +936,7 @@ paths:
       operationId: uploadControlChainFirmware
       summary: Upload a Control Chain device firmware
       description: >-
+        **Danger.** Firmware that is flashed to a device. Ask a person to confirm first; an AI tool must always confirm with a human.
         Stores the raw body as `/tmp/cc-firmware.bin`. The actual flashing is performed by an external process that
         signals completion with `SIGUSR1`, which results in a `cc-device-updated` WebSocket frame.
       requestBody:
@@ -911,7 +956,7 @@ paths:
       tags: [Updates]
       operationId: cancelControlChainUpdate
       summary: Discard an uploaded Control Chain firmware
-      description: '`false` when no firmware file exists.'
+      description: '**Danger** (part of the firmware update flow: ask a person to confirm first). `false` when no firmware file exists.'
       responses:
         "200":
           $ref: '#/components/responses/BooleanResult'

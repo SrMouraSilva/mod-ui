@@ -44,6 +44,15 @@ export class HttpTransport {
     });
   }
 
+  /** `POST path` with the bytes of `body` as an `application/octet-stream` body, decoded as JSON. */
+  postBinary<T>(path: string, body: Blob | ArrayBuffer | Uint8Array): Promise<T> {
+    return this.request<T>(this.url(path), {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: body as BodyInit,
+    });
+  }
+
   /** `POST path` with a JSON body, decoded as JSON. */
   postJson<T>(path: string, body: unknown): Promise<T> {
     return this.request<T>(this.url(path), {

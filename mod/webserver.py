@@ -2104,6 +2104,13 @@ class SwitchCpuFreq(JsonRequestHandler):
                 fh.write(next_freq)
         self.write(True)
 
+class GetConfig(JsonRequestHandler):
+    # keys that hold secrets (API keys, ...) are never sent
+    SECRET_KEY = re.compile(r"api[-_]?key|secret", re.IGNORECASE)
+
+    def get(self):
+        self.write({key: value for key, value in SESSION.prefs.prefs.items() if not self.SECRET_KEY.search(key)})
+
 class SaveSingleConfigValue(JsonRequestHandler):
     def post(self):
         key   = self.get_argument("key")
@@ -2614,6 +2621,7 @@ application = web.Application(
             (r"/favorites/add", FavoritesAdd),
             (r"/favorites/remove", FavoritesRemove),
 
+            (r"/config/get", GetConfig),
             (r"/config/set", SaveSingleConfigValue),
 
             (r"/ping/?", Ping),

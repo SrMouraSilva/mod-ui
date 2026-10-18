@@ -30,6 +30,10 @@ mod-ui is the web interface of MOD audio devices.
   Also the files of a plugin's GUI (`plugin.gui`: `getThumbnailUrl/getScreenshotUrl/getFileUrl/getCustomFileUrl/getResourceUrl`, `get/getAll`,
   `version`; `client.device.plugins.get/getDefaultTemplates/clearGuiCache`) and the user's files (`client.files.list`)
   (`docs/plans/2026-10-modui-client-plugin-assets.md`).
+  Also the device itself (`client.system`: `info`, `ping`, `settings.get`), the audio engine's writes in `client.device` (`setBufferSize(BufferSize)`,
+  `setTrueBypass`, `resetXruns`, `switchCpuFrequency`), the operations that need a person's decision in `client.system.danger` and the preferences
+  (`client.config.mod` for mod-ui's, `client.config.app` for the application's, in the single preference `modui-client`, at most 10 KiB)
+  (`docs/plans/2026-10-modui-client-system.md`).
   Cloud-related endpoints are planned under `client.cloud`.
   Developer guide with diagrams: `docs/modui-client.md`.
 - **Plugin GUIs**: `modui-plugin-view/` (sources in `src/`, tests in `test/`), renders and drives a plugin's modgui (icon, settings,
@@ -98,6 +102,15 @@ decision (confirmed or refused) in the plan of the area concerned (`docs/plans/2
 `docs/plans/2026-10-modui-client-pedalboard-graph.md`, ...). Never edit `mod/`, `modtools/` or `utils/` on your
 own for the client's sake.
 
+### Dangerous operations (read before touching `client.system.danger`)
+`client.system.danger` holds everything that reboots or restores the device, deletes user data, writes system files, starts or stops services, flashes
+firmware or overwrites the user's identity (`POST /system/exechange`, `POST /system/cleanup`, `POST /save_user_id/`, `POST /controlchain/*`).
+- **AI assistants working with this repository or with `modui-client` must never call these operations (or the endpoints behind them) without asking a human to
+  confirm, every time**, not even in tests or "to see if it works" against a real device. The tests use fakes only.
+- A new operation that can lose data, stop the device or change who it belongs to goes in `client.system.danger`, with "Danger: ask a person to confirm first" in its TSDoc and in the
+  `description` of its operation in `docs/openapi.yml`. The guide and the README tell application authors to always ask the user explicitly (for example with a confirmation modal).
+- Where the backend accepts a closed set of values, the client takes an enum (`BufferSize`, `ModConfigKey`) and checks it again at run time.
+
 ### Method names (one vocabulary for every entity)
 Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these, and give a new entity the same verbs.
 
@@ -120,7 +133,7 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
 `currentPedalboard.saveAs(title)` and `reference.copy()` stay as they are: they are the pedalboard's two ways of making a copy, not a new entity.
 
 ### TypeScript client conventions
-- One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `events.ts`, `http.ts`,
+- One module per concern in `src/` (`client.ts`, `pedalboards.ts`, `device.ts`, `system.ts`, `config.ts`, `events.ts`, `http.ts`,
   `errors.ts`, `types.ts`, `runtime.ts`, `plugins.ts`, `plugin-gui.ts`, `files.ts`, `pedalboard-*.ts`, `patch-params.ts`, `pedalboard-snapshots.ts`, `plugin-presets.ts`, `banks.ts`, `graph-state.ts`, `emitter.ts`, `snapshot.ts`, `device-state.ts`); `src/index.ts` only re-exports the public API (no side effect: it is the npm entry); `src/browser.ts` imports it and sets
   `window.ModUiClient` / `window.ModUi` (entry of the `<script>` build). New areas get their own module and test file.
 - Tests: one file per area in `test/`, sharing fakes from `test/helpers.ts` (`makeClient`, `connected`,
@@ -179,6 +192,9 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
   (`graph-state.ts`). `GET /effect/connect` of an existing connection answers `true` without a frame, and
   `GET /effect/disconnect` always answers `true` (and always sends its frame).
 - `POST /pedalboard/load_bundle/` does not clear the current graph; `/reset` does.
+- `GET /config/get` (added for the client, plan `2026-10-modui-client-system.md`) answers the preferences without the keys that contain `api-key`, `api_key`, `apikey` or `secret`.
+  Values written through `/config/set` are strings; the host also stores typed values (`tuner-*`, `display-brightness`, ...) in the same file. `POST /set_buffersize/{size}`
+  only takes 128 or 256. The classic settings page sends `cmd=poweroff` to `/system/exechange`, which the backend does not know (it answers `false`).
 
 ### General
 - Code, comments and docs in English.
