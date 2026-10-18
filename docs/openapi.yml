@@ -265,6 +265,9 @@ paths:
       description: |
         Emits one statement per file whose name matches `^[a-z_]+\.html$`:
         `TEMPLATES['<name without .html>'] = '<escaped contents>';`. Cached for a year (the URL is expected to carry `?v=`).
+
+        With `MOD_DESKTOP=1` it also emits the MOD Desktop partials of `html/include/desktop-app/` (same name rule) as
+        `TEMPLATES['desktop_app_<name without .html>']`. They are skipped on a device.
       responses:
         "200":
           description: JavaScript source.
@@ -555,6 +558,11 @@ paths:
       tags: [System]
       operationId: getSystemInfo
       summary: Software/hardware information
+      description: |
+        On a MOD device the answer describes the hardware (`hwname`, `platform`, `controller`, ...). When mod-ui runs as
+        **MOD Desktop** (`MOD_DESKTOP=1`) a computer has no hardware descriptor, release file or controller, so the answer
+        also carries a `host` object (operating system, CPU, memory, audio setup, launcher log) and the top-level `uptime`
+        is taken from `host.uptime`. `host` is absent on a device.
       responses:
         "200":
           description: System information (values are `"Unknown"` when not available).
@@ -2642,7 +2650,7 @@ components:
         controller: { type: string, description: "Controller (HMI) firmware revision." }
         uptime:
           type: [integer, "null"]
-          description: Seconds since boot.
+          description: Seconds since boot. On MOD Desktop, the same value as `host.uptime`.
         hwname: { type: string }
         architecture: { type: string }
         cpu: { type: string }
@@ -2659,8 +2667,37 @@ components:
           properties:
             machine: { type: string }
             release: { type: string }
-            sysname: { type: string }
+            sysname: { type: string, description: "Operating system name (`platform.uname().system`: `Linux`, `Darwin`, `Windows`)." }
             version: { type: string }
+        host:
+          $ref: '#/components/schemas/SystemHostInfo'
+
+    SystemHostInfo:
+      type: object
+      description: >-
+        The computer mod-ui runs on. Present only on MOD Desktop (`MOD_DESKTOP=1`), and used by the "Report a problem" text.
+        Every probe is best effort and answers `null` when it cannot. Nothing identifies the user: no hostname, no serial,
+        and the home folder is replaced by `~` in anything copied from a log.
+      properties:
+        os: { type: [string, "null"], description: "Operating system and version, e.g. `macOS 15.1 (arm64)`, `Windows 11 (build 10.0.22631, AMD64)`." }
+        cpu: { type: [string, "null"], description: "CPU model and thread count, e.g. `Apple M2, 8 threads`." }
+        memory_gb: { type: [number, "null"], description: "Installed memory in GB, one decimal." }
+        uptime: { type: [integer, "null"], description: "Seconds since the computer booted." }
+        python: { type: string, description: "Python version running mod-ui." }
+        buffer_size: { type: integer, description: "Buffer size of the audio engine, in frames." }
+        sample_rate: { type: number, description: "Sample rate of the audio engine, in Hz." }
+        launcher:
+          description: "What the Desktop launcher logged, or `null` when there is no `launcher.log`."
+          oneOf:
+            - type: "null"
+            - type: object
+              properties:
+                jackd: { type: [string, "null"], description: "Command line of the last `Starting jackd using:` line." }
+                problems:
+                  type: array
+                  description: "Up to 12 lines about problems (error, fail, xrun, warning, ...) since the last audio start, colour codes removed."
+                  items: { type: string }
+                path: { type: string, description: "Path of `launcher.log`, home folder shown as `~`." }
 
     SystemPreferences:
       type: object
@@ -3221,7 +3258,8 @@ components:
         fulltitle: { type: string, description: "HTML-escaped \"title - snapshot\"." }
         titleblend: { type: string, enum: ["", blend] }
         dev_api_class: { type: string, enum: ["", dev_api] }
-        using_desktop: { type: string, enum: ["true", "false"] }
+        using_desktop: { type: string, enum: ["true", "false"], description: "String substituted into JavaScript; both values are truthy in a template `{% if %}`, use `desktop_app` for that." }
+        desktop_app: { type: boolean, description: "`true` on MOD Desktop (`MOD_DESKTOP=1`). A real boolean, for `{% if %}` in the templates." }
         using_mod: { type: string, enum: ["true", "false"] }
         user_name: { type: string }
         user_email: { type: string }
