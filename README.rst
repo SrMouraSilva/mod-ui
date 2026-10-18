@@ -194,3 +194,10 @@ the tarballs are script builds that set ``window.ModUiClient`` and ``window.ModU
 
 To make a release of another branch, run the *modui-packages* workflow by hand (*Actions* tab, *Run workflow*). Details and the reasons for
 this layout: ``docs/plans/2026-10-modui-publishing.md``.
+
+Licence and trademarks
+----------------------
+
+mod-ui is released under the AGPL-3.0-or-later (see ``LICENSE``). That licence does not
+cover the logo. The MOD logo is a registered trademark (EU trade mark no. 016228827; UK trade mark no. UK00916228827).
+See ``TRADEMARKS.md``.
