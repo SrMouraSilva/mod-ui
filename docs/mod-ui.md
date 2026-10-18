@@ -42,15 +42,16 @@ and **Control Chain** (external pedals). It reads and writes pedalboards, banks,
 
 One code base serves two products ([`CONTRIBUTING.md`](../CONTRIBUTING.md)): **MOD OS** on the MOD Duo, Duo X and Dwarf, and **MOD Desktop** on Linux, macOS and Windows.
 It "does not depend on the hardware to run" ([`README.rst`](../README.rst)): with `MOD_DEV_HOST=1` it fakes mod-host and the HMI, so a pedalboard can be edited without audio.
+The MOD logo is a registered trademark, and the notice is kept in [`TRADEMARKS.md`](../TRADEMARKS.md); a test keeps its copies identical.
 
 | Part | Path | What it is | Size |
 |---|---|---|---|
 | Server | [`mod/`](../mod), [`server.py`](../server.py) | Tornado 4.3 webserver, session, the Host (the running pedalboard), HMI and Control Chain drivers | 16,980 lines of Python in 22 files |
 | Native bridge | [`modtools/`](../modtools), [`utils/`](../utils) | `ctypes` wrapper and the C++ library (lilv, JACK, ALSA), plus the pedalboard thumbnail renderer | 1,052 lines of Python, 7,388 of C++ |
 | Browser UI | [`html/`](../html) | Server-rendered page, 28 jQuery scripts, Mustache templates, CSS | 17,247 lines of JavaScript, 4,064 of HTML |
-| Contract | [`docs/openapi.yml`](openapi.yml) | 93 documented operations, the three sockets, the pages | 3,233 lines |
+| Contract | [`docs/openapi.yml`](openapi.yml) | 93 documented operations, the three sockets, the pages | 3,271 lines |
 | Typed client | [`modui-client/`](../modui-client), [`modui-plugin-view/`](../modui-plugin-view) | TypeScript packages on top of the contract; loaded by `index.html` but used by no classic script (section 10) | 11,053 lines of TypeScript |
-| Tests | [`test/`](../test) | A few Python `unittest` modules, a jsdom suite for the Desktop seam, a hardware integration test | 1,863 lines |
+| Tests | [`test/`](../test) | A few Python `unittest` modules, a jsdom suite for the Desktop seam, a hardware integration test | 1,905 lines |
 | Legacy | `bluetooth.py`, `hmi_debug.py`, `host_debug.py`, [`mod/old/`](../mod/old) | A Python 2 script, debugging scripts, and three modules nothing imports | about 800 lines |
 
 Which program talks to which, and who starts each conversation:
@@ -331,7 +332,7 @@ How to read it:
 | **MOD Duo** | `_MOD_DEVICE_DUO`, `MOD_SOUNDCARD=MODDUO`, HMI model `DUO`, hostname `modduo.local` | HMI schema `DUO` (6 commands: `fn`, `bc`, `n`, `si`, `ncp`, `boot`), foot-switch navigation, headphone bypass |
 | **MOD Duo X** | `_MOD_DEVICE_DUOX`, `DUOX`, `modduox.local`, `aarch64-a53` | HMI schema `DUOX` (7: `ss`, `sl`, `sc`, `pa` for pages, `s_contrast`, `exp_overcurrent`, `boot`), CV/expression modes, split S/PDIF (`has_duox_split_spdif`), the `separate-spdif-outs` setting |
 | **MOD Dwarf** | `_MOD_DEVICE_DWARF`, `DWARF`, `moddwarf.local`, `platform == "dwarf"` | HMI schema `DWARF` (2: `cs` for control sub-pages, `pa` for pages, with another argument list than the Duo X), `hmi_subpages` |
-| **MOD Desktop** | `MOD_DESKTOP=1`, `_MOD_DESKTOP`, Windows/macOS paths | no HMI, no Control Chain, no descriptor; listens on `127.0.0.1`; the Desktop seam in `desktop-app.js` |
+| **MOD Desktop** | `MOD_DESKTOP=1`, `_MOD_DESKTOP`, Windows/macOS paths | no HMI, no Control Chain, no descriptor; listens on `127.0.0.1`; the Desktop seam in `desktop-app.js`; `/system/info` adds a `host` block (computer, audio setup, launcher log) for "Report a problem" |
 | **x86-64 / development** | `_MOD_DEVICE_X86_64`, `MOD_DEV_*`, `default_x64` | a Linux PC with JACK, or no JACK with `FakeHost` |
 | **Control Chain devices** | `control_chain.py`, `hw_add` frames | external pedals discovered at run time through `/tmp/control-chain.sock` |
 
@@ -823,7 +824,7 @@ Counts are *occurrences in source text*, not executions; a `getoutput` in a rare
 
 | What | Where | Covers |
 |---|---|---|
-| Python `unittest` | `test/test_hostinfo.py`, `test/test_desktop_app.py` (8 tests) | the Desktop host report, and that the device page contains no Desktop token |
+| Python `unittest` | `test/test_hostinfo.py`, `test/test_desktop_app.py`, `test/test_trademark_notice.py` (11 tests, 2 skipped) | the Desktop host report, that the device page contains no Desktop token, and that the trademark sentence of [`TRADEMARKS.md`](../TRADEMARKS.md) is the same in the README, `CONTRIBUTING.md`, `html/img/README-TRADEMARKS.md` and `html/desktop-tou.html` |
 | HMI integration test | `test/hmi-protocol-integrationtest.py` | needs JACK, mod-host, `socat` and mod-ui running; "probably easier to run by hand" |
 | Frontend (jsdom, Node's runner) | `test/js/*.test.js` (18 tests, `jstest.yml`) | the Desktop seam and the TONE3000 scan |
 | Python 3.4 syntax gate | `tools/check_py34.py` (`pycompat.yml`) | f-strings, `async`, annotations, walrus |
