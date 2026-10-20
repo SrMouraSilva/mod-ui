@@ -158,6 +158,8 @@ export class SnapshotStore {
       case 'cleared':
         this.markAll();
         break;
+      case 'newer-format':
+        return; // not part of the snapshot: read `currentPedalboard.newerFormat`
       case 'plugin-added':
       case 'plugin-removed':
         this.pluginsDirty = true;

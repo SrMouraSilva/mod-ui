@@ -131,6 +131,7 @@ compile form, the scoped `box-sizing`.
 - A small React wrapper (`<PluginIcon instance={…} />`) as an example, not as a dependency.
 
 ## Revisions
+- **2026-10-20** — Upstream merge (PRs #200 to #202) checked. A plugin without a bypass (`info.bypassable === false`, the Buffer) gets no `.mod-switch.bypass` in the settings panel, like `html/js/pedalboard.js` now does for its settings dialog; the footswitch of the icon belongs to the plugin's template and stays. `html/js/modgui.js` did not change.
 - **2026-10-13** — Prepared for publication (`2026-10-modui-publishing.md`): `mustache.ts` and `sprintf.ts` removed in favour of the classic UI's files (`vendor.ts`), `index.ts` / `browser.ts` split, `dist/` builds.
 - **2026-10-13** — The plugin's files, URLs, version stamp and cache, and the user files, moved to `modui-client` (`plugin.gui`, `plugins.getDefaultTemplates()`,
   `client.files.list()`). Removed from the view: `assets.ts` (`AssetLoader`), the URL builders and `renderedVersion` of `urls.ts` (and their exports),

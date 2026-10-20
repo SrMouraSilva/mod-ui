@@ -605,6 +605,39 @@ describe('instance bypass: isActive(), setActive(), toggle()', () => {
   });
 });
 
+describe('a plugin without a bypass (the Buffer)', () => {
+  const bufferUri = 'http://moddevices.com/plugins/mod-devel/Buffer';
+  const bufferInfo = { ...gainInfo, uri: bufferUri, name: 'Buffer', label: 'Buffer', bypassable: false };
+
+  async function bufferDevice() {
+    const made = makeClient(routes({ 'POST /effect/bulk/': { [bufferUri]: bufferInfo, [gainUri]: gainInfo } }));
+    const socket = await connectedWith(made.client, [
+      ...hardwareFrames,
+      `add /graph/Buffer ${bufferUri} 1.0 2.0 0 1.0.0.0 0`,
+      gainFrame('/graph/Gain'),
+    ]);
+    const instances = await made.client.device.currentPedalboard.plugins.list();
+    const [buffer, gain] = instances;
+    return { ...made, socket, buffer, gain };
+  }
+
+  it('bypassable is false for it and true for the others (and while the description is unknown)', async () => {
+    const { buffer, gain } = await bufferDevice();
+    expect(buffer.bypassable).toBe(false);
+    expect(gain.bypassable).toBe(true);
+  });
+
+  it('setActive() and toggle() reject without sending anything or changing the state; isActive() still reads it', async () => {
+    const { socket, buffer } = await bufferDevice();
+
+    await expect(buffer.setActive(false)).rejects.toThrow(/no bypass/);
+    await expect(buffer.toggle()).rejects.toThrow(/no bypass/);
+
+    expect(socket.sent.filter((frame) => frame.includes(':bypass'))).toEqual([]);
+    expect(await buffer.isActive()).toBe(true);
+  });
+});
+
 describe('instance.setPosition()', () => {
   it('sends plugin_pos and x / y show the new position at once', async () => {
     const { current, socket } = await wiredDevice();

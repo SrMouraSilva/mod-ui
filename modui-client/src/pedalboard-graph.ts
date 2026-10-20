@@ -341,6 +341,10 @@ export class PluginInstance {
     return this.alive ? undefined : Promise.reject(new ModUiError(`There is no plugin "${this.instance}" in the running pedalboard`));
   }
 
+  private rejectIfNotBypassable(): Promise<never> | undefined {
+    return this.bypassable ? undefined : Promise.reject(new ModUiError(`The plugin "${this.instance}" (${this.uri}) has no bypass`));
+  }
+
   /** @internal The live state of this plugin (the last known one when it is gone). */
   liveModel(): ModelPlugin {
     return (this.alive ? this.ops.live(this.instance) : undefined) ?? this.last;
@@ -374,6 +378,17 @@ export class PluginInstance {
   }
 
   /**
+   * `false` for the plugins that mod-host implements itself and that have no bypass (the Buffer): {@link PluginInstance.setActive} and
+   * {@link PluginInstance.toggle} refuse them, because the backend ignores `:bypass` for them (and still echoes it to the other
+   * clients) and addressing it is refused. `true` for every other plugin, and while the description is not known (`info === null`).
+   * @example
+   * if (instance.bypassable) showBypassSwitch(instance);
+   */
+  get bypassable(): boolean {
+    return this.description?.bypassable !== false;
+  }
+
+  /**
    * Whether the plugin is processing audio (`true`) or bypassed (`false`). Reads the live state, after the socket is in sync.
    * @throws {ModUiError} when the plugin is not in the pedalboard (any more).
    * @example
@@ -391,7 +406,7 @@ export class PluginInstance {
    *
    * WebSocket: `param_set <instance>/:bypass <0|1>` (`1` bypasses).
    * @param options.source Marks the change as yours (see {@link Param.setValue}).
-   * @throws {ModUiError} when the plugin is not in the pedalboard.
+   * @throws {ModUiError} when the plugin is not in the pedalboard, or has no bypass ({@link PluginInstance.bypassable} is `false`).
    * @example
    * await instance.setActive(false);   // bypass
    */
@@ -399,18 +414,18 @@ export class PluginInstance {
     if (typeof active !== 'boolean') {
       return Promise.reject(new ModUiError('Expected true (on) or false (bypassed)'));
     }
-    return this.rejectIfGone() ?? this.ops.setActive(this.instance, active, options.source);
+    return this.rejectIfGone() ?? this.rejectIfNotBypassable() ?? this.ops.setActive(this.instance, active, options.source);
   }
 
   /**
    * Switches between on and bypassed and resolves with the new state (`true` = active). Announced like {@link PluginInstance.setActive}.
    * @param options.source Marks the change as yours (see {@link Param.setValue}).
-   * @throws {ModUiError} when the plugin is not in the pedalboard.
+   * @throws {ModUiError} when the plugin is not in the pedalboard, or has no bypass ({@link PluginInstance.bypassable} is `false`).
    * @example
    * const active = await instance.toggle();
    */
   toggle(options: WriteOptions = {}): Promise<boolean> {
-    return this.rejectIfGone() ?? this.ops.toggle(this.instance, options.source);
+    return this.rejectIfGone() ?? this.rejectIfNotBypassable() ?? this.ops.toggle(this.instance, options.source);
   }
 
   /**

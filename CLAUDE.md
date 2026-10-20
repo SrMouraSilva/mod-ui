@@ -17,7 +17,7 @@ mod-ui is the web interface of MOD audio devices.
   and live editing of the running pedalboard (`device.plugins.list`, `currentPedalboard.plugins` list/add/remove,
   `.connections` list/connect/disconnect, `.ports.list()` and `.ports.<audio|midi|cv>.<input()|output()>`; per instance:
   `params.list/get` + `Param.setValue`, `patchParams.list/get` + `PatchParam.setValue/refresh`, `isActive/setActive/toggle`, `setPosition`)
-  and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading events), `instance.on`, `param.on('change')`,
+  and proactive updates: `currentPedalboard.on/once` (plugin, connection, port, loading and `newerFormat` events; `currentPedalboard.newerFormat`), `instance.on`, `param.on('change')`,
   `patchParam.on('change')`, stable objects (`plugins.get`, `alive`), a `{ source }` option on every write, and the connection
   (`client.state`, `client.on('state' | 'error')`, optional `reconnect`), immutable snapshots for UI frameworks
   (`currentPedalboard.getSnapshot()` / `subscribe()`, batched per animation frame) and the device's own reports
@@ -192,6 +192,10 @@ Do not copy the backend's names (`saveas`, `save_new`, `remove`, ...); use these
   (`graph-state.ts`). `GET /effect/connect` of an existing connection answers `true` without a frame, and
   `GET /effect/disconnect` always answers `true` (and always sends its frame).
 - `POST /pedalboard/load_bundle/` does not clear the current graph; `/reset` does.
+- A plugin without a bypass (the Buffer; `PluginInfo.bypassable === false`) has its `:bypass` ignored by the host, yet the WebSocket `param_set` is still echoed to the other
+  sockets, and `/effect/parameter/address` of its `:bypass` answers `false`: the client refuses `setActive()` / `toggle()` before sending (`instance.bypassable`).
+- A pedalboard file saved on a newer MOD OS (`pedal:formatVersion` above the one this mod-ui writes, `PEDALBOARD_FORMAT_VERSION`) loads anyway; the backend sends
+  `pb_newer_format <fileFormat> <supportedFormat>` right after `size` inside the loading bracket (and in the replay of a new socket).
 - `GET /config/get` (added for the client, plan `2026-10-modui-client-system.md`) answers the preferences without the keys that contain `api-key`, `api_key`, `apikey` or `secret`.
   Values written through `/config/set` are strings; the host also stores typed values (`tuner-*`, `display-brightness`, ...) in the same file. `POST /set_buffersize/{size}`
   only takes 128 or 256. The classic settings page sends `cmd=poweroff` to `/system/exechange`, which the backend does not know (it answers `false`).
@@ -221,6 +225,14 @@ step that commits, pushes branches or publishes to the registry without asking. 
   pin the classic behaviour: `&#x2F;`, `%d` truncates, `%f` unpadded).
 - Runtime dependencies stay at none. The license file is the repository's (`prepack` copies `LICENSE`; the copy is git-ignored).
 - The packages are ES modules only (`"type": "module"`). `engines` is not set (browsers and Node >= 18 with `fetch` work; developing needs 22.12).
+
+## Skills
+
+Project skills in `.claude/skills/` for the recurring work after an upstream merge:
+
+- `upstream-sync-check`: read-only. Finds what the merge changed in the backend and the classic UI and reports whether `docs/openapi.yml`, `modui-client`,
+  `modui-plugin-view` and the guides are out of date.
+- `modui-sync-implement`: applies the changes in order (openapi, client, tests, generated docs and diagrams, plan) and verifies them.
 
 ## Plans
 

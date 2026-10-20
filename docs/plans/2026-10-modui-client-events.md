@@ -479,3 +479,9 @@ first, the time limit and the refresh expectation).
 - **2026-10-10** — Phases 3 and 4 implemented (snapshots with batched notifications, device state, plugin presets); notes added. All planned phases are done.
 - **2026-10-10** — Code review of phases 1 to 4: ten problems fixed with regression tests; Phase 2 design changed (the model is replaced when the replay
   begins, not when the socket is created).
+- **2026-10-20** — Upstream merge (PRs #200 to #202). The new `pb_newer_format <fileFormat> <supportedFormat>` frame (sent after `size`, inside the loading bracket, when a pedalboard
+  file's `pedal:formatVersion` is higher than the device writes) is a pedalboard event: `currentPedalboard.on('newerFormat')` and the live getter
+  `currentPedalboard.newerFormat` (`null` otherwise; cleared by `loading_start` and `remove :all`; the shared-socket snapshot read replays it). It is the one event delivered
+  between `loading` and `loaded`, because the application must warn the user before they save. It is not part of the immutable `getSnapshot()` (it is about the file, not the graph).
+  `PluginInfo.bypassable` (added by the backend: `false` for the Buffer) became `instance.bypassable`; `setActive()` and `toggle()` reject such a plugin before sending, because the backend now
+  ignores `:bypass` for it but still echoes the frame to the other sockets. `PedalboardInfo.formatVersion` was added to the wire type. No backend change was needed.

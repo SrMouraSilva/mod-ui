@@ -69,6 +69,24 @@ export interface LoadedEvent extends EventMeta {
   snapshotId: number;
 }
 
+/**
+ * The pedalboard being loaded was saved on a newer MOD OS than the device runs: its `pedal:formatVersion` is higher than the one the
+ * device writes. It loads and plays as usual, but saving it on this device drops what this version does not know, so tell the user.
+ * Read it with `currentPedalboard.newerFormat`, or listen to {@link NewerFormatEvent}.
+ */
+export interface NewerFormat {
+  /** `pedal:formatVersion` of the file. */
+  fileFormat: number;
+  /** The highest format the device writes. */
+  supportedFormat: number;
+}
+
+/**
+ * `newerFormat`: see {@link NewerFormat}. Delivered between `loading` and `loaded` (the one event of a load that is), and only for such
+ * a pedalboard.
+ */
+export interface NewerFormatEvent extends EventMeta, NewerFormat {}
+
 /** `cleared`: the pedalboard was emptied (`device.reset()`, `remove :all`). Individual removals are not delivered. */
 export type ClearedEvent = EventMeta;
 
@@ -95,6 +113,7 @@ export interface PedalboardEvents {
   'port:removed': PortRemovedEvent;
   loading: LoadingEvent;
   loaded: LoadedEvent;
+  newerFormat: NewerFormatEvent;
   cleared: ClearedEvent;
   error: ErrorEvent;
 }

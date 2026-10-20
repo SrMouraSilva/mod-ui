@@ -194,7 +194,7 @@ code with reserved negative numbers (`HMI_SNAPSHOTS_OFFSET = 100`).
 information and GUI files, pedalboard listing and info, the LV2 bundle set (`add_bundle_to_lilv_world`), preset scanning, JACK ports and aliases, true-bypass and master-volume
 through the ALSA mixer, the JACK buffer size and xrun counters, and a few callbacks into Python. Device selection happens here **at build time** with `-D_MOD_DEVICE_*` macros
 (section 7). `modtools/pedalboard.py` is a separate command (`python3 -m modtools.pedalboard take_screenshot …`) that renders pedalboard thumbnails with Pillow and `aggdraw`; the
-`ScreenshotGenerator` runs it as a subprocess at nice level +34.
+`ScreenshotGenerator` runs it as a subprocess at nice level +34. Since upstream PR #202 `mod/screenshot.py` first writes `screenshot-job.json` in the cache directory (the pedalboard and the data of its plugins, taken from the LV2 world that mod-ui already holds) and passes it with `--job`, so the child does not scan the LV2 world again (several seconds of lilv parsing on a device); the renderer draws at most 1920 px wide and pauses between the heavy image steps so the audio threads are not starved.
 
 ### 4.6 The imports
 
@@ -231,7 +231,7 @@ For a drawing within the nine-node budget, `tuner.py`, `tempo.py` and the leaf m
 ![Sequence: the browser posts the bundle, the Host reads it through libmod_utils, tells mod-host to add every plugin and connection while sending the same frames to every browser, then confirms with loading_end and the HTTP answer](mod-ui/diagrams/load-pedalboard.svg)
 
 The classic UI first calls `GET /reset` and then `POST /pedalboard/load_bundle/`. `Session.load_pedalboard` pauses plugin processing (`feature_enable processing 0`), `Host.load` does the work, and processing resumes.
-`Host.load` reads the bundle through `get_pedalboard_info`, announces `loading_start` and `size`, maps MIDI hardware ports by *name* (a USB device can come back with another port name),
+`Host.load` reads the bundle through `get_pedalboard_info`, announces `loading_start` and `size` (and `pb_newer_format` when the file's `pedal:formatVersion` is higher than `PEDALBOARD_FORMAT_VERSION`, 2 today; the pedalboard still loads), maps MIDI hardware ports by *name* (a USB device can come back with another port name),
 adds each plugin to mod-host and tells the browsers, connects, restores plugin state (`state_load`), loads the addressings (which also programs the HMI and Control Chain), and ends with `loading_end`.
 The figure leaves out the snapshots, the MIDI mapping and the transport, to stay within five lifelines and twelve messages.
 
@@ -271,7 +271,7 @@ Neither was run on hardware. They are the first thing to check on a device by ki
 
 | What | Where | Written by | Format |
 |---|---|---|---|
-| Pedalboards | `~/.pedalboards/<name>.pedalboard/` (`LV2_PEDALBOARDS_DIR`), factory ones in `/usr/share/mod/pedalboards` | `Host.save_state_*` | LV2 bundle: `manifest.ttl`, `<name>.ttl`, `addressings.json`, `snapshots.json`, `screenshot.png`, `thumbnail.png` |
+| Pedalboards | `~/.pedalboards/<name>.pedalboard/` (`LV2_PEDALBOARDS_DIR`), factory ones in `/usr/share/mod/pedalboards` | `Host.save_state_*` | LV2 bundle: `manifest.ttl`, `<name>.ttl` (with `pedal:formatVersion`, `pedal:version`), `addressings.json`, `snapshots.json`, `screenshot.png`, `thumbnail.png` |
 | Plugins | `~/.lv2` (`LV2_PLUGIN_DIR`) | install handlers | LV2 bundles, scanned by lilv |
 | Banks | `<DATA_DIR>/banks.json`, factory `/usr/share/mod/banks.json` | `bank.py` | JSON, written through an atomic rename |
 | Last bank and pedalboard | `<DATA_DIR>/last.json` | `bank.py` | JSON |

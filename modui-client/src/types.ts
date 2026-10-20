@@ -117,6 +117,11 @@ export interface PedalboardInfo {
   hardware: PedalboardHardware;
   timeInfo: PedalboardTimeInfo;
   version: number;
+  /**
+   * `pedal:formatVersion` of the bundle: `1` when the file has none (written up to MOD OS 1.14), `2` from MOD OS 1.15. A number higher
+   * than the one the device writes means a newer MOD OS made the file; loading it announces that with `currentPedalboard.on('newerFormat')`.
+   */
+  formatVersion: number;
 }
 
 /** Answer of `GET /pedalboard/current` (schema in `docs/openapi.yml`, operationId `getCurrentPedalboard`). */
@@ -275,6 +280,11 @@ export interface PluginInfo extends PluginSummary {
   valid: boolean;
   binary: string;
   hasExternalUI: boolean;
+  /**
+   * `false` for the plugins that mod-host implements itself and that have no bypass (the Buffer): `instance.setActive()` refuses them and the
+   * backend refuses to address their `:bypass`. Use `instance.bypassable` instead of reading this.
+   */
+  bypassable?: boolean;
   /** Textual version. */
   version: string;
   stability: string;

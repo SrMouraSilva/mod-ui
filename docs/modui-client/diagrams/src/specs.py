@@ -74,7 +74,7 @@ def d_pedalboard():
     images = at(Ent('images', 'class', 'PedalboardImages', sub='reference.images', w=224,
                     ops=['getThumbnailUrl()', 'getScreenshotUrl()', 'status() · generate()']), C[0], y3)
     info = at(Ent('info', 'wire', 'PedalboardInfo', sub='GET /pedalboard/info/', w=224,
-                  fields=['bundlepath: string (client)', 'title: string', 'width · height: number', 'factory · version', 'plugins · connections', 'hardware · timeInfo']), C[2], y3)
+                  fields=['bundlepath: string (client)', 'title: string', 'width · height: number', 'factory · version · formatVersion', 'plugins · connections', 'hardware · timeInfo']), C[2], y3)
     status = at(Ent('status', 'data', 'ImageStatus', fields=['Missing', 'Generating', 'Available'], w=224), C[0], images.b + 56)
     ents = [api, ref, bank, summary, images, info, status]
     conns = [
@@ -96,7 +96,7 @@ def d_pedalboard():
 def d_bundle():
     X = [40, 272, 504, 736]
     info = at(Ent('info', 'wire', 'PedalboardInfo', sub='GET /pedalboard/info/', focal=True, w=224,
-                  fields=['bundlepath: string (client)', 'title: string', 'width · height: number', 'factory: boolean', 'midi_separated_mode', 'midi_loopback: boolean', 'version: number']), 368, 48)
+                  fields=['bundlepath: string (client)', 'title: string', 'width · height: number', 'factory: boolean', 'midi_separated_mode', 'midi_loopback: boolean', 'version · formatVersion: number']), 368, 48)
     y2 = info.b + 104
     plugin = at(Ent('plugin', 'wire', 'PedalboardPlugin', w=184, fields=['instance: "/graph/Gain"', 'uri: string', 'bypassed: boolean', 'x · y: number', 'preset: string']), X[0], y2)
     conn = at(Ent('conn', 'wire', 'PedalboardInfoConnection', w=184, fields=['source: string', 'target: string'], sub='port ids'), X[1], y2)
@@ -155,6 +155,7 @@ def d_device():
 def d_current():
     snaps = at(Ent('snaps', 'stub', 'PedalboardSnapshots', note='snapshots diagram', w=224), C[0], 48)
     cp = at(Ent('cp', 'class', 'CurrentPedalboard', sub='client.device.currentPedalboard', focal=True, w=256,
+                fields=['newerFormat: NewerFormat | null'],
                 ops=['plugins.list · add · remove', 'connections.list · connect · disconnect', 'ports.list · ports.audio.input()', 'get · save · saveAs', 'on · once · getSnapshot · subscribe']), 352, 48)
     st = at(Ent('st', 'data', 'PedalboardSnapshot', sub='currentPedalboard.getSnapshot()', w=224,
                 fields=['version: number', 'ready · loading: boolean', 'plugins: PluginSnapshot[]', 'connections: ConnectionSnapshot[]', 'ports: PortSnapshot[]']), C[2], 48)
@@ -183,10 +184,10 @@ def d_current():
 def d_plugin():
     plugin = at(Ent('plugin', 'class', 'Plugin', sub='client.device.plugins.list()', w=224, fields=['uri · name: string', 'brand · label: string', 'category: string[]', 'gui: PluginGui'], ops=['info()']), C[0], 48)
     pinfo = at(Ent('pinfo', 'wire', 'PluginInfo', sub='GET /effect/get?uri=', w=224,
-                   fields=['…the PluginSummary fields', 'version · stability: string', 'ports: audio · midi · cv · control', 'parameters?: patch params', 'presets?: stale after a save']), C[1], 48)
+                   fields=['…the PluginSummary fields', 'version · stability: string', 'bypassable?: boolean', 'ports: audio · midi · cv · control', 'parameters?: patch params', 'presets?: stale after a save']), C[1], 48)
     y2 = max(plugin.b, pinfo.b) + 88
     pi = at(Ent('pi', 'class', 'PluginInstance', focal=True, w=224, sub='one block of the running graph',
-                fields=['instance: "/graph/Gain"', 'uri: string', 'x · y: number', 'alive: boolean', 'preset: string | null', 'info: PluginInfo | null'],
+                fields=['instance: "/graph/Gain"', 'uri: string', 'x · y: number', 'alive: boolean', 'bypassable: boolean', 'preset: string | null', 'info: PluginInfo | null'],
                 ops=['isActive() · setActive(b)', 'toggle() · setPosition(p)', 'port(symbol) · remove()', 'on(event) · once(event)']), C[1], y2)
     patch = at(Ent('patch', 'stub', 'PluginPatchParams', note='patch params diagram', w=224), C[2], y2)
     y3 = pi.b + 88

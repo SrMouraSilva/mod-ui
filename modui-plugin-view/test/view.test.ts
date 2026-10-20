@@ -341,6 +341,20 @@ describe('live view', () => {
   });
 });
 
+describe('a plugin without a bypass', () => {
+  it('hides the bypass switch of the settings and keeps it for the others', async () => {
+    const normal = await liveSetup({ frames: [fuzzFrame()] });
+    const withBypass = await normal.views.create(normal.instance);
+    expect(q(withBypass.settings, '.mod-switch.bypass').style.display).not.toBe('none');
+
+    const buffer = await liveSetup({ frames: [fuzzFrame()], info: fuzzInfo({ bypassable: false }) });
+    const view = await buffer.views.create(buffer.instance);
+    expect(q(view.settings, '.mod-switch.bypass').style.display).toBe('none');
+    // the icon's footswitch comes from the plugin's own template and is left alone
+    expect(q(view.icon, '[mod-role=bypass]').style.display).not.toBe('none');
+  });
+});
+
 describe('preview', () => {
   it('renders a catalogue plugin with local values and sends nothing', async () => {
     const { views, socket, client, calls } = await liveSetup({ frames: [] });

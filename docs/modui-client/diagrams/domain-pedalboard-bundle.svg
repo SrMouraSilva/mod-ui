@@ -16,7 +16,7 @@ classDiagram
     factory: boolean
     midi_separated_mode
     midi_loopback: boolean
-    version: number
+    version , formatVersion: number
   }
   note for PedalboardInfo "GET /pedalboard/info/"
   class PedalboardPlugin {
@@ -124,7 +124,7 @@ classDiagram
 <text x="380" y="161" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">factory: boolean</text>
 <text x="380" y="175" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">midi_separated_mode</text>
 <text x="380" y="189" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">midi_loopback: boolean</text>
-<text x="380" y="203" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">version: number</text>
+<text x="380" y="203" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">version · formatVersion: number</text>
 </g>
 <g>
 <rect x="40" y="316" width="184" height="124" rx="6" fill="#f5f5f5"/>

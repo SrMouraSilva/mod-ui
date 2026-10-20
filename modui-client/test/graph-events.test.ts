@@ -161,6 +161,46 @@ describe('loading bracket', () => {
     expect(instances[0]).toMatchObject({ x: 1, y: 2 });
   });
 
+  it('"pb_newer_format" is delivered inside the bracket, readable as currentPedalboard.newerFormat, and a later load forgets it', async () => {
+    const { socket, current } = await wired();
+    const log = record(current, ['loading', 'newerFormat', 'loaded']);
+    expect(current.newerFormat).toBeNull();
+
+    socket.emit('loading_start 0 0');
+    socket.emit('size 1200 600');
+    socket.emit('pb_newer_format 3 2');
+    socket.emit(gainFrame('/graph/Gain'));
+    socket.emit('loading_end 0');
+    await flush();
+
+    expect(names(log)).toEqual(['loading', 'newerFormat', 'loaded']);
+    expect(log[1][1]).toMatchObject({ fileFormat: 3, supportedFormat: 2, origin: 'remote' });
+    expect(current.newerFormat).toEqual({ fileFormat: 3, supportedFormat: 2 });
+
+    socket.emit('loading_start 0 0');
+    socket.emit('loading_end 0');
+    await flush();
+    expect(names(log)).toEqual(['loading', 'newerFormat', 'loaded', 'loading', 'loaded']);
+    expect(current.newerFormat).toBeNull();
+  });
+
+  it('"remove :all" (reset) clears newerFormat; a malformed "pb_newer_format" is ignored', async () => {
+    const { socket, current } = await wired();
+    const log = record(current, ['newerFormat']);
+    socket.emit('loading_start 0 0');
+    socket.emit('pb_newer_format 3 2');
+    socket.emit('loading_end 0');
+    await flush();
+    expect(current.newerFormat).not.toBeNull();
+
+    socket.emit('remove :all');
+    expect(current.newerFormat).toBeNull();
+
+    socket.emit('pb_newer_format x');
+    expect(current.newerFormat).toBeNull();
+    expect(names(log)).toEqual(['newerFormat']);
+  });
+
   it('"remove :all" delivers "cleared" alone (no removal per plugin) and ends the plugins', async () => {
     const { socket, current, gain } = await wired();
     const log = record(current);
@@ -710,6 +750,29 @@ describe('a socket that is shared', () => {
     await flush();
     // the live frame that arrived meanwhile is already part of the pedalboard that "loaded" announces
     expect(names(log)).toEqual(['loading', 'loaded']);
+  });
+});
+
+describe('a shared socket and newerFormat', () => {
+  it('delivers "newerFormat" between "loading" and "loaded" when the snapshot read carries it', async () => {
+    const shared = new FakeWebSocket();
+    shared.open();
+    const { client } = makeClient(routes(), { webSocket: shared });
+    const current = client.device.currentPedalboard;
+    const log = record(current, ['loading', 'newerFormat', 'loaded']);
+    const listing = current.plugins.list();
+    await flush();
+
+    const snapshot = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    snapshot.open();
+    snapshot.emit('loading_start 0 0');
+    snapshot.emit('pb_newer_format 4 2');
+    snapshot.emit('loading_end 0');
+    await listing;
+    await flush();
+
+    expect(names(log)).toEqual(['loading', 'newerFormat', 'loaded']);
+    expect(current.newerFormat).toEqual({ fileFormat: 4, supportedFormat: 2 });
   });
 });
 

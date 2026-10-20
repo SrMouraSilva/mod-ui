@@ -12,6 +12,7 @@
 
 import { ModUiError } from './errors';
 import type { EventChannel } from './events';
+import type { NewerFormat } from './pedalboard-events';
 import type { PortDirection, PortType } from './types';
 
 /** A plugin as the WebSocket describes it. */
@@ -57,6 +58,7 @@ export interface ModelConnection {
 export type GraphChange =
   | { type: 'loading'; empty: boolean; modified: boolean }
   | { type: 'loaded'; snapshotId: number }
+  | { type: 'newer-format'; fileFormat: number; supportedFormat: number }
   | { type: 'cleared' }
   | { type: 'plugin-added'; instance: string }
   | { type: 'plugin-removed'; instance: string }
@@ -75,12 +77,15 @@ export class GraphModel {
   readonly plugins = new Map<string, ModelPlugin>();
   readonly hardware = new Map<string, ModelHardwarePort>();
   connections: ModelConnection[] = [];
+  /** Set by `pb_newer_format` for the pedalboard being loaded or running; `null` when its format is not newer. */
+  newerFormat: NewerFormat | null = null;
 
   /** Forgets everything, the pedalboard's own ports included: a new socket starts a new state replay that announces them again. */
   clear(): void {
     this.plugins.clear();
     this.hardware.clear();
     this.connections = [];
+    this.newerFormat = null;
   }
 
   /** Applies one WebSocket message and reports what changed; unrelated commands change nothing. */
@@ -151,6 +156,16 @@ export class GraphModel {
         return [{ type: 'loading', empty: parts[0] === '1', modified: parts[1] === '1' }];
       case 'loading_end':
         return [{ type: 'loaded', snapshotId: parseInt(parts[0], 10) || 0 }];
+      case 'pb_newer_format': {
+        // <fileFormat> <supportedFormat>, right after `size` inside the loading bracket
+        const fileFormat = parseInt(parts[0], 10);
+        const supportedFormat = parseInt(parts[1], 10);
+        if (isNaN(fileFormat) || isNaN(supportedFormat)) {
+          return [];
+        }
+        this.newerFormat = { fileFormat, supportedFormat };
+        return [{ type: 'newer-format', fileFormat, supportedFormat }];
+      }
       case 'connect': {
         const [from, to] = parts;
         if (from && to && !this.hasConnection(from, to)) {
@@ -236,6 +251,7 @@ export class GraphModel {
   private clearPedalboard(): void {
     this.plugins.clear();
     this.connections = [];
+    this.newerFormat = null;
   }
 
   /** Removes the connections of a plugin (or port) and reports them. The backend sends `disconnect` first; this is a safety net. */
@@ -261,6 +277,7 @@ const GRAPH_COMMANDS = [
   'remove',
   'loading_start',
   'loading_end',
+  'pb_newer_format',
   'connect',
   'disconnect',
   'plugin_pos',

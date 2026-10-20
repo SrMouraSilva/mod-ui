@@ -167,6 +167,7 @@ await currentPedalboard.connections.connect(capture, midiSink).catch(() => {}); 
 await gain.isActive();                                 // true / false, read from the live state
 await gain.setActive(false);                           // bypass
 const nowActive = await gain.toggle();                 // resolves with the new state
+gain.bypassable;                                       // false for the Buffer (host-implemented, no bypass): setActive() / toggle() reject it
 
 // Parameters ("Param"): the control inputs, knobs and switches of the plugin
 const params = gain.params.list();                     // Param[], synchronous (the description is already known)
@@ -233,6 +234,7 @@ pedalboard.on('plugin:removed',      ({ plugin }) => view.remove(plugin));
 pedalboard.on('connection:added',    ({ from, to }) => view.wire(from, to));    // port ids
 pedalboard.on('loading',             () => view.showSpinner());
 pedalboard.on('loaded',              async () => view.render(await pedalboard.plugins.list()));
+pedalboard.on('newerFormat',         ({ fileFormat, supportedFormat }) => view.warnSavingDropsData());  // saved on a newer MOD OS
 
 // one plugin and one control (the objects are the same ones every time: key your views by them)
 const plugin = await pedalboard.plugins.get('/graph/Gain');
@@ -258,7 +260,9 @@ Rules worth knowing (the TSDoc of `CurrentPedalboard.on()` has the full table of
 - **A load is one `loading` and one `loaded`.** Between them nothing else is delivered (a load is hundreds of frames), the
   plugins of the old pedalboard are gone (`plugin.alive === false`, their `removed` fires with `reason: 'reloaded'`), and
   the new ones are built once, with their descriptions, before `loaded`. Read the state again on `loaded`. `device.reset()` and
-  `remove :all` deliver `cleared` alone.
+  `remove :all` deliver `cleared` alone. The one exception inside a load is `newerFormat`: the pedalboard file was saved on a newer
+  MOD OS (`pb_newer_format`), it plays as usual but saving it here drops what this device does not know, so warn the user. It is
+  also readable as `currentPedalboard.newerFormat` (`null` for any other pedalboard, and after a reset).
 - **Order and state.** Events come in the order of the WebSocket frames, after the state is updated: inside a handler the
   getters (`param.value`, `plugin.x`, `list()`) already show the new state. A handler that throws does not stop the others
   (the error is rethrown asynchronously, so the console shows it). `on()` returns the unsubscribe function; options also take an
@@ -530,6 +534,8 @@ off();
 - `setValue()`, `setActive()`, `toggle()` and `setPosition()` are WebSocket messages (`param_set`, `plugin_pos`) that the backend
   never confirms to the socket that sent them (only to the others), so they resolve **once the message was sent**, and the
   attributes (`value`, `x`, `y`) and `isActive()` already show the new state. They are queued behind loads and saves.
+  `setActive()` and `toggle()` reject a plugin with `bypassable === false` (the Buffer) before sending: the backend ignores `:bypass`
+  for it but would still echo the frame to the other clients, which would then show a state the host never applied.
 - The client checks before sending because the backend raises (and closes the socket) when the plugin does not exist.
 - `list()` is asynchronous because no endpoint lists the running plugins or connections: the client builds them
   from the WebSocket (the state replay plus live frames), so changes made by the classic UI or by other clients show up too.
@@ -1294,7 +1300,7 @@ must run the build before installing `html/` (`setup.py` and `mod-deploy.sh` pic
 - Plugins and connections come from the WebSocket, not from an endpoint. Every new own socket (first connection or reconnection) starts from an empty model and rebuilds it from the state replay, so nothing that vanished in between stays. A socket shared through `options.webSocket` is never reopened by the client.
 - The first `connect()` is not retried by `reconnect` (it rejects and the state is `closed`); only a connection that was `open` and got lost is. Reconnection never gives up by itself: call `client.close()`. Calls that were waiting for a frame when the connection was lost fail with `ModUiError('WebSocket closed')` and are not retried (a write may have reached the backend).
 - `origin: 'local'` is best effort: a change is local when this client had a matching request in flight when the frame arrived. A pedalboard load or reset by someone else at the same moment cannot be told apart (same as the note on `device.load()`).
-- Events cover what the model knows (plugins, connections, the pedalboard's own ports, control values, bypass, position, patch parameters, presets, loading) and what the device reports (`stats`, `sysStats`, `transport`, `bufferSize`, `trueBypass`, `snapshot`). Meters (`output_set`), addressings (`hw_map`, `midi_map`, `cv_map`), `log` and `progress` frames are not events yet; the pedalboard's `size` frame is not exposed.
+- Events cover what the model knows (plugins, connections, the pedalboard's own ports, control values, bypass, position, patch parameters, presets, loading, the newer-format notice of a pedalboard) and what the device reports (`stats`, `sysStats`, `transport`, `bufferSize`, `trueBypass`, `snapshot`). Meters (`output_set`), addressings (`hw_map`, `midi_map`, `cv_map`), `log` and `progress` frames are not events yet; the pedalboard's `size` frame is not exposed.
 - `setValue()`, `setActive()`, `toggle()` and `setPosition()` cannot confirm anything: the backend does not answer the sender of `param_set` / `plugin_pos`. They resolve when the message is sent; if the backend refuses a value (it only refuses ports with a host designation, which the client already blocks), nothing tells the caller.
 - `PatchParam.setValue()` cannot confirm anything either (the sender of `patch_set` gets no frame). Only `"` is escaped on the way to mod-host, so a backslash in a string reaches the plugin as it is. Empty strings are refused by the client. Only parameters the host tracks (atom types Bool, Int, Long, Float, Double, String, Path, URI, with ranges) report values; vectors are not supported. Whether `refresh()` gets an answer depends on the plugin.
 - `plugins.add()` always generates the instance name (like the classic UI). If the backend creates the plugin but cannot read its description, it answers `404` and the plugin stays in the pedalboard.

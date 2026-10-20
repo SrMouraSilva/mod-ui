@@ -16,7 +16,7 @@ import type { ChangeSink, GraphChange, GraphState, ModelHardwarePort, ModelPlugi
 import type { PluginsApi } from './plugins';
 import { SnapshotStore, type Schedule } from './snapshot';
 import type { PedalboardConnection, Port, PluginInstance } from './pedalboard-graph';
-import type { PluginRemovedReason, StoreEvents } from './pedalboard-events';
+import type { NewerFormat, PluginRemovedReason, StoreEvents } from './pedalboard-events';
 import type { PluginInfo } from './types';
 
 /** A request of this client that will provoke frames: they are tagged `'local'` while it is in flight. */
@@ -196,7 +196,18 @@ export class PedalboardStore implements ChangeSink {
 
   /** The model was replaced by a state read through a second socket: the same as a pedalboard load that is already complete. */
   reset(snapshotId = 0): void {
-    this.changes([{ type: 'loading', empty: false, modified: false }, { type: 'loaded', snapshotId }]);
+    const notice = this.state.peek().newerFormat;
+    this.changes([
+      { type: 'loading', empty: false, modified: false },
+      ...(notice ? [{ type: 'newer-format' as const, ...notice }] : []),
+      { type: 'loaded', snapshotId },
+    ]);
+  }
+
+  /** The `pb_newer_format` notice of the pedalboard that is running, `null` when its file is not of a newer format. */
+  get newerFormat(): NewerFormat | null {
+    const notice = this.state.peek().newerFormat;
+    return notice ? { ...notice } : null;
   }
 
   /**
@@ -269,6 +280,9 @@ export class PedalboardStore implements ChangeSink {
         }
         this.loading = true;
         this.killAll('reloaded', meta);
+        return;
+      case 'newer-format':
+        this.bus.emit('newerFormat', { fileFormat: change.fileFormat, supportedFormat: change.supportedFormat, ...meta });
         return;
       case 'cleared':
         this.bus.emit('cleared', { ...meta });

@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8"?>
-<svg viewBox="0 0 960 556" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="domain-current-pedalboard-title domain-current-pedalboard-desc">
+<svg viewBox="0 0 960 580" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="domain-current-pedalboard-title domain-current-pedalboard-desc">
 <title id="domain-current-pedalboard-title">Current pedalboard</title>
 <desc id="domain-current-pedalboard-desc">CurrentPedalboard holds the live plugin instances, the pedalboard own ports and the connections between ports, its snapshots, and an immutable state snapshot for UI frameworks.</desc>
 <metadata><![CDATA[
@@ -13,6 +13,7 @@ classDiagram
   }
   class CurrentPedalboard {
     <<focal class>>
+    newerFormat: NewerFormat or null
     plugins.list , add , remove
     connections.list , connect , disconnect
     ports.list , ports.audio.input()
@@ -67,31 +68,31 @@ classDiagram
 <!-- Connectors (behind boxes) -->
 <path d="M 352,78 L 264,78" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
 <path d="M 608,78 L 696,78" fill="none" stroke="#5c4a64" stroke-width="1.0" stroke-dasharray="4,3" marker-end="url(#domain-current-pedalboard-arrow)"/>
-<path d="M 388,184 L 388,212 Q 388,220 380,220 L 160,220 Q 152,220 152,228 L 152,272" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
-<path d="M 480,184 L 480,272" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
-<path d="M 572,184 L 572,212 Q 572,220 580,220 L 800,220 Q 808,220 808,228 L 808,272" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
-<path d="M 264,302 L 368,302" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
-<path d="M 696,312 L 592,312" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
+<path d="M 388,208 L 388,236 Q 388,244 380,244 L 160,244 Q 152,244 152,252 L 152,296" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
+<path d="M 480,208 L 480,296" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
+<path d="M 572,208 L 572,236 Q 572,244 580,244 L 800,244 Q 808,244 808,252 L 808,296" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
+<path d="M 264,326 L 368,326" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
+<path d="M 696,336 L 592,336" fill="none" stroke="#5c4a64" stroke-width="1.2"/>
 <!-- Labels -->
 <rect x="332.8" y="60" width="9.2" height="12" fill="#f5f5f5"/><text x="340" y="69" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.04em">1</text>
 <rect x="274" y="60" width="9.2" height="12" fill="#f5f5f5"/><text x="276" y="69" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
 <rect x="282.6" y="86" width="50.8" height="12" fill="#f5f5f5"/><text x="308" y="95" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">SNAPSHOTS</text>
 <rect x="616.2" y="86" width="71.6" height="12" fill="#f5f5f5"/><text x="652" y="95" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">GETSNAPSHOT()</text>
-<rect x="394" y="191" width="9.2" height="12" fill="#f5f5f5"/><text x="396" y="200" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
-<rect x="158" y="251" width="24.8" height="12" fill="#f5f5f5"/><text x="160" y="260" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
-<rect x="159" y="240" width="40.4" height="12" fill="#f5f5f5"/><text x="161" y="249" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">PLUGINS</text>
-<rect x="486" y="191" width="9.2" height="12" fill="#f5f5f5"/><text x="488" y="200" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
-<rect x="486" y="251" width="24.8" height="12" fill="#f5f5f5"/><text x="488" y="260" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
-<rect x="487" y="222" width="30" height="12" fill="#f5f5f5"/><text x="489" y="231" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">PORTS</text>
-<rect x="578" y="191" width="9.2" height="12" fill="#f5f5f5"/><text x="580" y="200" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
-<rect x="814" y="251" width="24.8" height="12" fill="#f5f5f5"/><text x="816" y="260" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
-<rect x="815" y="240" width="61.2" height="12" fill="#f5f5f5"/><text x="817" y="249" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">CONNECTIONS</text>
-<rect x="274" y="284" width="24.8" height="12" fill="#f5f5f5"/><text x="276" y="293" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..1</text>
-<rect x="333.2" y="284" width="24.8" height="12" fill="#f5f5f5"/><text x="356" y="293" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.04em">0..*</text>
-<rect x="301" y="310" width="30" height="12" fill="#f5f5f5"/><text x="316" y="319" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">PORTS</text>
-<rect x="676.8" y="294" width="9.2" height="12" fill="#f5f5f5"/><text x="684" y="303" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.04em">2</text>
-<rect x="602" y="294" width="24.8" height="12" fill="#f5f5f5"/><text x="604" y="303" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
-<rect x="621.2" y="320" width="45.6" height="12" fill="#f5f5f5"/><text x="644" y="329" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">FROM, TO</text>
+<rect x="394" y="215" width="9.2" height="12" fill="#f5f5f5"/><text x="396" y="224" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
+<rect x="158" y="275" width="24.8" height="12" fill="#f5f5f5"/><text x="160" y="284" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
+<rect x="159" y="264" width="40.4" height="12" fill="#f5f5f5"/><text x="161" y="273" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">PLUGINS</text>
+<rect x="486" y="215" width="9.2" height="12" fill="#f5f5f5"/><text x="488" y="224" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
+<rect x="486" y="275" width="24.8" height="12" fill="#f5f5f5"/><text x="488" y="284" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
+<rect x="487" y="246" width="30" height="12" fill="#f5f5f5"/><text x="489" y="255" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">PORTS</text>
+<rect x="578" y="215" width="9.2" height="12" fill="#f5f5f5"/><text x="580" y="224" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">1</text>
+<rect x="814" y="275" width="24.8" height="12" fill="#f5f5f5"/><text x="816" y="284" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
+<rect x="815" y="264" width="61.2" height="12" fill="#f5f5f5"/><text x="817" y="273" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">CONNECTIONS</text>
+<rect x="274" y="308" width="24.8" height="12" fill="#f5f5f5"/><text x="276" y="317" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..1</text>
+<rect x="333.2" y="308" width="24.8" height="12" fill="#f5f5f5"/><text x="356" y="317" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.04em">0..*</text>
+<rect x="301" y="334" width="30" height="12" fill="#f5f5f5"/><text x="316" y="343" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">PORTS</text>
+<rect x="676.8" y="318" width="9.2" height="12" fill="#f5f5f5"/><text x="684" y="327" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="end" letter-spacing="0.04em">2</text>
+<rect x="602" y="318" width="24.8" height="12" fill="#f5f5f5"/><text x="604" y="327" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="start" letter-spacing="0.04em">0..*</text>
+<rect x="621.2" y="344" width="45.6" height="12" fill="#f5f5f5"/><text x="644" y="353" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.04em">FROM, TO</text>
 <!-- Entities -->
 <g>
 <rect x="40" y="48" width="224" height="60" rx="6" fill="#f5f5f5"/>
@@ -102,18 +103,20 @@ classDiagram
 <text x="152.0" y="100" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">snapshots diagram</text>
 </g>
 <g>
-<rect x="352" y="48" width="256" height="136" rx="6" fill="#f5f5f5"/>
-<rect x="352" y="48" width="256" height="136" rx="6" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+<rect x="352" y="48" width="256" height="160" rx="6" fill="#f5f5f5"/>
+<rect x="352" y="48" width="256" height="160" rx="6" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
 <rect x="360" y="56" width="32" height="12" rx="2" fill="transparent" stroke="rgba(168,78,10,0.50)" stroke-width="0.8"/>
 <text x="376.0" y="65" fill="#a84e0a" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
 <text x="480.0" y="84" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">CurrentPedalboard</text>
 <text x="480.0" y="97" fill="#6f5a78" font-size="8" font-family="'Geist Mono', monospace" text-anchor="middle">client.device.currentPedalboard</text>
 <line x1="352" y1="104" x2="608" y2="104" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
-<text x="364" y="119" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">plugins.list · add · remove</text>
-<text x="364" y="133" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">connections.list · connect · disconnect</text>
-<text x="364" y="147" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">ports.list · ports.audio.input()</text>
-<text x="364" y="161" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">get · save · saveAs</text>
-<text x="364" y="175" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">on · once · getSnapshot · subscribe</text>
+<text x="364" y="119" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">newerFormat: NewerFormat | null</text>
+<line x1="352" y1="128" x2="608" y2="128" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
+<text x="364" y="143" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">plugins.list · add · remove</text>
+<text x="364" y="157" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">connections.list · connect · disconnect</text>
+<text x="364" y="171" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">ports.list · ports.audio.input()</text>
+<text x="364" y="185" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">get · save · saveAs</text>
+<text x="364" y="199" fill="#6f5a78" font-size="9" font-family="'Geist Mono', monospace">on · once · getSnapshot · subscribe</text>
 </g>
 <g>
 <rect x="696" y="48" width="224" height="136" rx="6" fill="#f5f5f5"/>
@@ -130,52 +133,52 @@ classDiagram
 <text x="708" y="175" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">ports: PortSnapshot[]</text>
 </g>
 <g>
-<rect x="40" y="272" width="224" height="60" rx="6" fill="#f5f5f5"/>
-<rect x="40" y="272" width="224" height="60" rx="6" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="4,3"/>
-<rect x="48" y="280" width="24" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.30)" stroke-width="0.8"/>
-<text x="60.0" y="289" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SEE</text>
-<text x="152.0" y="308" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PluginInstance</text>
-<text x="152.0" y="324" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugin diagram</text>
+<rect x="40" y="296" width="224" height="60" rx="6" fill="#f5f5f5"/>
+<rect x="40" y="296" width="224" height="60" rx="6" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="4,3"/>
+<rect x="48" y="304" width="24" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.30)" stroke-width="0.8"/>
+<text x="60.0" y="313" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">SEE</text>
+<text x="152.0" y="332" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PluginInstance</text>
+<text x="152.0" y="348" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugin diagram</text>
 </g>
 <g>
-<rect x="368" y="272" width="224" height="124" rx="6" fill="#f5f5f5"/>
-<rect x="368" y="272" width="224" height="124" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
-<rect x="376" y="280" width="32" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
-<text x="392.0" y="289" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
-<text x="480.0" y="308" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Port</text>
-<line x1="368" y1="316" x2="592" y2="316" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
-<text x="380" y="331" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">id: "/graph/Gain/in"</text>
-<text x="380" y="345" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">symbol · name: string</text>
-<text x="380" y="359" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">type: audio | midi | cv</text>
-<text x="380" y="373" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">direction: input | output</text>
-<text x="380" y="387" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">owner: PluginInstance | null</text>
+<rect x="368" y="296" width="224" height="124" rx="6" fill="#f5f5f5"/>
+<rect x="368" y="296" width="224" height="124" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+<rect x="376" y="304" width="32" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
+<text x="392.0" y="313" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
+<text x="480.0" y="332" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Port</text>
+<line x1="368" y1="340" x2="592" y2="340" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
+<text x="380" y="355" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">id: "/graph/Gain/in"</text>
+<text x="380" y="369" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">symbol · name: string</text>
+<text x="380" y="383" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">type: audio | midi | cv</text>
+<text x="380" y="397" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">direction: input | output</text>
+<text x="380" y="411" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">owner: PluginInstance | null</text>
 </g>
 <g>
-<rect x="696" y="272" width="224" height="96" rx="6" fill="#f5f5f5"/>
-<rect x="696" y="272" width="224" height="96" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
-<rect x="704" y="280" width="32" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
-<text x="720.0" y="289" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
-<text x="808.0" y="308" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PedalboardConnection</text>
-<line x1="696" y1="316" x2="920" y2="316" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
-<text x="708" y="331" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">id: string</text>
-<text x="708" y="345" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">from: Port</text>
-<text x="708" y="359" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">to: Port</text>
+<rect x="696" y="296" width="224" height="96" rx="6" fill="#f5f5f5"/>
+<rect x="696" y="296" width="224" height="96" rx="6" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+<rect x="704" y="304" width="32" height="12" rx="2" fill="transparent" stroke="rgba(136,57,150,0.50)" stroke-width="0.8"/>
+<text x="720.0" y="313" fill="#883996" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">CLASS</text>
+<text x="808.0" y="332" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">PedalboardConnection</text>
+<line x1="696" y1="340" x2="920" y2="340" stroke="rgba(46,31,51,0.15)" stroke-width="0.8"/>
+<text x="708" y="355" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">id: string</text>
+<text x="708" y="369" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">from: Port</text>
+<text x="708" y="383" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">to: Port</text>
 </g>
-<text x="40" y="372" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">No endpoint lists the running plugins or</text>
-<text x="40" y="386" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">connections: the client rebuilds them from</text>
-<text x="40" y="400" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">the frames of the WebSocket.</text>
-<line x1="40" y1="464" x2="920" y2="464" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
-<text x="40" y="484" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
-<rect x="40" y="492" width="14" height="10" rx="2" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
-<text x="60" y="500" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Client class</text>
-<rect x="139.2" y="492" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
-<text x="159.2" y="500" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data, enum or interface</text>
-<rect x="316.59999999999997" y="492" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
-<text x="336.59999999999997" y="500" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
-<rect x="480.19999999999993" y="492" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
-<text x="500.19999999999993" y="500" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
-<line x1="657.5999999999999" y1="497" x2="685.5999999999999" y2="497" stroke="#5c4a64" stroke-width="1.2"/>
-<text x="691.5999999999999" y="500" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Owns / contains (cardinality at each end)</text>
-<line x1="40" y1="517" x2="68" y2="517" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#domain-current-pedalboard-arrow)"/>
-<text x="74" y="520" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Creates / reads / refers to</text>
+<text x="40" y="396" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">No endpoint lists the running plugins or</text>
+<text x="40" y="410" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">connections: the client rebuilds them from</text>
+<text x="40" y="424" fill="#5c4a64" font-size="12" font-style="italic" font-family="'Instrument Serif', serif">the frames of the WebSocket.</text>
+<line x1="40" y1="488" x2="920" y2="488" stroke="rgba(46,31,51,0.10)" stroke-width="0.8"/>
+<text x="40" y="508" fill="#5c4a64" font-size="8" font-family="'Geist Mono', monospace" letter-spacing="0.18em">LEGEND</text>
+<rect x="40" y="516" width="14" height="10" rx="2" fill="rgba(136,57,150,0.07)" stroke="#883996" stroke-width="1"/>
+<text x="60" y="524" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Client class</text>
+<rect x="139.2" y="516" width="14" height="10" rx="2" fill="rgba(46,31,51,0.03)" stroke="rgba(46,31,51,0.30)" stroke-width="1"/>
+<text x="159.2" y="524" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Plain data, enum or interface</text>
+<rect x="316.59999999999997" y="516" width="14" height="10" rx="2" fill="#ffffff" stroke="rgba(46,31,51,0.45)" stroke-width="1" stroke-dasharray="3,2"/>
+<text x="336.59999999999997" y="524" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Defined in another diagram</text>
+<rect x="480.19999999999993" y="516" width="14" height="10" rx="2" fill="rgba(168,78,10,0.08)" stroke="#a84e0a" stroke-width="1"/>
+<text x="500.19999999999993" y="524" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Aggregate root of this domain</text>
+<line x1="657.5999999999999" y1="521" x2="685.5999999999999" y2="521" stroke="#5c4a64" stroke-width="1.2"/>
+<text x="691.5999999999999" y="524" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Owns / contains (cardinality at each end)</text>
+<line x1="40" y1="541" x2="68" y2="541" stroke="#5c4a64" stroke-width="1.2" stroke-dasharray="4,3" marker-end="url(#domain-current-pedalboard-arrow)"/>
+<text x="74" y="544" fill="#5c4a64" font-size="8.5" font-family="'Geist', sans-serif">Creates / reads / refers to</text>
 </svg>

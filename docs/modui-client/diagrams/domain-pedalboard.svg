@@ -47,7 +47,7 @@ classDiagram
     bundlepath: string (client)
     title: string
     width , height: number
-    factory , version
+    factory , version , formatVersion
     plugins , connections
     hardware , timeInfo
   }
@@ -169,7 +169,7 @@ classDiagram
 <text x="708" y="499" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">bundlepath: string (client)</text>
 <text x="708" y="513" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">title: string</text>
 <text x="708" y="527" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">width · height: number</text>
-<text x="708" y="541" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">factory · version</text>
+<text x="708" y="541" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">factory · version · formatVersion</text>
 <text x="708" y="555" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">plugins · connections</text>
 <text x="708" y="569" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace">hardware · timeInfo</text>
 </g>

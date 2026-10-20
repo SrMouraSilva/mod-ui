@@ -12,7 +12,7 @@ import type { PedalboardSnapshot } from './snapshot';
 import type { HttpTransport } from './http';
 import { waitForPendingImages } from './pedalboard-images';
 import { PedalboardConnections, PedalboardPorts } from './pedalboard-connections';
-import type { PedalboardEvents } from './pedalboard-events';
+import type { NewerFormat, PedalboardEvents } from './pedalboard-events';
 import type { Enqueue, PedalboardGraph } from './pedalboard-graph';
 import { PedalboardPlugins } from './pedalboard-plugins';
 import { PedalboardSnapshots } from './pedalboard-snapshots';
@@ -159,6 +159,7 @@ export class CurrentPedalboard {
    * | `port:added`, `port:removed` | a port of the pedalboard itself changed | `{ id, ... }` |
    * | `loading` | a pedalboard starts loading | `{ empty, modified }` |
    * | `loaded` | the pedalboard is complete (also once after the first connection) | `{ snapshotId }` |
+   * | `newerFormat` | the pedalboard being loaded was saved on a newer MOD OS (see {@link CurrentPedalboard.newerFormat}) | `{ fileFormat, supportedFormat }` |
    * | `cleared` | the pedalboard was emptied | `{}` |
    * | `error` | a background request failed (a plugin description) | `{ error, context }` |
    *
@@ -167,7 +168,7 @@ export class CurrentPedalboard {
    *
    * Rules:
    * - Events are delivered in the order of the WebSocket frames, after the state is updated, so a handler reads the new state.
-   * - Between `loading` and `loaded` nothing else is delivered (a load is hundreds of frames): show a loading state, and read
+   * - Between `loading` and `loaded` nothing else is delivered (a load is hundreds of frames), except `newerFormat`: show a loading state, and read
    *   `plugins.list()`, `connections.list()` and `ports.list()` again on `loaded`. `cleared` also stands for every removal.
    * - A handler that throws does not affect the others; the error is rethrown asynchronously (visible in the console).
    * - Render from events, not from the promise of a write: local writes emit their event too, so one path serves every cause.
@@ -186,6 +187,20 @@ export class CurrentPedalboard {
     options?: ListenOptions,
   ): Unsubscribe {
     return this.graph.store.bus.on(event, handler, options);
+  }
+
+  /**
+   * Set when the running pedalboard was saved on a newer MOD OS than the device runs (its `pedal:formatVersion` is higher than the one the
+   * device writes), `null` otherwise. It loads and plays as usual, but saving it on this device drops what this version does not know,
+   * so warn the user before they save. Live: it follows every load (and `reset()`, which clears it), and `on('newerFormat')` announces it.
+   *
+   * WebSocket: `pb_newer_format <fileFormat> <supportedFormat>`, sent inside the loading bracket (and in the state replay of a new socket).
+   * @example
+   * const notice = client.device.currentPedalboard.newerFormat;
+   * if (notice) warn(`Made with pedalboard format ${notice.fileFormat}; this device knows ${notice.supportedFormat}.`);
+   */
+  get newerFormat(): NewerFormat | null {
+    return this.graph.store.newerFormat;
   }
 
   /**

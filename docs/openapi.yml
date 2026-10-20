@@ -395,7 +395,8 @@ paths:
 
         Sent to each new socket, in this order:
 
-        `sys_stats`, `stats`, `transport`, `truebypass`, `loading_start`, `size`, `hw_add`*, `add_hw_port`* (audio in, CV in,
+        `sys_stats`, `stats`, `transport`, `truebypass`, `loading_start`, `size`, `pb_newer_format` (only when the running
+        pedalboard's file is of a newer format), `hw_add`*, `add_hw_port`* (audio in, CV in,
         audio out, CV out, MIDI in, MIDI out, MIDI loopback), `add`* (one per plugin), `midi_map` (bypass CC) and `preset`
         per plugin, `param_set`* / `output_set`* / `patch_set`* per plugin, `connect`*, `add_cv_port`*, `hw_map`*,
         `midi_map`*, `cv_map`*, `loading_end`.
@@ -447,6 +448,7 @@ paths:
         | `plugin_pos` | `<instance> <x:int> <y:int>` | Another client moved a plugin (never echoed to the sender). |
         | `preset` | `<instance> <presetUri>` or `null` | Current preset of a plugin; `null` means none. |
         | `size` | `<width:int> <height:int>` | Pedalboard canvas size at full zoom. (The bundled UI ignores it.) |
+        | `pb_newer_format` | `<fileFormat:int> <supportedFormat:int>` | The pedalboard being loaded (or running, in the state replay of a new socket) was saved on a newer MOD OS: its `pedal:formatVersion` (`fileFormat`) is higher than the one this mod-ui writes (`supportedFormat`, `2` today). It is sent right after `size`, inside the `loading_start` … `loading_end` bracket, and **only** in that case. The pedalboard loads and plays as usual (terms it does not know are ignored), but saving it here drops them; the bundled UI shows a 10 s warning. |
         | `pedal_snapshot` | `<index:int> <name...>` | A snapshot was **loaded** (HTTP `loadSnapshot`, HMI, MIDI program change). Name is the rest of the frame. It is the only frame about snapshots: `saveSnapshotAs`, `removeSnapshot` and `renameSnapshot` change the current snapshot or the list without sending anything, and `loading_end <snapshotId>` carries the current index after a pedalboard load. |
 
         ## Pedalboard loading bracket
@@ -496,7 +498,7 @@ paths:
         |---------|-----------|--------|
         | `pong` | – | Answer to `ping`. Ignored. |
         | `data_ready` | `<counter:int>` | Acknowledge flow control, see above. |
-        | `param_set` | `<instance>/<symbol> <value:float>` | Set a control port (symbol `:bypass`: `value >= 0.5` bypasses). Echoed as `param_set <instance> <symbol> <value>` to **other** sockets only: the sender gets no confirmation. Marks the pedalboard as modified. Ports with a host designation (enabled, free-wheeling, beats per bar/minute, speed) are refused by the host, yet still echoed. An instance that does not exist raises an error and closes the socket. |
+        | `param_set` | `<instance>/<symbol> <value:float>` | Set a control port (symbol `:bypass`: `value >= 0.5` bypasses; a plugin with `bypassable: false`, such as the Buffer, ignores it with a warning in the log, **yet the frame is still echoed** to the other sockets). Echoed as `param_set <instance> <symbol> <value>` to **other** sockets only: the sender gets no confirmation. Marks the pedalboard as modified. Ports with a host designation (enabled, free-wheeling, beats per bar/minute, speed) are refused by the host, yet still echoed. An instance that does not exist raises an error and closes the socket. |
         | `patch_get` | `<instance> <uri>` | Ask the plugin for the current value of a patch parameter; the answer arrives as `patch_set` (to every socket). An instance that does not exist raises an error and closes the socket. |
         | `patch_set` | `<instance> <uri> <type:char> <value...>` | Set a patch parameter (types as in the server message). Echoed to **other** sockets only as `patch_set <instance> <writable> <uri> <type> <value>`: the sender gets no confirmation. Marks the pedalboard as modified. The value is the rest of the line and may contain spaces. mod-ui sends `patch_set <id> <uri> "<value>"` to mod-host and escapes only `"`: a newline in the value would split the command and a backslash is not escaped, so clients must not send control characters. For an unknown instance the parameter is simply untracked (`writable` 0) but the line still reaches mod-host. Format used by the classic UI: bool `1`/`0`, int and long without decimals, float and double with `toString()`. |
         | `plugin_pos` | `<instance> <x:float> <y:float>` | Persist a plugin block position. Echoed to other sockets as `plugin_pos <instance> <x:int> <y:int>`; the sender gets no confirmation. An instance that does not exist raises an error and closes the socket. |
@@ -1334,7 +1336,9 @@ paths:
         `port` is `<instance>/<symbol>`; `:bypass`, `:presets` and pedalboard-level ports are allowed. `uri` selects the
         actuator: an HMI/Control Chain URI, a MIDI/CV pseudo-URI, `/bpm`, or the special value `null` which removes the
         existing addressing. Resulting mappings are broadcast as `hw_map`, `midi_map` or `cv_map` frames.
-        The call returns `false` when the actuator cannot be used (not available, already full, wrong type).
+        The call returns `false` when the actuator cannot be used (not available, already full, wrong type), and when `port`
+        is the `:bypass` of a plugin that has no bypass (`bypassable: false` in `getPlugin`, the Buffer): that covers hardware,
+        MIDI learn, MIDI CC and CV addressings alike.
       parameters:
         - name: port
           in: path
@@ -1595,6 +1599,10 @@ paths:
         overwriting only increments the pedalboard's `version`; and if the device has an HMI that shows
         pedalboard names, it is updated. The classic UI sends `asNew=0` for *Save* and `asNew=1` for *Save as*.
 
+        Every saved bundle carries `pedal:formatVersion` (`2` today; a file without it is format `1`, up to MOD OS 1.14), which
+        `getPedalboardInfo` returns as `formatVersion`. Saving a pedalboard that was made on a newer MOD OS (see the
+        `pb_newer_format` WebSocket message) writes it again in this version's format and drops what this version does not know.
+
         `title` is always required, even for an overwrite: read the current one with `getCurrentPedalboard`
         if you want to keep it.
       requestBody:
@@ -1848,6 +1856,7 @@ paths:
         bundle**, never from the running state. They are (re)generated when a pedalboard is saved after its graph
         changed, or on demand with `generatePedalboardImage`. A bundle that has no image yet answers `404`
         (see `checkPedalboardImage`), and unsaved edits of the running pedalboard are not reflected.
+        `screenshot.png` is at most 1920 px wide (a wider canvas is scaled down); `thumbnail.png` at most 640 px.
       parameters:
         - name: kind
           in: path
@@ -2882,6 +2891,12 @@ components:
         licensed: { $ref: '#/components/schemas/PluginLicense' }
         iotype: { $ref: '#/components/schemas/PluginIoType' }
         hasExternalUI: { type: boolean }
+        bypassable:
+          type: boolean
+          description: >-
+            `false` for the plugins that mod-host implements itself and that have no bypass (the Buffer,
+            `http://moddevices.com/plugins/mod-devel/Buffer`): mod-host ignores `:bypass` for them, `addressParameter` refuses
+            to address it and the bundled UI hides the switch. Added by mod-ui, not read from the plugin's LV2 data.
         version: { type: string, description: "Textual version." }
         stability: { type: string }
         author:
@@ -2921,6 +2936,7 @@ components:
     NonCachedPluginInfo:
       type: object
       properties:
+        bypassable: { type: boolean, description: "Same as in `PluginInfo`." }
         licensed: { $ref: '#/components/schemas/PluginLicense' }
         presets:
           type: array
@@ -3189,6 +3205,12 @@ components:
             rolling: { type: boolean }
             rollingCC: { $ref: '#/components/schemas/MidiControl' }
         version: { type: integer }
+        formatVersion:
+          type: integer
+          description: >-
+            `pedal:formatVersion` of the bundle: which `modpedal#` terms its writer may have used. `1` when the file has none
+            (written up to MOD OS 1.14), `2` from MOD OS 1.15. A number higher than the one this mod-ui writes means a newer MOD OS
+            made it (see the `pb_newer_format` WebSocket message).
 
     HardwareMidiPort:
       type: object

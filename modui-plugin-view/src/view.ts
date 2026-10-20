@@ -179,6 +179,11 @@ export class PluginView {
     this.setupFileLists();
     // Addressing is not supported (yet): its buttons would do nothing.
     for (const element of queryAll(this.settings, '.mod-address, .assign-all, .preset-btn-assign-sel')) element.style.display = 'none';
+    // A plugin that has no bypass (the Buffer) gets no bypass switch in the settings, like the classic settings dialog (`html/js/pedalboard.js`).
+    // The footswitch of the icon belongs to the plugin's own template, which the classic UI leaves as it is.
+    if (info.bypassable === false) {
+      for (const element of queryAll(this.settings, '.mod-switch.bypass')) element.style.display = 'none';
+    }
     for (const element of queryAll(this.settings, '.js-close')) {
       if (backend.live) {
         this.on_(element, 'click', () => this.emitter.emit('close', {}));

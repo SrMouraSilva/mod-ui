@@ -130,6 +130,7 @@ export const infoBody = {
   },
   timeInfo: { available: 0, bpb: 4, bpm: 120, rolling: false },
   version: 3,
+  formatVersion: 2,
 };
 
 export function makeClient(routes: Record<string, unknown>, extra: Partial<ConstructorParameters<typeof ModUiClient>[0]> = {}) {
@@ -193,6 +194,7 @@ export const gainInfo = {
   iotype: 1,
   binary: '',
   hasExternalUI: false,
+  bypassable: true,
   version: '1.0',
   stability: 'stable',
   ports: {
