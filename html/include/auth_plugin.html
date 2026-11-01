@@ -1,14 +1,20 @@
-{{! One plugin row of the account window }}
-<div class="auth-plugin{{#absent}} auth-plugin-absent{{/absent}}">
-    <div class="auth-thumb" style="background-color: {{color}}">
-        <span class="auth-thumb-initials">{{initials}}</span>
+{{! One plugin card of the account window: the picture on the left, what it is and whose it is on the right }}
+<article class="auth-plugin auth-plugin-{{kind}}{{#absent}} auth-plugin-absent{{/absent}}">
+    <div class="auth-thumb{{#longName}} auth-thumb-long{{/longName}}">
+        <span class="auth-thumb-name">{{name}}</span>
     </div>
-    <div class="auth-plugin-text">
-        <strong>{{name}}</strong>
-        {{#detail}}<span class="auth-plugin-detail">{{detail}}</span>{{/detail}}
+    <div class="auth-plugin-body">
+        <h4 class="auth-plugin-name">{{name}}{{#brand}} <small>by {{brand}}</small>{{/brand}}</h4>
+        {{#detail}}<p class="auth-plugin-detail">{{detail}}</p>{{/detail}}
+        {{#meta}}<p class="auth-plugin-detail">{{meta}}</p>{{/meta}}
+        <p class="auth-plugin-tags">
+            <span class="auth-badge">{{badge}}</span>
+            {{#label}}<span class="auth-plugin-label">{{label}}</span>{{/label}}
+        </p>
+        {{#action}}
+        <div class="auth-plugin-actions">
+            <button type="button" class="auth-button auth-button-small js-action" data-action="{{action}}" data-uri="{{uri}}"{{#disabled}} disabled title="Not available yet"{{/disabled}}>{{actionText}}</button>
+        </div>
+        {{/action}}
     </div>
-    <div class="auth-plugin-side">
-        {{#label}}<span class="auth-plugin-label">{{label}}</span>{{/label}}
-        {{#action}}<button type="button" class="auth-button auth-button-small js-action" data-action="{{action}}" data-uri="{{uri}}"{{#disabled}} disabled title="Not available yet"{{/disabled}}>{{actionText}}</button>{{/action}}
-    </div>
-</div>
+</article>

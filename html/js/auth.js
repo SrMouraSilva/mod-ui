@@ -238,40 +238,46 @@ function Auth(options) {
         // What the person has and this device does not (`held` is null when that list could not be read)
         var elsewhere = $.grep(held || [], function (l) { return !onDevice[l.plugin_uri] })
 
+        // `title` explains the group in the list; `filter` is the short name on its chip; `badge` tags each card
         var sections = [
             {
-                kind: 'mine', title: "Yours, and working on this unit",
+                kind: 'mine', title: "Yours, and working on this unit", filter: "Yours",
                 items: $.map(mine, function (i) {
                     return self.row(i.plugin, {
-                        detail: self.bought(i.purchase) + " · " + self.seats(i.seats),
+                        kind: 'mine', badge: "Installed",
+                        detail: self.bought(i.purchase),
+                        meta: self.seats(i.seats),
                         label: i.purchase && i.purchase.evidence,
                     })
                 }),
             },
             {
-                kind: 'elsewhere', title: "Yours, but not on this unit",
+                kind: 'elsewhere', title: "Yours, but not on this unit", filter: "Not installed",
                 items: $.map(elsewhere, function (l) {
                     return self.row(l.plugin, {
-                        absent: true,
-                        detail: self.bought(l.evidences[0]) + " · " + (l.seats_in_use ? self.seats(l) : "not in use"),
+                        kind: 'elsewhere', badge: "Not installed", absent: true,
+                        detail: self.bought(l.evidences[0]),
+                        meta: l.seats_in_use ? self.seats(l) : "not in use",
                         action: 'install', actionText: "Install here",
                     })
                 }),
             },
             {
-                kind: 'others', title: "On this unit, but we don't know they're yours",
+                kind: 'others', title: "On this unit, but we don't know they're yours", filter: "To confirm",
                 note: "These keep working either way. Confirming them lets you reinstall them on another unit later.",
                 items: $.map(others, function (i) {
                     return self.row(i.plugin, {
+                        kind: 'others', badge: "To confirm",
                         detail: self.bought(i.purchase) + (i.license.masked_email ? " with " + i.license.masked_email : ""),
                         action: 'claim', actionText: "This is mine", disabled: true,
                     })
                 }),
             },
             {
-                kind: 'included', title: "Included with this device · stays with the unit",
+                kind: 'included', title: "Included with this device · stays with the unit", filter: "Device",
                 items: $.map(included, function (i) {
                     return self.row(i.plugin, {
+                        kind: 'included', badge: "Device",
                         label: INCLUDED_LABELS[i.license.order_number] || i.license.order_number,
                     })
                 }),
@@ -279,19 +285,50 @@ function Auth(options) {
         ]
 
         var container = win.find('.js-sections').empty()
-        $.each(sections, function (i, section) {
-            if (section.items.length == 0) {
-                return
-            }
+        var filters = win.find('.js-filters').empty()
+        var shown = $.grep(sections, function (section) { return section.items.length > 0 })
+
+        $.each(shown, function (i, section) {
             var box = $('<section class="auth-section auth-section-' + section.kind + '">').appendTo(container)
             box.append($('<h3>').text(section.title))
             if (section.note) {
                 box.append($('<p class="auth-section-note">').text(section.note))
             }
+            var grid = $('<div class="auth-grid">').appendTo(box)
             $.each(section.items, function (j, row) {
-                box.append(row)
+                grid.append(row)
             })
         })
+
+        // The chips filter by group; with a single group there is nothing to choose
+        if (shown.length > 1) {
+            var total = 0
+            var chips = []
+            $.each(shown, function (i, section) {
+                total += section.items.length
+                chips.push({kind: section.kind, filter: section.filter, count: section.items.length})
+            })
+            chips.unshift({kind: 'all', filter: "All", count: total})
+            $.each(chips, function (i, chip) {
+                $('<button type="button" class="auth-chip auth-chip-' + chip.kind + '">')
+                    .attr('data-kind', chip.kind)
+                    .append($('<span>').text(chip.filter))
+                    .append($('<b>').text(chip.count))
+                    .appendTo(filters)
+            })
+            filters.on('click', '.auth-chip', function () {
+                var kind = $(this).attr('data-kind')
+                filters.find('.auth-chip').removeClass('active').attr('aria-pressed', 'false')
+                $(this).addClass('active').attr('aria-pressed', 'true')
+                container.find('.auth-section').each(function () {
+                    $(this).toggle(kind == 'all' || $(this).hasClass('auth-section-' + kind))
+                })
+                win.find('.auth-account-body').scrollTop(0)
+            })
+            filters.find('.auth-chip-all').click()
+        } else {
+            filters.hide()
+        }
 
         if (container.children().length == 0) {
             container.append($('<p class="auth-loading">').text("No plugins to show for this unit yet."))
@@ -316,24 +353,88 @@ function Auth(options) {
         })
     }
 
-    // A plugin row, with its picture on top of the initials: the picture comes from this device (/effect/image),
-    // then from the thumbnail the service gave, and the initials stay when neither exists
+    // A plugin card. The picture is the plugin's screenshot (the thumbnail is too small for a card): from this
+    // device (/effect/image), or from what the service gave for a plugin that is not here. The name is written on
+    // the tile and the picture stands over it, so the name is what shows when there is no picture.
     this.row = function (plugin, extra) {
         var name = plugin.name || plugin.uri
         var html = self.render('auth_plugin', $.extend({
             name: name,
+            longName: name.length > 14,
+            brand: plugin.brand,
             uri: plugin.uri,
-            initials: self.initials(name),
-            color: self.color(name),
         }, extra))
 
-        var src = extra.absent ? plugin.thumbnail_href : "/effect/image/thumbnail.png?uri=" + escape(plugin.uri)
+        var thumb = html.find('.auth-thumb')
+        thumb.css('background', self.background(self.hue(name), 0.2))
+
+        var src = extra.absent ? (plugin.screenshot_href || plugin.thumbnail_href) : "/effect/image/screenshot.png?uri=" + escape(plugin.uri)
         if (src) {
-            $('<img aria-hidden="true">').appendTo(html.find('.auth-thumb'))
+            $('<img aria-hidden="true">').appendTo(thumb)
                 .on('error', function () { $(this).remove() })
+                .on('load', function () {
+                    var tint = self.dominantColor(this)
+                    if (tint) {
+                        thumb.css('background', self.background(tint.hue, tint.saturation))
+                    }
+                })
                 .attr('src', src)
         }
         return html
+    }
+
+    // The color of a plugin, as its picture says: the hue its colored pixels lean to and how colored they are.
+    // Null when the browser does not let the picture be read.
+    this.dominantColor = function (img) {
+        var size = 24
+        try {
+            var canvas = document.createElement('canvas')
+            canvas.width = canvas.height = size
+            var context = canvas.getContext('2d')
+            context.drawImage(img, 0, 0, size, size)
+            var pixels = context.getImageData(0, 0, size, size).data
+        } catch (e) {
+            return null
+        }
+
+        var x = 0, y = 0, chroma = 0, count = 0
+        for (var i = 0; i < pixels.length; i += 4) {
+            if (pixels[i + 3] < 200) {
+                continue // the empty corners of the picture
+            }
+            var r = pixels[i] / 255, g = pixels[i + 1] / 255, b = pixels[i + 2] / 255
+            var max = Math.max(r, g, b), min = Math.min(r, g, b), delta = max - min
+            var hue = 0
+            if (delta > 0) {
+                if (max == r) {
+                    hue = ((g - b) / delta) % 6
+                } else if (max == g) {
+                    hue = (b - r) / delta + 2
+                } else {
+                    hue = (r - g) / delta + 4
+                }
+            }
+            // The more colored a pixel, the more it counts for the hue
+            x += delta * Math.cos(hue * Math.PI / 3)
+            y += delta * Math.sin(hue * Math.PI / 3)
+            chroma += delta
+            count++
+        }
+        if (count == 0) {
+            return null
+        }
+        return {
+            hue: Math.round((Math.atan2(y, x) * 180 / Math.PI + 360) % 360),
+            saturation: Math.min(0.55, chroma / count * 1.6),
+        }
+    }
+
+    // A light tile of the color, so the plugin stands out of it whatever its own colors
+    this.background = function (hue, saturation) {
+        var color = function (lightness) {
+            return 'hsl(' + hue + ', ' + Math.round(saturation * 100) + '%, ' + lightness + '%)'
+        }
+        return 'linear-gradient(135deg, ' + color(95) + ', ' + color(85) + ')'
     }
 
     // Texts -----------------------------------------------------------------
@@ -352,18 +453,13 @@ function Auth(options) {
         return seats ? seats.seats_in_use + " of " + seats.total_seats + " seats in use" : "no seats"
     }
 
-    this.initials = function (name) {
-        var words = name.replace(/[^\w\s]/g, '').split(/\s+/)
-        return (words[0].charAt(0) + (words.length > 1 ? words[1].charAt(0) : '')).toUpperCase()
-    }
-
-    // The same name always gets the same, muted, color
-    this.color = function (name) {
+    // The same name always gets the same hue
+    this.hue = function (name) {
         var hash = 0
         for (var i = 0; i < name.length; i++) {
             hash = (hash * 31 + name.charCodeAt(i)) % 360
         }
-        return 'hsl(' + hash + ', 35%, 32%)'
+        return hash
     }
 
     this.capitalize = function (text) {

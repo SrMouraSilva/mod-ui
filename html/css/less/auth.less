@@ -229,48 +229,67 @@
 
 // ------------------------------------------------------------------
 // Account: the plugins of the person and of this device
+//
+// Mobile first: one column of cards on a phone, more as the window gets wider.
+// The bar and the filters stay put; only the list scrolls.
 // ------------------------------------------------------------------
 
+@auth-mine: #4a7a1a;
+@auth-elsewhere: #2b5fa8;
+@auth-others: #b3721a;
+@auth-included: #6b6b66;
+
 .auth-account {
-  max-width: 560px;
+  display: flex;
+  flex-direction: column;
+  max-width: 1200px;
+  max-height: 100%;
   background: #f6f6f4;
   color: #222;
 
   .auth-account-bar {
     display: flex;
+    flex: 0 0 auto;
     justify-content: space-between;
-    padding: 16px 52px 16px 20px;
+    padding: 14px 52px 14px 16px;
     background: #222;
     color: #ddd;
     font-size: 13px;
     letter-spacing: 1px;
     .auth-close {
-      top: 10px;
+      top: 8px;
+    }
+  }
+
+  .auth-account-head {
+    display: flex;
+    flex: 0 0 auto;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 16px 16px 0;
+    h2 {
+      margin: 0 0 4px;
+      font-size: 22px;
+    }
+    p {
+      margin: 0;
+      font-size: 13px;
+      color: #888;
     }
   }
 
   .auth-account-body {
-    padding: 20px;
-    header {
-      display: flex;
-      justify-content: space-between;
-      align-items: flex-start;
-      margin-bottom: 16px;
-      h2 {
-        margin: 0 0 4px;
-        font-size: 20px;
-      }
-      p {
-        margin: 0;
-        font-size: 13px;
-        color: #888;
-      }
-    }
+    flex: 1 1 auto;
+    min-height: 0;
+    padding: 4px 16px 16px;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
     footer {
       margin-top: 8px;
       text-align: center;
     }
     .auth-link {
+      padding: 10px;
       color: #888;
       &:hover {
         color: #444;
@@ -294,137 +313,268 @@
     color: #888;
   }
 
+  // Filters by group: a row that scrolls sideways on a phone, big enough to touch
+  .auth-filters {
+    display: flex;
+    flex: 0 0 auto;
+    gap: 8px;
+    padding: 12px 16px;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    border-bottom: 1px solid #e3e3e0;
+  }
+
+  .auth-chip {
+    flex: 0 0 auto;
+    min-height: 40px;
+    padding: 0 14px;
+    border: 1px solid #ccc;
+    border-radius: 20px;
+    background: #fff;
+    font-size: 13px;
+    color: #444;
+    white-space: nowrap;
+    cursor: pointer;
+    b {
+      margin-left: 8px;
+      padding: 1px 7px;
+      border-radius: 10px;
+      background: #eee;
+      font-size: 11px;
+      font-weight: normal;
+    }
+    &.active {
+      border-color: #222;
+      background: #222;
+      color: #fff;
+      b {
+        background: rgba(255, 255, 255, 0.2);
+      }
+    }
+  }
+
+  // A dot in the color of the group tells the chip apart from the others
+  .auth-chip-mine:before,
+  .auth-chip-elsewhere:before,
+  .auth-chip-others:before,
+  .auth-chip-included:before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: @auth-mine;
+  }
+  .auth-chip-elsewhere:before { background: @auth-elsewhere; }
+  .auth-chip-others:before { background: @auth-others; }
+  .auth-chip-included:before { background: @auth-included; }
+
   .auth-section {
-    margin-bottom: 14px;
-    padding: 14px 16px 6px;
-    border: 1px solid;
-    border-radius: 8px;
+    margin-top: 20px;
     h3 {
-      margin: 0 0 8px;
+      margin: 0 0 10px;
       font-size: 13px;
+      text-transform: uppercase;
+      letter-spacing: 0.6px;
     }
   }
 
   .auth-section-note {
-    margin: -2px 0 6px;
+    margin: -4px 0 10px;
     font-size: 12px;
     line-height: 1.5;
+    color: #8a5a12;
   }
 
-  .auth-section-mine {
-    background: #fff;
-    border-color: #d4e3b4;
-    h3 { color: #4a7a1a; }
-  }
-  .auth-section-elsewhere {
-    background: #e8f1fb;
-    border-color: #bcd3ee;
-    h3 { color: #2b5fa8; }
-  }
-  .auth-section-others {
-    background: #faefdc;
-    border-color: #efcf94;
-    h3,
-    .auth-section-note,
-    .auth-plugin-detail { color: #8a5a12; }
-    .auth-plugin { border-top-color: #efcf94; }
-  }
-  .auth-section-included {
-    background: #efeeea;
-    border-color: #d4d2cc;
-    h3,
-    .auth-plugin-label { color: #6b6b66; }
-    .auth-plugin { border-top-color: #d4d2cc; }
+  .auth-section-mine h3 { color: @auth-mine; }
+  .auth-section-elsewhere h3 { color: @auth-elsewhere; }
+  .auth-section-others h3 { color: @auth-others; }
+  .auth-section-included h3 { color: @auth-included; }
+
+  // As many columns as fit, never narrower than a card needs
+  .auth-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+    gap: 12px;
   }
 
+  // The picture takes the left of the card and its full height; the group shows on the edge and on the badge
   .auth-plugin {
     display: flex;
-    align-items: center;
-    padding: 10px 0;
-    border-top: 1px solid #e3e3e3;
-    &:first-of-type {
-      border-top: 0;
-    }
+    min-width: 0;
+    border: 1px solid #e3e3e0;
+    border-left: 4px solid @auth-mine;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
   }
+  .auth-plugin-elsewhere { border-left-color: @auth-elsewhere; }
+  .auth-plugin-others { border-left-color: @auth-others; }
+  .auth-plugin-included { border-left-color: @auth-included; }
 
-  // The initials sit under the picture and show alone when the picture is missing
+  // A square tile: the name on top, big, and the plugin's picture standing at the bottom, over the name when
+  // the plugin is tall. The tile has the color of the plugin (set by js/auth.js).
   .auth-thumb {
     position: relative;
-    flex: 0 0 auto;
-    width: 48px;
-    height: 48px;
-    margin-right: 12px;
+    flex: 0 0 42%;
+    align-self: flex-start;
+    aspect-ratio: 1;
+    margin: 6px 0 6px 6px;
     border-radius: 6px;
     overflow: hidden;
-    img,
-    .auth-thumb-initials {
-      position: absolute;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-    }
+    container-type: inline-size;
+    background: #e9e9e9;
     img {
-      object-fit: cover;
-    }
-    .auth-thumb-initials {
-      font-size: 16px;
-      font-weight: bold;
-      line-height: 48px;
-      text-align: center;
-      color: rgba(255, 255, 255, 0.85);
+      position: absolute;
+      bottom: 4%;
+      left: 5%;
+      z-index: 1;
+      width: 90%;
+      height: 74%;
+      object-fit: contain;
+      object-position: center bottom;
+      filter: drop-shadow(0 3px 4px rgba(0, 0, 0, 0.25));
     }
   }
 
-  // A plugin the person owns that this device does not have: drained, dashed, and still recognizable
+  .auth-thumb-name {
+    position: absolute;
+    top: 6%;
+    right: 6%;
+    left: 7%;
+    font-size: 17cqw;
+    font-weight: bold;
+    line-height: 1.05;
+    color: #111;
+    overflow-wrap: anywhere;
+  }
+  .auth-thumb-long .auth-thumb-name {
+    font-size: 12cqw;
+  }
+
+  // A plugin the person owns that this device does not have: drained, and still recognizable
   .auth-plugin-absent .auth-thumb {
-    outline: 2px dashed #7aa3d8;
-    outline-offset: 1px;
-    img,
-    .auth-thumb-initials {
-      filter: grayscale(0.8);
-      opacity: 0.75;
-    }
+    filter: grayscale(0.85);
+    opacity: 0.8;
+  }
+  .auth-plugin-absent {
+    border-style: dashed;
+    border-left-style: solid;
+    background: #f3f7fc;
   }
 
-  .auth-plugin-text {
+  .auth-plugin-body {
+    display: flex;
     flex: 1;
+    flex-direction: column;
     min-width: 0;
-    strong {
-      display: block;
-      font-size: 15px;
+    padding: 10px 12px;
+  }
+
+  .auth-plugin-name {
+    margin: 0 0 4px;
+    font-size: 16px;
+    line-height: 1.25;
+    small {
+      font-size: 13px;
       font-weight: normal;
+      color: #666;
     }
   }
 
   .auth-plugin-detail {
-    display: block;
-    margin-top: 2px;
+    margin: 0;
     font-size: 12px;
+    line-height: 1.5;
     color: #888;
   }
 
-  .auth-plugin-side {
-    flex: 0 0 auto;
-    margin-left: 12px;
-    text-align: right;
+  .auth-plugin-tags {
+    margin: 6px 0 0;
   }
 
+  .auth-badge {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 3px;
+    background: fade(@auth-mine, 14%);
+    font-size: 11px;
+    font-weight: bold;
+    color: @auth-mine;
+  }
+  .auth-plugin-elsewhere .auth-badge { background: fade(@auth-elsewhere, 14%); color: @auth-elsewhere; }
+  .auth-plugin-others .auth-badge { background: fade(@auth-others, 16%); color: @auth-others; }
+  .auth-plugin-included .auth-badge { background: fade(@auth-included, 14%); color: @auth-included; }
+
   .auth-plugin-label {
-    font-size: 13px;
+    margin-left: 6px;
+    font-size: 12px;
     color: #999;
   }
 
+  // The action sits at the bottom right of the card, like the buttons of the license list
+  .auth-plugin-actions {
+    margin-top: auto;
+    padding-top: 10px;
+    text-align: right;
+  }
+
   .auth-button-small {
-    padding: 6px 12px;
-    border: 1px solid #ccc;
-    background: #fff;
-    color: #222;
+    min-height: 40px;
+    padding: 0 16px;
+    border: 1px solid #222;
+    background: #222;
+    color: #fff;
     font-size: 13px;
     letter-spacing: 0;
     text-transform: none;
     &:hover {
-      background: #f2f2f2;
+      background: #444;
+    }
+    &[disabled]:hover {
+      background: #222;
+    }
+  }
+}
+
+// Phone: the window is the whole screen
+@media (max-width: 600px) {
+  .auth-overlay-account {
+    padding: 0;
+  }
+  .auth-account {
+    height: 100%;
+    border-radius: 0;
+  }
+}
+
+// Fingers: bigger targets
+@media (pointer: coarse) {
+  .auth-account .auth-button-small,
+  .auth-account .auth-chip {
+    min-height: 44px;
+  }
+}
+
+// Tablet and up: a bigger picture, and the cards use the width
+@media (min-width: 768px) {
+  .auth-account {
+    .auth-account-head,
+    .auth-filters {
+      padding-right: 24px;
+      padding-left: 24px;
+    }
+    .auth-account-body {
+      padding: 4px 24px 24px;
+    }
+    .auth-grid {
+      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      gap: 16px;
+    }
+    .auth-plugin-name {
+      font-size: 17px;
     }
   }
 }
