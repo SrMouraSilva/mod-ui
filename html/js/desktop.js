@@ -51,6 +51,7 @@ function Desktop(elements) {
         devicesWindow: $('<div>'),
         statusIcon: $('<div>'),
         settingsIcon: $('<div>'),
+        userIcon: $('<button>'),
         upgradeIcon: $('<div>'),
         upgradeWindow: $('<div>'),
         bypassLeftButton: $('<div>'),
@@ -1299,11 +1300,16 @@ function Desktop(elements) {
     })
 
     elements.settingsIcon.statusTooltip()
+    elements.userIcon.statusTooltip()
     elements.pedalboardTrigger.statusTooltip()
     elements.pedalboardBoxTrigger.statusTooltip()
     elements.bankBoxTrigger.statusTooltip()
     elements.cloudPluginBoxTrigger.statusTooltip()
     elements.fileManagerBoxTrigger.statusTooltip()
+
+    this.auth = new Auth({
+        icon: elements.userIcon,
+    })
 
     this.upgradeWindow = elements.upgradeWindow.upgradeWindow({
         icon: elements.upgradeIcon,

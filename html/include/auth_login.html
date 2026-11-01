@@ -1,0 +1,38 @@
+{{! Sign-in window: what signing in gives on the left (copy still to be defined), the e-mail + 6-digit code flow on the right }}
+<div class="auth-overlay">
+    <div class="auth-card auth-login">
+        <span class="auth-close js-close">&times;</span>
+
+        <div class="auth-aside">
+            <img src="img/desktop-app/dwarf-front.jpg" alt="" />
+            <div class="auth-aside-text">
+                <h2>Sign in to MOD</h2>
+                <ul>
+                    <li>See which plugins are yours, on this unit and beyond</li>
+                    <li>Install your plugins on any of your units</li>
+                    <li>Keep your purchases tied to you, not to a device</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="auth-main">
+            <form class="js-email-form" novalidate>
+                <h3>Enter your e-mail</h3>
+                <p>We will send you a 6-digit code to sign in. No password needed.</p>
+                <input type="email" class="js-email" placeholder="you@example.com" autocomplete="email" />
+                <p class="auth-error js-error"></p>
+                <button type="submit" class="auth-button js-submit">Send code</button>
+            </form>
+
+            <form class="js-code-form" novalidate>
+                <h3>Check your e-mail</h3>
+                <p>Enter the 6-digit code we sent to <strong class="js-sent-to"></strong>. It expires in 15 minutes.</p>
+                <input type="text" class="js-code auth-code" inputmode="numeric" autocomplete="one-time-code"
+                       maxlength="6" placeholder="000000" aria-label="6-digit code" />
+                <p class="auth-error js-error"></p>
+                <button type="submit" class="auth-button js-submit">Sign in</button>
+                <a href="#" class="auth-link js-back">Use a different e-mail</a>
+            </form>
+        </div>
+    </div>
+</div>

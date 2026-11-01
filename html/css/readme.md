@@ -1,39 +1,40 @@
 ## LESS compiler for MOD-UI's css
 
-NodeJS and its package manager npm are required to install the dependencies,
-which are included in package.json. Once you have them installed, simply run: 
+`main.css` is generated from `less/main.less` (which imports the other files in `less/`
+and Bootstrap's LESS sources) with [Grunt](https://gruntjs.com/). Do not edit `main.css` by hand.
+
+### Requirements
+
+[Node.js](https://nodejs.org/) with its package manager `npm` are required to install the dependencies
+which are included in package.json.
+
+### Setup
+
+From this folder (`html/css`):
 
 ```shell
-sudo npm install
+npm install
 ```
 
-On some systems it's required to install grunt-cli, too:
+This creates `node_modules/` (git-ignored), which is required: `main.less` imports
+`../node_modules/bootstrap/less/*`.
 
-```shell 
-sudo npm install -g grunt-cli
-```
-
-It might happen that the sudo command installs the hidden directory ".npm"
-not into your users home directory but in /root. If so, just move the folder
-over to your users home directory and make sure its content and the folder
-itself belong to your user:
+### Usage
 
 ```shell
-sudo mv /root.npm ~/
-sudo chown -R $USER:$USER ~/.npm
+npm run build    # Compile less/main.less into main.css once
+npm run watch    # Compile, then keep watching less/*.less and recompile on every change (Ctrl+C to stop)
+                 # useful for development
 ```
 
-On some systems the binary of "nodejs" is called "node". In this case add
-a link to it:
+Commit the regenerated `main.css` together with the `.less` change.
 
-```shell 
-sudo ln -s /usr/bin/nodejs /usr/bin/node
-```
+### Troubleshooting
 
-If everything is set up correctly you should have a working grunt. To use it
-switch over to the directory this readme is located and run "grunt" in a
-terminal.
-
-It should watch every .less and .css file inside the less folder and compile
-into main.css. Ideally, every section should have its .less file. Bootstrap
-is included in main.less.
+- `EACCES` errors on `npm install`: npm is trying to write to a directory owned by root. Do not
+  use `sudo`; fix the npm prefix/cache ownership instead
+  (e.g. `sudo chown -R $USER ~/.npm`), or use a Node version manager such as `nvm`.
+- `node: command not found` on old Debian/Ubuntu, where the binary is called `nodejs`:
+  install the `nodejs-legacy` package or link it: `sudo ln -s /usr/bin/nodejs /usr/bin/node`.
+- The dependencies in `package.json` are old (Grunt 0.4, `grunt-contrib-less` 1.x). If a very
+  recent Node.js fails to run them, try an older LTS version.

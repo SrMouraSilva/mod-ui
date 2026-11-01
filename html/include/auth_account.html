@@ -1,0 +1,29 @@
+{{! Account window: the plugins of the signed-in user, grouped by whose they are and where they are }}
+<div class="auth-overlay">
+    <div class="auth-card auth-account">
+        <div class="auth-account-bar">
+            <strong>MOD</strong>
+            <span class="js-device"></span>
+            <span class="auth-close js-close">&times;</span>
+        </div>
+
+        <div class="auth-account-body">
+            <header>
+                <div>
+                    <h2>Your plugins</h2>
+                    <p class="js-email"></p>
+                </div>
+                <span class="auth-pill js-summary"></span>
+            </header>
+
+            <p class="auth-loading js-loading">Loading your plugins...</p>
+            <p class="auth-error js-error"></p>
+
+            <div class="js-sections"></div>
+
+            <footer>
+                <a href="#" class="auth-link js-logout">Sign out</a>
+            </footer>
+        </div>
+    </div>
+</div>

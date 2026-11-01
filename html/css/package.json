@@ -3,6 +3,10 @@
   "author": "MOD Team",
   "description": "grunt task for compiing MOD's css",
   "repository": "moddevices/mod-ui",
+  "scripts": {
+    "build": "grunt less",
+    "watch": "grunt"
+  },
   "dependencies": {
     "bootstrap": "~3.4.1",
     "grunt": "^0.4.5",

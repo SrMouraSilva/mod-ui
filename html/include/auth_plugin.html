@@ -1,0 +1,14 @@
+{{! One plugin row of the account window }}
+<div class="auth-plugin{{#absent}} auth-plugin-absent{{/absent}}">
+    <div class="auth-thumb" style="background-color: {{color}}">
+        <span class="auth-thumb-initials">{{initials}}</span>
+    </div>
+    <div class="auth-plugin-text">
+        <strong>{{name}}</strong>
+        {{#detail}}<span class="auth-plugin-detail">{{detail}}</span>{{/detail}}
+    </div>
+    <div class="auth-plugin-side">
+        {{#label}}<span class="auth-plugin-label">{{label}}</span>{{/label}}
+        {{#action}}<button type="button" class="auth-button auth-button-small js-action" data-action="{{action}}" data-uri="{{uri}}"{{#disabled}} disabled title="Not available yet"{{/disabled}}>{{actionText}}</button>{{/action}}
+    </div>
+</div>

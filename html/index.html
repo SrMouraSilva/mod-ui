@@ -168,6 +168,7 @@ $('document').ready(function() {
         devicesWindow: $('#mod-devices-window'),
         statusIcon: $('#mod-status'),
         settingsIcon: $('#mod-settings'),
+        userIcon: $('#mod-user'),
         upgradeIcon: $('#mod-update'),
         upgradeWindow: $('#mod-upgrade'),
         bypassLeftButton: $("#mod-bypassLeft"),
@@ -353,6 +354,8 @@ $('document').ready(function() {
 <script type="text/javascript" src="js/desktop-app.js?v={{version}}"></script>
 {% end %}
 <script type="text/javascript" src="js/desktop.js?v={{version}}"></script>
+<script type="text/javascript" src="js/auth-mock.js?v={{version}}"></script>
+<script type="text/javascript" src="js/auth.js?v={{version}}"></script>
 <script type="text/javascript" src="js/pedalboard.js?v={{version}}"></script>
 <script type="text/javascript" src="js/pedalboards.js?v={{version}}"></script>
 <script type="text/javascript" src="js/file_manager.js?v={{version}}"></script>
@@ -777,6 +780,9 @@ $('document').ready(function() {
         <div id="mod-status" class="status icon mod-hidden"></div>
         <div id="mod-devices" class="status icon"></div>
         <div id="mod-settings" class="status icon mod-settings" data-message="Go to settings screen"></div>
+        <button id="mod-user" class="status icon mod-hidden" data-message="Sign in to access all MOD Cloud functionalities">
+            <span>Sign-in</span>
+        </button>
         <div id="mod-report" class="icon" title="Report a problem with this release">Report a problem</div>
         <div id="mod-ram" class="icon">
             <div class="progress" id="ram-bar" style="width: 100%;">
