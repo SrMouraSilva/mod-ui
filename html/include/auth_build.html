@@ -1,0 +1,14 @@
+{{! One build of the account window: what was built, how it went, and the files of it }}
+<article class="auth-plugin auth-build auth-build-{{state}}">
+    <div class="auth-build-head">
+        <h4 class="auth-plugin-name">{{name}}{{#version}} <small>{{version}}</small>{{/version}}</h4>
+        <span class="auth-badge">{{status}}</span>
+    </div>
+    <p class="auth-plugin-detail">{{created}}{{#platforms}} · {{platforms}}{{/platforms}}</p>
+    {{#contents}}<p class="auth-plugin-detail">{{contents}}</p>{{/contents}}
+    {{#reason}}<p class="auth-build-reason">{{reason}}</p>{{/reason}}
+    <div class="auth-build-actions">
+        {{#files}}<a class="auth-button auth-button-small" href="{{href}}" target="_blank" rel="noopener">{{label}}</a>{{/files}}
+        {{#logs}}<a class="auth-button auth-button-small auth-button-light" href="{{logs}}" target="_blank" rel="noopener">Logs</a>{{/logs}}
+    </div>
+</article>

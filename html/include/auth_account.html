@@ -3,7 +3,7 @@
     <div class="auth-card auth-account">
         <div class="auth-account-bar">
             <strong>MOD</strong>
-            <span class="js-device"></span>
+            <span class="auth-bar-email js-email"></span>
             <a href="#" class="auth-link js-logout">Sign out</a>
             <span class="auth-close js-close">&times;</span>
         </div>
@@ -22,6 +22,10 @@
                     <span class="auth-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><circle cx="16" cy="9" r="1.5"/><circle cx="12" cy="15.5" r="2"/></svg></span>
                     <span class="auth-nav-label">Pedalboards</span>
                 </button>
+                <button type="button" class="auth-nav-item" data-view="builds">
+                    <span class="auth-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M12 12l8-4.5M12 12v9M12 12L4 7.5"/></svg></span>
+                    <span class="auth-nav-label">Builds</span>
+                </button>
             </nav>
 
             <div class="auth-views">
@@ -29,9 +33,19 @@
                     <header class="auth-account-head">
                         <div>
                             <h2>Licenses</h2>
-                            <p class="js-email"></p>
+                            <p>The plugins of the device you are using now</p>
                         </div>
-                        <span class="auth-pill js-summary"></span>
+                        <div class="auth-head-action">
+                            <button type="button" class="auth-button js-install-all" style="display: none"></button>
+                            <span class="auth-all-installed js-all-installed" style="display: none">&#10003; Everything you own is installed here</span>
+                        </div>
+                        <div class="auth-here js-here" style="display: none">
+                            <span class="auth-here-picture"><img class="js-device-image" alt=""></span>
+                            <span class="auth-here-text">
+                                <small>You are using this device</small>
+                                <strong><span class="js-device-name"></span> <span class="js-device-tag"></span></strong>
+                            </span>
+                        </div>
                     </header>
 
                     <nav class="auth-filters js-filters" aria-label="Filter plugins"></nav>
@@ -65,12 +79,37 @@
                     <header class="auth-account-head">
                         <div>
                             <h2>Pedalboards</h2>
-                            <p>Your pedalboards in the MOD Cloud</p>
+                            <p>The pedalboards you shared from your devices</p>
                         </div>
+                        <span class="auth-pill js-count"></span>
                     </header>
 
                     <div class="auth-account-body">
-                        <p class="auth-loading">Coming soon.</p>
+                        <p class="auth-loading js-loading">Loading your pedalboards...</p>
+                        <p class="auth-error js-error"></p>
+
+                        <div class="auth-grid auth-grid-pedalboards js-pedalboards"></div>
+                    </div>
+                </section>
+
+                <section class="auth-view auth-view-builds">
+                    <header class="auth-account-head">
+                        <div>
+                            <h2>Builds</h2>
+                            <p>The plugins you built with MOD Buildroot</p>
+                        </div>
+                        <div class="auth-head-action">
+                            <a class="auth-button" href="https://try.mod.audio/buildroot" target="_blank" rel="noopener">New build</a>
+                        </div>
+                    </header>
+
+                    <nav class="auth-filters js-filters" aria-label="Filter builds"></nav>
+
+                    <div class="auth-account-body">
+                        <p class="auth-loading js-loading">Loading your builds...</p>
+                        <p class="auth-error js-error"></p>
+
+                        <div class="auth-grid auth-grid-builds js-builds"></div>
                     </div>
                 </section>
             </div>

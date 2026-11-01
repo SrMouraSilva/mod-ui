@@ -256,8 +256,13 @@
     color: #ddd;
     font-size: 13px;
     letter-spacing: 1px;
-    .js-device {
+    .auth-bar-email {
       margin-left: auto;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      letter-spacing: 0;
+      color: #999;
     }
     .auth-link {
       margin-left: 16px;
@@ -347,8 +352,10 @@
   .auth-account-head {
     display: flex;
     flex: 0 0 auto;
+    flex-wrap: wrap;
     justify-content: space-between;
     align-items: flex-start;
+    gap: 12px;
     padding: 16px 16px 0;
     h2 {
       margin: 0 0 4px;
@@ -358,6 +365,70 @@
       margin: 0;
       font-size: 13px;
       color: #888;
+    }
+  }
+
+  // The title gives way to the action, so both stay on a line on a phone
+  .auth-account-head > div:first-child {
+    flex: 1 1 0;
+    min-width: 160px;
+  }
+
+  .auth-head-action {
+    flex: 0 0 auto;
+    margin-left: auto;
+    text-align: right;
+    .auth-button {
+      min-height: 44px;
+      white-space: nowrap;
+    }
+  }
+
+  .auth-all-installed {
+    font-size: 13px;
+    color: @auth-mine;
+  }
+
+  // Which device the licenses are of: the one the person is using now
+  .auth-here {
+    display: flex;
+    flex: 1 0 100%;
+    align-items: center;
+    box-sizing: border-box;
+    gap: 12px;
+    padding: 6px 14px 6px 6px;
+    border: 1px solid #e3e3e0;
+    border-left: 4px solid @auth-mine;
+    border-radius: 6px;
+    background: #fff;
+    small {
+      display: block;
+      font-size: 11px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: @auth-mine;
+    }
+    strong {
+      font-size: 15px;
+    }
+    .js-device-tag {
+      font-weight: normal;
+      color: #888;
+    }
+  }
+  .auth-here-picture {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 64px;
+    height: 44px;
+    border-radius: 4px;
+    background: linear-gradient(135deg, #f7f7f5, #e4e4e1);
+    img {
+      max-width: 52px;
+      max-height: 36px;
+      filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.3));
     }
   }
 
@@ -637,11 +708,12 @@
 
   // The device stands in a light tile, whole, whatever its proportions
   .auth-device-picture {
+    position: relative;
     display: flex;
     align-items: center;
     justify-content: center;
-    height: 170px;
-    padding: 16px;
+    height: 180px;
+    padding: 32px 16px 14px;
     box-sizing: border-box;
     background: linear-gradient(135deg, #f7f7f5, #e4e4e1);
     img {
@@ -650,6 +722,34 @@
       max-height: 100%;
       filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
     }
+  }
+  .auth-device-current .auth-device-picture {
+    background: linear-gradient(135deg, #f3f8ea, #d9e7c2);
+  }
+  // The mark of the device in use: on its picture, where the eye lands first
+  .auth-device-now {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    z-index: 1;
+    padding: 4px 10px 4px 8px;
+    border-radius: 12px;
+    background: @auth-mine;
+    font-size: 12px;
+    font-weight: bold;
+    color: #fff;
+    &:before {
+      content: '';
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      margin-right: 6px;
+      border-radius: 50%;
+      background: #fff;
+    }
+  }
+  .auth-device-here {
+    color: @auth-mine;
   }
   .auth-device-fallback {
     font-size: 24px;
@@ -661,6 +761,223 @@
   .auth-device-body {
     padding: 10px 14px 14px;
   }
+}
+
+// ------------------------------------------------------------------
+// Pedalboards (shared, with the history of each) and builds
+// ------------------------------------------------------------------
+
+@auth-failed: @brand-danger;
+
+.auth-account {
+  .auth-grid-pedalboards,
+  .auth-grid-builds {
+    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+    align-items: start;
+  }
+
+  // A light button next to the dark one
+  .auth-button-light {
+    border-color: #ccc;
+    background: #fff;
+    color: #222;
+    &:hover,
+    &[disabled]:hover {
+      background: #f2f2f2;
+    }
+  }
+
+  .auth-plugin-actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  // "Sure?" in place of the buttons
+  .auth-confirm {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    width: 100%;
+  }
+  .auth-confirm-text {
+    flex: 1 0 100%;
+    font-size: 12px;
+    text-align: left;
+    color: #555;
+  }
+
+  // ---- Pedalboards
+  .auth-pedalboard {
+    flex-wrap: wrap;
+    border-left-color: @brand-primary;
+  }
+  // The buttons run under the picture and the text, so they fit in one line
+  .auth-pedalboard > .auth-plugin-actions {
+    flex: 1 0 100%;
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0 12px 12px;
+  }
+  .auth-pedalboard .auth-plugin-label {
+    margin-left: 0;
+  }
+  .auth-thumb-pedalboard img {
+    bottom: 8%;
+    height: 66%;
+    object-position: center;
+  }
+  .auth-clamp {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .auth-origin {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0 0;
+    font-size: 12px;
+    color: #666;
+    strong {
+      font-weight: normal;
+      color: #222;
+    }
+    span span {
+      color: #999;
+    }
+  }
+  .auth-origin-picture {
+    display: flex;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    width: 34px;
+    height: 24px;
+    border-radius: 3px;
+    background: linear-gradient(135deg, #f7f7f5, #e4e4e1);
+    img {
+      max-width: 28px;
+      max-height: 18px;
+    }
+  }
+  .auth-plugin-tags .auth-badge {
+    background: fade(@auth-others, 16%);
+    color: @auth-others;
+  }
+
+  // The earlier versions of a pedalboard
+  .auth-history {
+    flex: 1 0 100%;
+    box-sizing: border-box;
+    padding: 10px 14px 12px;
+    border-top: 1px solid #e3e3e0;
+    background: #fafaf8;
+    h5 {
+      margin: 0 0 6px;
+      font-size: 11px;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+      color: #888;
+    }
+  }
+  .auth-history-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 0;
+    border-top: 1px solid #e9e9e6;
+    &:first-of-type {
+      border-top: 0;
+    }
+  }
+  .auth-history-text {
+    flex: 1 1 140px;
+    min-width: 0;
+    font-size: 12px;
+    color: #888;
+    strong {
+      display: block;
+      font-size: 13px;
+      font-weight: normal;
+      color: #222;
+    }
+  }
+  .auth-history-actions {
+    display: flex;
+    flex: 0 1 auto;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 8px;
+  }
+
+  // ---- Builds
+  .auth-build {
+    flex-direction: column;
+    padding: 12px 14px;
+    border-left-color: @auth-mine;
+  }
+  .auth-build-head {
+    display: flex;
+    align-items: flex-start;
+    justify-content: space-between;
+    gap: 8px;
+    .auth-plugin-name {
+      margin-bottom: 2px;
+    }
+  }
+  .auth-build-building { border-left-color: @auth-elsewhere; }
+  .auth-build-queued { border-left-color: @auth-included; }
+  .auth-build-failed { border-left-color: @auth-failed; }
+  .auth-build-building .auth-badge { background: fade(@auth-elsewhere, 14%); color: @auth-elsewhere; }
+  .auth-build-queued .auth-badge { background: fade(@auth-included, 14%); color: @auth-included; }
+  .auth-build-failed .auth-badge { background: fade(@auth-failed, 12%); color: @auth-failed; }
+  .auth-build .auth-badge {
+    flex: 0 0 auto;
+    white-space: nowrap;
+  }
+  .auth-build-reason {
+    margin: 6px 0 0;
+    padding: 6px 8px;
+    border-radius: 3px;
+    background: fade(@auth-failed, 8%);
+    font-family: monospace;
+    font-size: 12px;
+    line-height: 1.4;
+    color: @auth-failed;
+    word-break: break-word;
+  }
+  .auth-build-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 12px;
+    .auth-button {
+      display: inline-flex;
+      align-items: center;
+      text-decoration: none;
+    }
+  }
+
+  .auth-chip-finished:before,
+  .auth-chip-active:before,
+  .auth-chip-failed:before {
+    content: '';
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-right: 8px;
+    border-radius: 50%;
+    background: @auth-mine;
+  }
+  .auth-chip-active:before { background: @auth-elsewhere; }
+  .auth-chip-failed:before { background: @auth-failed; }
 }
 
 // Phone: the window is the whole screen

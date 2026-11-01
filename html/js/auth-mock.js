@@ -18,6 +18,13 @@
  *   devices()                 MOD API: the EndCustomerDevices of the person (endpoint and shape to confirm)
  *   plugins()                 MOD API: GET /v2/devices/plugins
  *   licenses()                MOD API: not served yet (see mock/auth.json)
+ *   pedalboards()             MOD API: GET /v2/pedalboards/, the ones this person shared (no filter by person yet)
+ *   unshare(id)               MOD API: nothing removes a pedalboard yet
+ *   builds()                  mod-pipeline: GET /bundle/ and /bundle/{id}, the ones this person built (no filter by person yet)
+ *   install(uri)              Not the cloud's: the device installing a plugin it has the license of. Simulated
+ *                             here; the real one is desktop.installationQueue.installUsingURI(uri, 'auto', ...)
+ *   open(pedalboard_id)       Not the cloud's either: loads a shared pedalboard on this device. Simulated here; the
+ *                             real one is desktop.loadRemotePedalboard(pedalboard_id)
  *
  * Error codes: invalid_email, invalid_code, rate_limited, not_authenticated.
  *
@@ -31,6 +38,8 @@ function AuthMockApi() {
     var MAX_WRONG_CODES = 5
 
     var wrongCodes = {}
+    var installed = {}
+    var unshared = {}
     var data = null
 
     // mock/auth.json, read once
@@ -130,12 +139,73 @@ function AuthMockApi() {
         })
     }
 
+    // What this device has: the plugins of mock/auth.json, and what was "installed" since (owned, so on the seat)
     this.plugins = function () {
         return self.me().then(function () {
             return self.data().then(function (json) {
-                return json.plugins
+                var items = json.plugins.slice()
+                $.each(json.licenses, function (i, held) {
+                    if (!installed[held.plugin_uri]) {
+                        return
+                    }
+                    var evidence = held.evidences[0]
+                    items.push({
+                        device: json.plugins[0].device,
+                        plugin: held.plugin,
+                        owner: { end_customer_id: json.user_id, device_id: null },
+                        origin: 'end_customer',
+                        license: { id: 'lic_' + held.plugin.id, order_number: evidence.evidence, created: evidence.acquired_at, masked_email: null },
+                        seats: { seat_id: 'seat_' + held.plugin.id, active: true, total_seats: held.total_seats, seats_in_use: held.seats_in_use + 1, seats_available: held.seats_available - 1 },
+                        purchase: { evidence_id: evidence.id, source: evidence.source, evidence: evidence.evidence, acquired_at: evidence.acquired_at },
+                    })
+                })
+                return items
             })
         })
+    }
+
+    this.pedalboards = function () {
+        return self.me().then(function () {
+            return self.data().then(function (json) {
+                return $.grep(json.pedalboards, function (board) { return !unshared[board.id] })
+            })
+        })
+    }
+
+    this.unshare = function (id) {
+        return self.me().then(function () {
+            return self.delay().then(function () {
+                unshared[id] = true
+            })
+        })
+    }
+
+    this.builds = function () {
+        return self.me().then(function () {
+            return self.data().then(function (json) {
+                return json.builds
+            })
+        })
+    }
+
+    // The device loading a pedalboard: nothing to wait for here but the time it takes
+    this.open = function (id) {
+        return self.delay()
+    }
+
+    this.delay = function () {
+        var done = $.Deferred()
+        setTimeout(done.resolve, 600 + Math.random() * 800)
+        return done.promise()
+    }
+
+    this.install = function (uri) {
+        var done = $.Deferred()
+        setTimeout(function () {
+            installed[uri] = true
+            done.resolve()
+        }, 800 + Math.random() * 1200)
+        return done.promise()
     }
 
     this.licenses = function () {

@@ -47,7 +47,11 @@ function Auth(options) {
         duo: {model: "MOD Duo", image: "img/devices/duo.webp"},
         duox: {model: "MOD Duo X", image: "img/devices/duox.webp"},
         dwarf: {model: "MOD Dwarf", image: "img/devices/dwarf.webp"},
+        pablito: {model: "Darkglass Pablito"},
     }
+
+    // The model code that starts a device tag tells the platform (mod-api: business/device_tag.py)
+    var TAG_PLATFORMS = {MDS: 'duo', MDX: 'duox', MDW: 'dwarf', DGAN: 'pablito'}
 
     this.user = null
 
@@ -216,59 +220,125 @@ function Auth(options) {
             return false
         })
 
-        // The plugins of the device are the point of the window; the licenses only add what is not here
-        var plugins = api.plugins()
-        var licenses = api.licenses()
+        var plugins = self.loadLicenses(win)
 
-        plugins.done(function (items) {
-            licenses.done(function (held) {
-                self.renderAccount(win, items, held)
-            }).fail(function () {
-                self.renderAccount(win, items, null)
-            })
-        }).fail(function (code) {
-            var view = win.find('.auth-view-licenses')
-            view.find('.js-loading').hide()
-            view.find('.js-error').text(self.errorMessage(code))
-        })
-
-        // The menu: one view at a time. The devices are asked for when first looked at.
-        var devicesAsked = false
+        // The menu: one view at a time. The others are asked for when first looked at.
+        var devices = null
+        var getDevices = function () {
+            return devices || (devices = api.devices())
+        }
+        var asked = {}
         win.find('.auth-nav-item').click(function () {
             var name = $(this).attr('data-view')
             win.find('.auth-nav-item').removeClass('active')
             $(this).addClass('active')
             win.find('.auth-view').removeClass('active').filter('.auth-view-' + name).addClass('active')
 
-            if (name == 'devices' && !devicesAsked) {
-                devicesAsked = true
-                // Which of the devices is this one is told by the plugins of this unit
-                plugins.always(function () {
-                    self.loadDevices(win, plugins)
-                })
+            if (!asked[name]) {
+                asked[name] = true
+                if (name == 'devices') {
+                    // Which of the devices is this one is told by the plugins of this device
+                    plugins.always(function () {
+                        self.loadDevices(win, plugins, getDevices())
+                    })
+                } else if (name == 'pedalboards') {
+                    self.loadPedalboards(win, getDevices())
+                } else if (name == 'builds') {
+                    self.loadBuilds(win)
+                }
             }
             return false
         })
     }
 
+    // The licenses view. The plugins of the device are the point of it; the licenses only add what is not here.
+    // Returns the promise of the plugins of the device; `done` runs when the view is drawn.
+    this.loadLicenses = function (win, done) {
+        var view = win.find('.auth-view-licenses')
+        var plugins = api.plugins()
+        var licenses = api.licenses()
+
+        view.find('.js-error').text('')
+        plugins.done(function (items) {
+            licenses.done(function (held) {
+                self.renderAccount(win, items, held)
+            }).fail(function () {
+                self.renderAccount(win, items, null)
+            }).always(function () {
+                if (done) {
+                    done()
+                }
+            })
+        }).fail(function (code) {
+            view.find('.js-loading').hide()
+            view.find('.js-error').text(self.errorMessage(code))
+        })
+        return plugins
+    }
+
+    // Installs plugins the person owns on this device, one request each, and draws the view again when they are
+    // all answered. The ones that failed are still there to try again.
+    this.installPlugins = function (win, uris) {
+        var view = win.find('.auth-view-licenses')
+        var button = view.find('.js-install-all')
+        var asked = $.grep(view.find('.js-action[data-action=install]').toArray(), function (b) {
+            return $.inArray($(b).attr('data-uri'), uris) >= 0
+        })
+        var answered = 0
+        var failed = 0
+
+        var progress = function () {
+            button.text("Installing " + Math.min(answered + 1, uris.length) + " of " + uris.length + "...")
+        }
+
+        view.find('.js-error').text('')
+        view.find('.js-action[data-action=install]').prop('disabled', true)
+        $(asked).text("Installing...")
+        button.prop('disabled', true)
+        progress()
+
+        $.each(uris, function (i, uri) {
+            api.install(uri).fail(function () {
+                failed++
+            }).always(function () {
+                answered++
+                if (answered < uris.length) {
+                    progress()
+                    return
+                }
+                self.loadLicenses(win, function () {
+                    if (failed) {
+                        view.find('.js-error').text("Could not install " + failed + (failed == 1 ? " plugin" : " plugins") + ". Please try again.")
+                    }
+                })
+            })
+        })
+    }
+
     // The devices of the person, as cards; the one this interface runs on is marked
-    this.loadDevices = function (win, plugins) {
+    this.loadDevices = function (win, plugins, devices) {
         var view = win.find('.auth-view-devices')
         var current = null
         plugins.done(function (items) {
             current = items.length ? items[0].device.id : null
         })
 
-        api.devices().done(function (devices) {
+        devices.done(function (devices) {
             var grid = view.find('.js-devices').empty()
+            devices = $.grep(devices, function (device) { return !device.revoked })
+            // The one in use goes first
+            devices.sort(function (a, b) {
+                return (b.device_id == current) - (a.device_id == current)
+            })
+
             $.each(devices, function (i, device) {
-                var known = DEVICES[device.platform] || {}
+                var known = self.deviceModel(device.device_tag)
                 var card = self.render('auth_device', {
-                    model: known.model || self.capitalize(device.platform),
+                    model: known.model || "MOD device",
                     image: known.image,
-                    tag: device.tag,
-                    added: device.registered_at ? "added " + self.date(device.registered_at) : "",
-                    current: device.id == current,
+                    tag: device.device_tag,
+                    added: device.created_at ? "added " + self.date(device.created_at) : "",
+                    current: device.device_id == current,
                 })
                 // Without the picture, the name stays
                 card.find('img').on('error', function () {
@@ -304,7 +374,7 @@ function Auth(options) {
         // `title` explains the group in the list; `filter` is the short name on its chip; `badge` tags each card
         var sections = [
             {
-                kind: 'mine', title: "Yours, and working on this unit", filter: "Yours",
+                kind: 'mine', title: "Yours, and installed on this device", filter: "Yours",
                 items: $.map(mine, function (i) {
                     return self.row(i.plugin, {
                         kind: 'mine', badge: "Installed",
@@ -315,7 +385,7 @@ function Auth(options) {
                 }),
             },
             {
-                kind: 'elsewhere', title: "Yours, but not on this unit", filter: "Not installed",
+                kind: 'elsewhere', title: "Yours, but not installed on this device", filter: "Not installed",
                 items: $.map(elsewhere, function (l) {
                     return self.row(l.plugin, {
                         kind: 'elsewhere', badge: "Not installed", absent: true,
@@ -326,8 +396,8 @@ function Auth(options) {
                 }),
             },
             {
-                kind: 'others', title: "On this unit, but we don't know they're yours", filter: "To confirm",
-                note: "These keep working either way. Confirming them lets you reinstall them on another unit later.",
+                kind: 'others', title: "On this device, but we don't know they're yours", filter: "To confirm",
+                note: "These keep working either way. Confirming them lets you reinstall them on another device later.",
                 items: $.map(others, function (i) {
                     return self.row(i.plugin, {
                         kind: 'others', badge: "To confirm",
@@ -337,7 +407,7 @@ function Auth(options) {
                 }),
             },
             {
-                kind: 'included', title: "Included with this device · stays with the unit", filter: "Device",
+                kind: 'included', title: "Included with this device · stays with it", filter: "Device",
                 items: $.map(included, function (i) {
                     return self.row(i.plugin, {
                         kind: 'included', badge: "Device",
@@ -379,8 +449,9 @@ function Auth(options) {
                     .append($('<b>').text(chip.count))
                     .appendTo(filters)
             })
-            filters.on('click', '.auth-chip', function () {
+            filters.off('click').on('click', '.auth-chip', function () {
                 var kind = $(this).attr('data-kind')
+                win.filterKind = kind
                 filters.find('.auth-chip').removeClass('active').attr('aria-pressed', 'false')
                 $(this).addClass('active').attr('aria-pressed', 'true')
                 container.find('.auth-section').each(function () {
@@ -388,32 +459,344 @@ function Auth(options) {
                 })
                 win.find('.auth-view-licenses .auth-account-body').scrollTop(0)
             })
-            filters.find('.auth-chip-all').click()
+            filters.find('.auth-chip-' + (win.filterKind && $.grep(shown, function (x) { return x.kind == win.filterKind }).length ? win.filterKind : 'all')).click()
         } else {
             filters.hide()
         }
 
         if (container.children().length == 0) {
-            container.append($('<p class="auth-loading">').text("No plugins to show for this unit yet."))
+            container.append($('<p class="auth-loading">').text("No plugins to show for this device yet."))
         }
 
+        // Which device this is
+        var here = win.find('.js-here')
         if (items.length) {
             var device = items[0].device
-            win.find('.js-device').text(self.capitalize(device.platform) + " · #" + device.tag.replace(/^\w+-/, ''))
-        }
-        if (held) {
-            win.find('.js-summary').text(mine.length + " of " + held.length + " plugins on this unit")
+            var known = DEVICES[device.platform] || {}
+            here.find('.js-device-name').text(known.model || self.capitalize(device.platform))
+            here.find('.js-device-tag').text(device.tag)
+            here.find('.js-device-image').toggle(!!known.image).off('error').on('error', function () { $(this).hide() }).attr('src', known.image || '')
+            here.show()
         } else {
-            win.find('.js-summary').hide()
+            here.hide()
+        }
+
+        // One way to have everything the person owns here: install what the device lacks
+        var uris = $.map(elsewhere, function (l) { return l.plugin_uri })
+        var installAll = win.find('.js-install-all').prop('disabled', false).off('click').hide()
+        win.find('.js-all-installed').hide()
+        if (held && uris.length) {
+            installAll.text("Install all (" + uris.length + ")").attr('title', "Install the plugins you own that this device does not have").show()
+                .click(function () {
+                    self.installPlugins(win, uris)
+                    return false
+                })
+        } else if (held) {
+            win.find('.js-all-installed').show()
         }
         win.find('.auth-view-licenses .js-loading').hide()
 
-        // "Install here" takes the person to the Plugin Store
         container.find('.js-action[data-action=install]').click(function () {
-            win.close()
-            $('#mod-cloud-plugins').click()
+            self.installPlugins(win, [$(this).attr('data-uri')])
             return false
         })
+    }
+
+    // What the tag of a device tells of it: its model and its picture (empty when the tag is not known)
+    this.deviceModel = function (tag) {
+        return DEVICES[TAG_PLATFORMS[(tag || '').replace(/\d.*$/, '')]] || {}
+    }
+
+    // Asks "sure?" in place of the buttons of a card. `run` does the thing and returns its promise; when it
+    // fails the buttons come back.
+    this.confirm = function (actions, message, yesText, run) {
+        var buttons = actions.children().detach()
+        var box = $('<div class="auth-confirm">').appendTo(actions)
+        var yes = $('<button type="button" class="auth-button auth-button-small">').text(yesText)
+        var no = $('<button type="button" class="auth-button auth-button-small auth-button-light">').text("Cancel")
+        var restore = function () {
+            box.remove()
+            actions.append(buttons)
+        }
+
+        box.append($('<span class="auth-confirm-text">').text(message), yes, no)
+        no.click(function () {
+            restore()
+            return false
+        })
+        yes.click(function () {
+            yes.prop('disabled', true).text("Wait...")
+            no.prop('disabled', true)
+            run().fail(restore)
+            return false
+        })
+    }
+
+    // Filter chips of a view: `chips` is [{kind, label, count}], `apply(kind)` shows what the chosen one says
+    this.chips = function (container, chips, apply) {
+        container.empty().off('click').show()
+        $.each(chips, function (i, chip) {
+            $('<button type="button" class="auth-chip auth-chip-' + chip.kind + '">')
+                .attr('data-kind', chip.kind)
+                .append($('<span>').text(chip.label))
+                .append($('<b>').text(chip.count))
+                .appendTo(container)
+        })
+        container.on('click', '.auth-chip', function () {
+            container.find('.auth-chip').removeClass('active').attr('aria-pressed', 'false')
+            $(this).addClass('active').attr('aria-pressed', 'true')
+            apply($(this).attr('data-kind'))
+        })
+        container.find('.auth-chip:first').click()
+    }
+
+    this.count = function (n, noun) {
+        return n + " " + noun + (n == 1 ? "" : "s")
+    }
+
+    // Pedalboards ------------------------------------------------------------
+
+    // The pedalboards the person shared. The same title shared more than once is one pedalboard with its history.
+    this.loadPedalboards = function (win, devices) {
+        var view = win.find('.auth-view-pedalboards')
+        var byId = {}
+        devices.done(function (list) {
+            $.each(list, function (i, device) {
+                byId[device.device_id] = device
+            })
+        })
+
+        view.find('.js-error').text('')
+        api.pedalboards().done(function (boards) {
+            // The devices only tell where each came from: without them the list still shows
+            devices.always(function () {
+                self.renderPedalboards(win, boards, byId, devices)
+            })
+        }).fail(function (code) {
+            view.find('.js-error').text(self.errorMessage(code))
+        }).always(function () {
+            view.find('.js-loading').hide()
+        })
+    }
+
+    this.renderPedalboards = function (win, boards, byId, devices) {
+        var view = win.find('.auth-view-pedalboards')
+        var grid = view.find('.js-pedalboards').empty()
+        win.openHistory = win.openHistory || {}
+
+        var groups = {}
+        $.each(boards, function (i, board) {
+            var key = $.trim(board.title).toLowerCase()
+            ;(groups[key] = groups[key] || []).push(board)
+        })
+        var list = $.map(groups, function (versions, key) {
+            versions.sort(function (a, b) { return b.created < a.created ? -1 : 1 })
+            return [{key: key, versions: versions}]
+        })
+        list.sort(function (a, b) { return b.versions[0].created < a.versions[0].created ? -1 : 1 })
+
+        var originOf = function (board) {
+            var device = byId[board.device_id]
+            var known = device ? self.deviceModel(device.device_tag) : {}
+            return {
+                name: device ? (known.model || "MOD device") : "A device no longer in your account",
+                tag: device ? device.device_tag : '',
+                image: known.image,
+            }
+        }
+
+        var unshare = function (board, actions) {
+            self.confirm(actions, "Stop sharing this pedalboard?", "Unshare", function () {
+                return api.unshare(board.id).done(function () {
+                    self.loadPedalboards(win, devices)
+                }).fail(function () {
+                    view.find('.js-error').text("Could not unshare the pedalboard. Please try again.")
+                })
+            })
+        }
+
+        // Replaces what is open on the device, so it is asked first
+        var open = function (board, actions) {
+            self.confirm(actions, "This replaces the pedalboard open on this device.", "Open", function () {
+                return api.open(board.id).done(function () {
+                    win.close()
+                }).fail(function () {
+                    view.find('.js-error').text("Could not open the pedalboard. Please try again.")
+                })
+            })
+        }
+
+        $.each(list, function (i, group) {
+            var latest = group.versions[0]
+            var older = group.versions.slice(1)
+            var origin = originOf(latest)
+            var title = latest.title || "Untitled"
+            var card = self.render('auth_pedalboard', {
+                title: title,
+                longName: title.length > 14,
+                description: latest.description,
+                shared: self.date(latest.created),
+                plugins: self.count((latest.data && latest.data.plugins || []).length, "plugin"),
+                device: origin.name,
+                tag: origin.tag,
+                unlisted: latest.hidden,
+                versions: older.length ? self.count(group.versions.length, "version") : '',
+                older: older.length,
+            })
+
+            self.picture(card.find('.auth-thumb'), latest.thumbnail_href, title)
+            card.find('.js-origin-image').toggle(!!origin.image).off('error').on('error', function () { $(this).hide() }).attr('src', origin.image || '')
+
+            var actions = card.find('.js-actions')
+            actions.find('.js-unshare').click(function () {
+                unshare(latest, actions)
+                return false
+            })
+            actions.find('.js-open').click(function () {
+                open(latest, actions)
+                return false
+            })
+
+            // The earlier versions: each can be opened, or unshared, on its own
+            if (older.length) {
+                var history = card.find('.js-history-list')
+                var button = actions.find('.js-history')
+                var toggle = function (show) {
+                    history.toggle(show)
+                    button.text((show ? "Hide history (" : "History (") + older.length + ")")
+                    win.openHistory[group.key] = show
+                }
+
+                history.append($('<h5>').text("Earlier versions"))
+                $.each(older, function (j, board) {
+                    var from = originOf(board)
+                    var row = $('<div class="auth-history-row">').appendTo(history)
+                    row.append($('<div class="auth-history-text">')
+                        .append($('<strong>').text(self.date(board.created)))
+                        .append($('<span>').text(from.name + (board.description ? " · " + board.description : ""))))
+                    var rowActions = $('<div class="auth-history-actions">').appendTo(row)
+                    $('<button type="button" class="auth-button auth-button-small auth-button-light">').text("Unshare").appendTo(rowActions)
+                        .click(function () {
+                            unshare(board, rowActions)
+                            return false
+                        })
+                    $('<button type="button" class="auth-button auth-button-small">').text("Open here").appendTo(rowActions)
+                        .click(function () {
+                            open(board, rowActions)
+                            return false
+                        })
+                })
+
+                button.click(function () {
+                    toggle(!history.is(':visible'))
+                    return false
+                })
+                toggle(!!win.openHistory[group.key])
+            }
+
+            grid.append(card)
+        })
+
+        if (list.length == 0) {
+            grid.append($('<p class="auth-loading">').text("You have not shared any pedalboard yet."))
+        }
+        view.find('.js-count').text(self.count(list.length, "pedalboard")).toggle(list.length > 0)
+    }
+
+    // Builds -----------------------------------------------------------------
+
+    // The plugins the person built with MOD Buildroot
+    this.loadBuilds = function (win) {
+        var view = win.find('.auth-view-builds')
+
+        view.find('.js-error').text('')
+        api.builds().done(function (builds) {
+            self.renderBuilds(win, builds)
+        }).fail(function (code) {
+            view.find('.js-error').text(self.errorMessage(code))
+        }).always(function () {
+            view.find('.js-loading').hide()
+        })
+    }
+
+    this.renderBuilds = function (win, builds) {
+        var view = win.find('.auth-view-builds')
+        var grid = view.find('.js-builds').empty()
+        var filters = view.find('.js-filters').hide()
+
+        // The status of the pipeline in the words of the person; `group` is what the chips filter by
+        var STATES = {
+            finished: {state: 'finished', group: 'finished', text: "Finished"},
+            error: {state: 'failed', group: 'failed', text: "Failed"},
+            waiting: {state: 'queued', group: 'active', text: "Queued"},
+            source_verification: {state: 'building', group: 'active', text: "Checking source"},
+            compilation: {state: 'building', group: 'active', text: "Compiling"},
+            bundle_verification: {state: 'building', group: 'active', text: "Verifying"},
+            finishing: {state: 'building', group: 'active', text: "Finishing"},
+        }
+        var PLATFORMS = {duo: "Duo", duox: "Duo X", dwarf: "Dwarf", pablito: "Pablito"}
+        var platformName = function (id) { return PLATFORMS[id] || self.capitalize(id) }
+
+        builds = builds.slice().sort(function (a, b) { return b.created < a.created ? -1 : 1 })
+
+        var counts = {finished: 0, active: 0, failed: 0}
+        $.each(builds, function (i, build) {
+            var status = STATES[build.status] || STATES.waiting
+            var plugins = []
+            var warnings = 0
+            $.each(build.bundle_data || [], function (j, bundle) {
+                $.each(bundle.plugins, function (k, plugin) {
+                    plugins.push(plugin)
+                    warnings += (plugin.warnings || []).length
+                })
+            })
+            var platforms = (build.data.supported_platforms || []).map(platformName)
+            var contents = []
+            if (plugins.length > 1) {
+                contents.push(plugins.map(function (plugin) { return plugin.name }).join(", "))
+            }
+            if (warnings) {
+                contents.push(self.count(warnings, "warning"))
+            }
+
+            var card = self.render('auth_build', {
+                name: plugins.length ? plugins[0].name : build.data.project,
+                version: plugins.length && plugins[0].version ? "v" + plugins[0].version : '',
+                state: status.state,
+                status: status.text,
+                created: "started " + self.date(build.created),
+                platforms: platforms.join(", "),
+                contents: contents.join(" · "),
+                reason: build.status == 'error' ? build.reason : '',
+                files: build.status == 'finished' ? $.map(build.bundle_files || [], function (file) {
+                    return {label: "\u2193 " + platformName(file.platform), href: file.href}
+                }) : [],
+                logs: build.logs_href,
+            })
+            card.attr('data-group', status.group)
+            counts[status.group]++
+            grid.append(card)
+        })
+
+        if (builds.length == 0) {
+            grid.append($('<p class="auth-loading">').text("You have not built any plugin yet."))
+            return
+        }
+
+        // The chips filter by outcome; with a single outcome there is nothing to choose
+        var chips = $.grep([
+            {kind: 'finished', label: "Finished", count: counts.finished},
+            {kind: 'active', label: "In progress", count: counts.active},
+            {kind: 'failed', label: "Failed", count: counts.failed},
+        ], function (chip) { return chip.count > 0 })
+        if (chips.length > 1) {
+            chips.unshift({kind: 'all', label: "All", count: builds.length})
+            self.chips(filters, chips, function (kind) {
+                grid.children().each(function () {
+                    $(this).toggle(kind == 'all' || $(this).attr('data-group') == kind)
+                })
+            })
+        }
     }
 
     // A plugin card. The picture is the plugin's screenshot (the thumbnail is too small for a card): from this
@@ -428,10 +811,14 @@ function Auth(options) {
             uri: plugin.uri,
         }, extra))
 
-        var thumb = html.find('.auth-thumb')
-        thumb.css('background', self.background(self.hue(name), 0.2))
-
         var src = extra.absent ? (plugin.screenshot_href || plugin.thumbnail_href) : "/effect/image/screenshot.png?uri=" + escape(plugin.uri)
+        self.picture(html.find('.auth-thumb'), src, name)
+        return html
+    }
+
+    // The picture of a tile, when there is one, and the color the tile takes from it
+    this.picture = function (thumb, src, name) {
+        thumb.css('background', self.background(self.hue(name), 0.2))
         if (src) {
             $('<img aria-hidden="true">').appendTo(thumb)
                 .on('error', function () { $(this).remove() })
@@ -443,7 +830,6 @@ function Auth(options) {
                 })
                 .attr('src', src)
         }
-        return html
     }
 
     // The color of a plugin, as its picture says: the hue its colored pixels lean to and how colored they are.
