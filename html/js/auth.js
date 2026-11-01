@@ -42,6 +42,13 @@ function Auth(options) {
         crowdfunding: "crowdfunding",
     }
 
+    // What each platform of the service is called, and its picture (img/devices, WebP)
+    var DEVICES = {
+        duo: {model: "MOD Duo", image: "img/devices/duo.webp"},
+        duox: {model: "MOD Duo X", image: "img/devices/duox.webp"},
+        dwarf: {model: "MOD Dwarf", image: "img/devices/dwarf.webp"},
+    }
+
     this.user = null
 
     // The message to show for the error code of a failed call
@@ -220,8 +227,64 @@ function Auth(options) {
                 self.renderAccount(win, items, null)
             })
         }).fail(function (code) {
-            win.find('.js-loading').hide()
-            win.find('.js-error').text(self.errorMessage(code))
+            var view = win.find('.auth-view-licenses')
+            view.find('.js-loading').hide()
+            view.find('.js-error').text(self.errorMessage(code))
+        })
+
+        // The menu: one view at a time. The devices are asked for when first looked at.
+        var devicesAsked = false
+        win.find('.auth-nav-item').click(function () {
+            var name = $(this).attr('data-view')
+            win.find('.auth-nav-item').removeClass('active')
+            $(this).addClass('active')
+            win.find('.auth-view').removeClass('active').filter('.auth-view-' + name).addClass('active')
+
+            if (name == 'devices' && !devicesAsked) {
+                devicesAsked = true
+                // Which of the devices is this one is told by the plugins of this unit
+                plugins.always(function () {
+                    self.loadDevices(win, plugins)
+                })
+            }
+            return false
+        })
+    }
+
+    // The devices of the person, as cards; the one this interface runs on is marked
+    this.loadDevices = function (win, plugins) {
+        var view = win.find('.auth-view-devices')
+        var current = null
+        plugins.done(function (items) {
+            current = items.length ? items[0].device.id : null
+        })
+
+        api.devices().done(function (devices) {
+            var grid = view.find('.js-devices').empty()
+            $.each(devices, function (i, device) {
+                var known = DEVICES[device.platform] || {}
+                var card = self.render('auth_device', {
+                    model: known.model || self.capitalize(device.platform),
+                    image: known.image,
+                    tag: device.tag,
+                    added: device.registered_at ? "added " + self.date(device.registered_at) : "",
+                    current: device.id == current,
+                })
+                // Without the picture, the name stays
+                card.find('img').on('error', function () {
+                    $(this).replaceWith($('<span class="auth-device-fallback">').text(known.model))
+                })
+                grid.append(card)
+            })
+
+            if (devices.length == 0) {
+                grid.append($('<p class="auth-loading">').text("No devices linked to your account yet."))
+            }
+            view.find('.js-count').text(devices.length + (devices.length == 1 ? " device" : " devices"))
+        }).fail(function (code) {
+            view.find('.js-error').text(self.errorMessage(code))
+        }).always(function () {
+            view.find('.js-loading').hide()
         })
     }
 
@@ -323,7 +386,7 @@ function Auth(options) {
                 container.find('.auth-section').each(function () {
                     $(this).toggle(kind == 'all' || $(this).hasClass('auth-section-' + kind))
                 })
-                win.find('.auth-account-body').scrollTop(0)
+                win.find('.auth-view-licenses .auth-account-body').scrollTop(0)
             })
             filters.find('.auth-chip-all').click()
         } else {
@@ -343,7 +406,7 @@ function Auth(options) {
         } else {
             win.find('.js-summary').hide()
         }
-        win.find('.js-loading').hide()
+        win.find('.auth-view-licenses .js-loading').hide()
 
         // "Install here" takes the person to the Plugin Store
         container.find('.js-action[data-action=install]').click(function () {
@@ -439,14 +502,16 @@ function Auth(options) {
 
     // Texts -----------------------------------------------------------------
 
+    // The interface is in English whatever the language of the browser
+    this.date = function (iso) {
+        return new Date(iso).toLocaleDateString('en-GB', {day: 'numeric', month: 'short', year: 'numeric'})
+    }
+
     this.bought = function (purchase) {
         if (!purchase || !purchase.acquired_at) {
             return "purchase date unknown"
         }
-        // The interface is in English whatever the language of the browser
-        return "bought " + new Date(purchase.acquired_at).toLocaleDateString('en-GB', {
-            day: 'numeric', month: 'short', year: 'numeric',
-        })
+        return "bought " + self.date(purchase.acquired_at)
     }
 
     this.seats = function (seats) {

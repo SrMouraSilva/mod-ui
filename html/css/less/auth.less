@@ -250,15 +250,98 @@
   .auth-account-bar {
     display: flex;
     flex: 0 0 auto;
-    justify-content: space-between;
+    align-items: center;
     padding: 14px 52px 14px 16px;
     background: #222;
     color: #ddd;
     font-size: 13px;
     letter-spacing: 1px;
+    .js-device {
+      margin-left: auto;
+    }
+    .auth-link {
+      margin-left: 16px;
+      letter-spacing: 0;
+    }
     .auth-close {
       top: 8px;
     }
+  }
+
+  // The menu below the view on a phone, beside it from the tablet up
+  .auth-account-main {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column-reverse;
+    min-height: 0;
+  }
+
+  .auth-views {
+    display: flex;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-width: 0;
+    min-height: 0;
+  }
+
+  .auth-view {
+    display: none;
+    flex: 1 1 auto;
+    flex-direction: column;
+    min-height: 0;
+    &.active {
+      display: flex;
+    }
+  }
+
+  .auth-nav {
+    display: flex;
+    flex: 0 0 auto;
+    border-top: 1px solid #e3e3e0;
+    background: #fff;
+  }
+
+  .auth-nav-item {
+    display: flex;
+    flex: 1 1 0;
+    flex-direction: column;
+    align-items: center;
+    min-height: 64px;
+    padding: 8px 4px 10px;
+    border: 0;
+    background: none;
+    font-size: 12px;
+    color: #555;
+    cursor: pointer;
+    svg {
+      display: block;
+      width: 24px;
+      height: 24px;
+      fill: none;
+      stroke: currentColor;
+      stroke-width: 1.8;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+    &.active {
+      font-weight: bold;
+      color: #222;
+      .auth-nav-icon {
+        background: fade(@auth-mine, 18%);
+        color: @auth-mine;
+      }
+    }
+  }
+
+  .auth-nav-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 56px;
+    height: 30px;
+    margin-bottom: 4px;
+    border-radius: 15px;
+    transition: background 0.15s ease;
   }
 
   .auth-account-head {
@@ -284,17 +367,6 @@
     padding: 4px 16px 16px;
     overflow-y: auto;
     -webkit-overflow-scrolling: touch;
-    footer {
-      margin-top: 8px;
-      text-align: center;
-    }
-    .auth-link {
-      padding: 10px;
-      color: #888;
-      &:hover {
-        color: #444;
-      }
-    }
   }
 
   .auth-pill {
@@ -539,6 +611,58 @@
   }
 }
 
+// ------------------------------------------------------------------
+// Devices: a card for each unit of the person
+// ------------------------------------------------------------------
+
+.auth-account {
+  .auth-grid-devices {
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  }
+
+  .auth-device {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    border: 1px solid #e3e3e0;
+    border-radius: 6px;
+    background: #fff;
+    overflow: hidden;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  .auth-device-current {
+    border-color: @auth-mine;
+    box-shadow: 0 0 0 1px @auth-mine;
+  }
+
+  // The device stands in a light tile, whole, whatever its proportions
+  .auth-device-picture {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 170px;
+    padding: 16px;
+    box-sizing: border-box;
+    background: linear-gradient(135deg, #f7f7f5, #e4e4e1);
+    img {
+      display: block;
+      max-width: 100%;
+      max-height: 100%;
+      filter: drop-shadow(0 4px 6px rgba(0, 0, 0, 0.3));
+    }
+  }
+  .auth-device-fallback {
+    font-size: 24px;
+    font-weight: bold;
+    color: #444;
+    text-align: center;
+  }
+
+  .auth-device-body {
+    padding: 10px 14px 14px;
+  }
+}
+
 // Phone: the window is the whole screen
 @media (max-width: 600px) {
   .auth-overlay-account {
@@ -570,11 +694,30 @@
       padding: 4px 24px 24px;
     }
     .auth-grid {
-      grid-template-columns: repeat(auto-fill, minmax(360px, 1fr));
+      grid-template-columns: repeat(auto-fill, minmax(340px, 1fr));
       gap: 16px;
     }
     .auth-plugin-name {
       font-size: 17px;
+    }
+    .auth-grid-devices {
+      grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    }
+    .auth-account-main {
+      flex-direction: row;
+    }
+    .auth-nav {
+      flex-direction: column;
+      flex: 0 0 88px;
+      padding-top: 12px;
+      border-top: 0;
+      border-right: 1px solid #e3e3e0;
+      background: #fbfbf9;
+    }
+    .auth-nav-item {
+      flex: 0 0 auto;
+      min-height: 0;
+      padding: 8px 4px 12px;
     }
   }
 }

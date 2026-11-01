@@ -1,31 +1,79 @@
-{{! Account window: the plugins of the signed-in user, grouped by whose they are and where they are }}
+{{! Account window: a menu (licenses, devices, pedalboards) and the view of the one chosen }}
 <div class="auth-overlay auth-overlay-account">
     <div class="auth-card auth-account">
         <div class="auth-account-bar">
             <strong>MOD</strong>
             <span class="js-device"></span>
+            <a href="#" class="auth-link js-logout">Sign out</a>
             <span class="auth-close js-close">&times;</span>
         </div>
 
-        <header class="auth-account-head">
-            <div>
-                <h2>Your plugins</h2>
-                <p class="js-email"></p>
+        <div class="auth-account-main">
+            <nav class="auth-nav" aria-label="Account">
+                <button type="button" class="auth-nav-item active" data-view="licenses">
+                    <span class="auth-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 6h13M8 12h13M8 18h13M3 6h.01M3 12h.01M3 18h.01"/></svg></span>
+                    <span class="auth-nav-label">Licenses</span>
+                </button>
+                <button type="button" class="auth-nav-item" data-view="devices">
+                    <span class="auth-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><rect x="7" y="8" width="10" height="4" rx="0.5"/><path d="M8 16h.01M16 16h.01"/></svg></span>
+                    <span class="auth-nav-label">Devices</span>
+                </button>
+                <button type="button" class="auth-nav-item" data-view="pedalboards">
+                    <span class="auth-nav-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><circle cx="8" cy="9" r="1.5"/><circle cx="16" cy="9" r="1.5"/><circle cx="12" cy="15.5" r="2"/></svg></span>
+                    <span class="auth-nav-label">Pedalboards</span>
+                </button>
+            </nav>
+
+            <div class="auth-views">
+                <section class="auth-view auth-view-licenses active">
+                    <header class="auth-account-head">
+                        <div>
+                            <h2>Licenses</h2>
+                            <p class="js-email"></p>
+                        </div>
+                        <span class="auth-pill js-summary"></span>
+                    </header>
+
+                    <nav class="auth-filters js-filters" aria-label="Filter plugins"></nav>
+
+                    <div class="auth-account-body">
+                        <p class="auth-loading js-loading">Loading your plugins...</p>
+                        <p class="auth-error js-error"></p>
+
+                        <div class="js-sections"></div>
+                    </div>
+                </section>
+
+                <section class="auth-view auth-view-devices">
+                    <header class="auth-account-head">
+                        <div>
+                            <h2>Devices</h2>
+                            <p>Linked to <span class="js-email"></span></p>
+                        </div>
+                        <span class="auth-pill js-count"></span>
+                    </header>
+
+                    <div class="auth-account-body">
+                        <p class="auth-loading js-loading">Loading your devices...</p>
+                        <p class="auth-error js-error"></p>
+
+                        <div class="auth-grid auth-grid-devices js-devices"></div>
+                    </div>
+                </section>
+
+                <section class="auth-view auth-view-pedalboards">
+                    <header class="auth-account-head">
+                        <div>
+                            <h2>Pedalboards</h2>
+                            <p>Your pedalboards in the MOD Cloud</p>
+                        </div>
+                    </header>
+
+                    <div class="auth-account-body">
+                        <p class="auth-loading">Coming soon.</p>
+                    </div>
+                </section>
             </div>
-            <span class="auth-pill js-summary"></span>
-        </header>
-
-        <nav class="auth-filters js-filters" aria-label="Filter plugins"></nav>
-
-        <div class="auth-account-body">
-            <p class="auth-loading js-loading">Loading your plugins...</p>
-            <p class="auth-error js-error"></p>
-
-            <div class="js-sections"></div>
-
-            <footer>
-                <a href="#" class="auth-link js-logout">Sign out</a>
-            </footer>
         </div>
     </div>
 </div>

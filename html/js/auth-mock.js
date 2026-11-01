@@ -15,6 +15,7 @@
  *   verifyCode(email, code)   MOD API: POST /users/tokens_magiclink/verify_code
  *   me()                      MOD API: GET /admin/me
  *   logout()                  MOD API: POST /users/tokens/logout
+ *   devices()                 MOD API: the EndCustomerDevices of the person (endpoint and shape to confirm)
  *   plugins()                 MOD API: GET /v2/devices/plugins
  *   licenses()                MOD API: not served yet (see mock/auth.json)
  *
@@ -119,6 +120,14 @@ function AuthMockApi() {
         remember(null)
         self.email = null
         return $.Deferred().resolve().promise()
+    }
+
+    this.devices = function () {
+        return self.me().then(function () {
+            return self.data().then(function (json) {
+                return json.devices
+            })
+        })
     }
 
     this.plugins = function () {

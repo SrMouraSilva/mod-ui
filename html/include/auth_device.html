@@ -1,0 +1,13 @@
+{{! One device card of the account window: its picture on top, which unit it is below }}
+<article class="auth-device{{#current}} auth-device-current{{/current}}">
+    <div class="auth-device-picture">
+        {{#image}}<img src="{{image}}" alt="">{{/image}}
+        {{^image}}<span class="auth-device-fallback">{{model}}</span>{{/image}}
+    </div>
+    <div class="auth-device-body">
+        <h4 class="auth-plugin-name">{{model}}</h4>
+        <p class="auth-plugin-detail">{{tag}}</p>
+        {{#added}}<p class="auth-plugin-detail">{{added}}</p>{{/added}}
+        {{#current}}<p class="auth-plugin-tags"><span class="auth-badge">This unit</span></p>{{/current}}
+    </div>
+</article>
