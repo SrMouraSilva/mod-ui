@@ -8,6 +8,7 @@ import os
 import measure
 from kit import *  # noqa: F401,F403
 from engine import Node, Conn, at, zone, KINDS, TAGW, LEGEND  # noqa: F401
+import engine
 
 KINDS['step'] = ('#ffffff', INK, 'STEP', INK, 'rgba(46,31,51,0.40)', None)
 TAGW['STEP'] = 28
@@ -181,9 +182,9 @@ def architecture_detail():
     NW, NH = 176, 80
     ax, bx, cx, dx = 48, 336, 624, 912
     r0, r1, r2, r3, r4 = 112, 232, 352, 472, 592
-    web = Node('web', 'http', 'Webserver', ['webserver.py', '89 routes · 3 sockets'], ax, r0, NW, NH)
+    web = Node('web', 'http', 'Webserver', ['webserver.py', f'{measure.route_stats()["routes"]} routes · 3 sockets'], ax, r0, NW, NH)
     ses = Node('ses', 'backend', 'Session', ['session.py', 'browsers · prefs · recorder'], ax, r1, NW, NH)
-    host = Node('host', 'backend', 'Host', ['host.py · 201 methods', 'the running pedalboard'], bx, r1, NW, NH, focal=True)
+    host = Node('host', 'backend', 'Host', [f'host.py · {measure.host_methods()[1]} methods', 'the running pedalboard'], bx, r1, NW, NH, focal=True)
     addr = Node('addr', 'backend', 'Addressings + CC', ['addressings.py', 'control_chain.py listener'], cx, r0, NW, NH)
     hmi = Node('hmi', 'backend', 'HMI driver', ['hmi.py · protocol.py', 'mod_protocol.py'], cx, r1, NW, NH)
     lib = Node('lib', 'clib', 'libmod_utils', ['JACK client "mod-ui"', 'lilv · ALSA mixer'], cx, r3, NW, NH)
@@ -481,7 +482,7 @@ def inside_host():
     hh = 40 + 3 * th + 4 * gap
     c.rect(hx, hy, hw, hh, fill='rgba(46,31,51,0.02)', stroke=INK, sw=1.2, rx=8)
     c.text(hx + 16, hy + 26, 'Host · mod/host.py', size=13, fill=INK, font='sans', weight=600)
-    c.text(hx + hw - 16, hy + 26, '201 methods · one instance · created by Session', size=8.5, fill=MUTED, anchor='end')
+    c.text(hx + hw - 16, hy + 26, f'{measure.host_methods()[1]} methods · one instance · created by Session', size=8.5, fill=MUTED, anchor='end')
     for i, (title, lines, kind) in enumerate(tiles):
         col, row = i % 4, i // 4
         x = hx + gap + col * (tw_ + gap)
@@ -582,5 +583,165 @@ def persistence():
     return {'canvas': c}
 
 
+def architecture_expanded():
+    W = 1910
+    engine.STYLES['event'] = dict(stroke=EVENT, w=1.2, dash='5,4', end=True, start=False, marker='arrow-event')
+    engine.STYLES['midi'] = dict(stroke=MIDI, w=1.6, dash=None, end=True, start=False, marker='arrow-midi')
+    engine.STYLES['file'] = dict(stroke=INK, w=1.4, dash=None, end=True, start=True, marker='arrow-file')
+    engine.STYLES['filew'] = dict(stroke=INK, w=1.4, dash=None, end=True, start=False, marker='arrow-file')
+    KINDS['ws'] = ('#ffffff', INK, 'WS', INK, 'rgba(46,31,51,0.40)', None)
+    TAGW['WS'] = 20
+    routes = measure.route_stats()['routes']
+    B, C, D, E, NW, NH = 600, 960, 1248, 1536, 184, 84
+    r1, r2, r3, r4, r5 = 288, 440, 592, 816, 968
+    tone = Node('tone', 'cloud', 'TONE3000', ['tone3000.com', 'OAuth · tones', 'NAM model files'], 48, 104, 168, 128)
+    cloud = Node('cloud', 'cloud', 'mod.audio cloud', ['api.mod.audio · download.mod.audio', 'auth: /devices/*', 'catalogue: /lv2/plugins, /lv2/bundles', 'pedalboards: /pedalboards/*', 'files: bundles, archives, firmware, OS'], 240, 104, 232, 128)
+    site = Node('site', 'cloud', 'mod.audio website', ['plugin and pedalboard pages', 'is a device here? /hello', 'load a pedalboard: /rpbsocket', 'install a plugin: /rplsocket', 'runs in a browser tab'], B, 104, NW, 128)
+    classic = Node('classic', 'legacy', 'Classic UI', ['desktop.js · pedalboard.js · modgui.js', '$.ajax to mod-ui and to the cloud; relays downloads and uploads'], 48, r1, 424, NH)
+    hostjs = Node('hostjs', 'legacy', 'host.js', ['ws://<host>/websocket', 'answers ping and data_ready, turns ~40 frame names into calls'], 48, r3, 424, NH)
+    http = Node('http', 'http', 'HTTP handlers', [f'webserver.py · {routes} routes', 'also calls libmod_utils'], B, r1, NW, NH)
+    ses = Node('ses', 'backend', 'Session', ['session.py', 'browsers · prefs · recorder'], B, r2, NW, NH)
+    ws = Node('ws', 'ws', '/websocket', ['ServerWebSocket', '14 commands in, ~40 frames out'], B, r3, NW, NH)
+    sub = Node('sub', 'backend', 'Subprocesses', ['jack_capture · tar · thumbnails', 'from handlers, Session, Host'], B, r4, NW, NH)
+    addr = Node('addr', 'backend', 'Addressings', ['addressings.py', 'actuator ↔ parameter'], C, r1, NW, NH)
+    host = Node('host', 'backend', 'Host', ['host.py · plugins · connections', 'snapshots · banks · tuner', 'transport · profiles'], C, r2, NW, 236, focal=True)
+    lib = Node('lib', 'clib', 'libmod_utils', ['C++ · JACK client "mod-ui"', 'lilv · ALSA mixer'], D, r4, NW, NH)
+    ccl = Node('ccl', 'backend', 'CC listener', ['control_chain.py', 'discovery only'], D, r1, NW, NH)
+    hmi = Node('hmi', 'backend', 'HMI driver', ['hmi.py · protocol.py', 'one request in flight'], D, r2, NW, NH)
+    ccd = Node('ccd', 'ext', 'Control Chain', ['daemon + external pedals', '/tmp/control-chain.sock'], E, r1, NW, NH)
+    fw = Node('fw', 'ext', 'HMI firmware', ['knobs · LEDs · screens', 'serial · 10 Mbaud'], E, r2, NW, NH)
+    mh = Node('mh', 'ext', 'mod-host', ['LV2 plugins · midi_in', 'CC client · :5555 · :5556'], E, r3, NW, NH)
+    jack = Node('jack', 'ext', 'JACK + ALSA', ['jackd2 · sound card', 'system:capture / playback'], E, r4, NW, NH)
+    midi = Node('midi', 'ext', 'MIDI devices', ['USB: system:midi_*', 'DIN: ttymidi:MIDI_in'], E, r5, NW, NH)
+    ents = [tone, cloud, site, classic, hostjs, http, ses, ws, sub, addr, host, lib, ccl, hmi, ccd, fw, mh, jack, midi]
+    conns = [
+        Conn(classic, 'T', tone, 'B', 'http', at_a=132, at_b=132, label='https', lside='R'),
+        Conn(classic, 'T', cloud, 'B', 'http', at_a=356, at_b=356, label='https', lside='R'),
+        Conn(site, 'B', http, 'T', 'http', label='load · install', lside='R'),
+        Conn(classic, 'R', http, 'L', 'http', label='http'),
+        Conn(hostjs, 'R', ws, 'L', 'http', at_a=r3 + 28, at_b=r3 + 28, label='ws commands'),
+        Conn(ws, 'L', hostjs, 'R', 'event', at_a=r3 + 56, at_b=r3 + 56, label='frames', lside='B'),
+        Conn(hostjs, 'T', classic, 'B', 'call', at_a=64, at_b=64, label='desktop.*', lside='R'),
+        Conn(http, 'B', ses, 'T', 'call', label='web_*', lside='R'),
+        Conn(http, 'R', host, 'L', 'ref', at_a=r1 + 60, at_b=r2 + 8, mid=910, label='session.host', seg=0),
+        Conn(ses, 'R', host, 'L', 'call', at_a=r2 + 32, at_b=r2 + 32, label='calls'),
+        Conn(host, 'L', ses, 'R', 'event', at_a=r2 + 56, at_b=r2 + 56, label='msg_callback', lside='B'),
+        Conn(ws, 'T', ses, 'B', 'call', at_a=B + 40, at_b=B + 40, label='ws_*', lside='L'),
+        Conn(ses, 'B', ws, 'T', 'event', at_a=B + 110, at_b=B + 110, label='write_message', lside='R'),
+        Conn(host, 'T', addr, 'B', 'call', at_a=C + 52, at_b=C + 52, label='address', lside='L'),
+        Conn(addr, 'B', host, 'T', 'event', at_a=C + 132, at_b=C + 132, label='_task_*', lside='R'),
+        Conn(addr, 'R', ccl, 'L', 'call', at_a=r1 + 28, at_b=r1 + 28, label='owns'),
+        Conn(ccl, 'L', addr, 'R', 'event', at_a=r1 + 56, at_b=r1 + 56, label='hw_added', lside='B'),
+        Conn(ccl, 'R', ccd, 'L', 'call', at_a=r1 + 28, at_b=r1 + 28, label='device_list'),
+        Conn(ccd, 'L', ccl, 'R', 'event', at_a=r1 + 56, at_b=r1 + 56, label='device_status', lside='B'),
+        Conn(host, 'R', hmi, 'L', 'call', at_a=r2 + 28, at_b=r2 + 28, label='control_add'),
+        Conn(hmi, 'L', host, 'R', 'event', at_a=r2 + 56, at_b=r2 + 56, label='hmi_*', lside='B'),
+        Conn(hmi, 'R', fw, 'L', 'call', at_a=r2 + 28, at_b=r2 + 28, label='leds · screens'),
+        Conn(fw, 'L', hmi, 'R', 'event', at_a=r2 + 56, at_b=r2 + 56, label='knobs · menus', lside='B'),
+        Conn(host, 'R', mh, 'L', 'call', at_a=r3 + 20, at_b=r3 + 20, label='commands :5555'),
+        Conn(mh, 'L', host, 'R', 'event', at_a=r3 + 56, at_b=r3 + 56, label='events :5556', lside='B'),
+        Conn(host, 'B', lib, 'L', 'call', at_a=C + 150, at_b=r4 + 28, label='ctypes', seg=1),
+        Conn(lib, 'L', host, 'B', 'event', at_a=r4 + 60, at_b=C + 110, label='polled 1 s', seg=0, lside='B'),
+        Conn(lib, 'R', jack, 'L', 'call', at_a=r4 + 28, at_b=r4 + 28, label='ports · alsa'),
+        Conn(jack, 'L', lib, 'R', 'event', at_a=r4 + 60, at_b=r4 + 60, label='xruns · ports', lside='B'),
+        Conn(mh, 'T', fw, 'B', 'call', at_a=E + 52, at_b=E + 52, label='shm', lside='L'),
+        Conn(fw, 'B', mh, 'T', 'event', at_a=E + 132, at_b=E + 132, label='shm', lside='R'),
+        Conn(mh, 'B', jack, 'T', 'call', at_a=E + 52, at_b=E + 52, label='clients', lside='L'),
+        Conn(jack, 'T', mh, 'B', 'midi', at_a=E + 132, at_b=E + 132, label='midi_in', lside='R'),
+        Conn(midi, 'T', jack, 'B', 'midi', label='midi ports', lside='R'),
+        Conn(mh, 'R', ccd, 'R', 'call', at_a=r3 + 20, at_b=r1 + 60, mid=1756, label='cc_map', seg=1, lside='R'),
+        Conn(ccd, 'R', mh, 'R', 'event', at_a=r1 + 20, at_b=r3 + 60, mid=1832, label='values', seg=1, lside='R'),
+    ]
+    fz = Node('fz', 'store', 'Files', [], 360, 932, 1120, 212)
+    colx = {'sub': 692, 'ses': 804, 'http': 900, 'host': 1000, 'os': 1170, 'lib': B + 0 + 740, 'mh': 1430}
+    conns += [
+        Conn(sub, 'B', fz, 'T', 'filew', at_a=colx['sub'], at_b=colx['sub']),
+        Conn(ses, 'R', fz, 'T', 'file', at_a=r2 + 72, at_b=colx['ses']),
+        Conn(host, 'B', fz, 'T', 'file', at_a=colx['host'], at_b=colx['host']),
+        Conn(fz, 'T', lib, 'B', 'filew', at_a=colx['lib'], at_b=colx['lib']),
+    ]
+    md = 'flowchart LR\n' + '\n'.join('  %s %s%s %s' % (x.a.key, '-.->' if x.kind == 'event' else '-->', '|"%s"|' % x.label if x.label else '', x.b.key) for x in conns)
+    md += '\n  %% dashed = event or return path. Files, the events on :5556 and the MIDI path are listed in the panels of the diagram.'
+    c = Canvas('architecture-expanded', 'mod-ui expanded: the way there and the way back',
+               'Every program around mod-ui with both directions of each link: the browser and the cloud, the modules of the Python process, the HMI, Control Chain, mod-host, JACK and MIDI devices, plus the events mod-host sends, the path of a MIDI message up to the browser, and who writes which files.',
+               W, eyebrow='Architecture · expanded view', h1='The way there and the way back: browser, cloud, mod-ui, HMI, Control Chain, mod-host, JACK, MIDI', md=md)
+    c.zone(32, 80, 768, 164, 'INTERNET')
+    c.zone(32, 256, 456, 436, 'BROWSER')
+    c.zone(584, 256, 896, 660, 'MOD-UI · ONE PYTHON PROCESS · ONE THREAD')
+    c.zone(1520, 256, 216, 812, 'DEVICE · OTHER PROCESSES')
+    # panel: what mod-host says on :5556
+    px, py_ = 1130, 680
+    c.rect(px, py_, 340, 124, fill=PAPER, stroke='rgba(63,111,150,0.55)', sw=1, rx=6)
+    c.text(px + 12, py_ + 16, 'WHAT MOD-HOST SAYS ON :5556', size=7.5, fill=EVENT, ls='0.14em')
+    rows = [('param_set', 'value moved by MIDI or a CC pedal'), ('output_set', 'monitored plugin output; tuner frequency'), ('patch_set', 'LV2 parameter changed by a plugin'),
+            ('midi_mapped', 'MIDI learn finished: becomes an addressing'), ('midi_program_change', 'loads a pedalboard or a snapshot'), ('transport', 'tempo or play changed (Link, MIDI clock)'),
+            ('log', 'plugin log line'), ('data_finish', 'end of a batch; waits for output_data_ready')]
+    for k, (a_, b_) in enumerate(rows):
+        c.text(px + 12, py_ + 31 + 12 * k, a_, size=7.5, fill=INK)
+        c.text(px + 112, py_ + 31 + 12 * k, b_, size=7.5, fill=MUTED)
+    # panel: what the browser carries between the cloud and the device
+    c.rect(144, 384, 328, 192, fill=PAPER, stroke='rgba(136,57,150,0.45)', sw=1, rx=6)
+    c.text(156, 401, 'WHAT THE BROWSER CARRIES', size=7.5, fill=LINK, ls='0.14em')
+    for k, (a_, b_) in enumerate([('plugin bundle', 'cloud → /effect/install/'), ('pedalboard archive', 'cloud → /pedalboard/load_web/'), ('shared pedalboard', '/pack_bundle → upload_href'),
+                                  ('CC firmware', 'download → /controlchain/download/'), ('OS image', 'image-href → /update/download/'), ('NAM model', 'TONE3000 → /files/upload'),
+                                  ('token', '/devices/* ↔ /auth/nonce, /auth/token'), ('catalogue, stats', 'JSON, used only by the page')]):
+        c.text(156, 420 + 19 * k, a_, size=8, fill=INK)
+        c.text(156 + 96, 420 + 19 * k, b_, size=7.5, fill=MUTED)
+    # panel: MIDI
+    c.rect(48, 708, 424, 148, fill=PAPER, stroke='rgba(79,122,62,0.60)', sw=1, rx=6)
+    c.text(60, 725, 'HOW A MIDI MESSAGE REACHES THE UI', size=7.5, fill=MIDI, ls='0.14em')
+    for k, ln in enumerate(['1  A USB or DIN port appears in JACK (system:midi_*, ttymidi:MIDI_in)',
+                            '2  It reaches mod-host:midi_in, directly or through mod-midi-merger',
+                            '3  mod-host applies it in the audio thread: mapped CC, program change,',
+                            '    beat clock, MIDI learn. The audio changes here, without mod-ui',
+                            '4  mod-host queues an event and writes it on :5556',
+                            '5  Host updates plugins[id] and calls msg_callback',
+                            '6  Session writes the frame to every /websocket',
+                            '7  host.js moves the widget (param_set, midi_map, transport)']):
+        c.text(60, 742 + 14 * k, ln, size=8.5, fill=INK if ln[0] != ' ' else INK)
+    # the files, as a matrix: each column sits under the arrow of the program that reads or writes
+    c.rect(fz.x, fz.y, fz.w, fz.h, fill='rgba(46,31,51,0.03)', stroke='rgba(46,31,51,0.45)', sw=1, rx=8)
+    c.text(fz.x + 14, fz.y + 20, 'FILES', size=9, fill=INK, ls='0.18em', weight=600)
+    heads = {'sub': 'subprocess', 'ses': 'Session', 'http': 'handlers', 'host': 'Host', 'os': 'OS image', 'lib': 'libmod_utils', 'mh': 'mod-host'}
+    for k_, x_ in colx.items():
+        c.text(x_, fz.y + 20, heads[k_], size=8, fill=INK, anchor='middle', weight=600)
+    frows = [('Pedalboards', '~/.pedalboards', 'W . W W W r W'), ('Plugins, presets', '~/.lv2', 'W . W W . r W'), ('Banks, last, profiles', 'DATA_DIR', '. . W W W . .'),
+             ('prefs.json', 'DATA_DIR', '. W W W . . .'), ('Favourites, user id, tokens', 'DATA_DIR', '. . W . . . .'), ('User files', '/data/user-files', '. . W . . . r'),
+             ('Settings markers', '/data/*', '. . W . W . .'), ('Recording', '/tmp/*.ogg', 'W W . . . . .'), ('Temporary plugin state', 'pedalboard-tmp-data', '. . . x . . W'),
+             ('Identity, descriptor', '/etc, DATA_DIR', '. . r r W . .'), ('License keys', 'keys/', '. . x . . r .')]
+    for k, (a_, b_, cells) in enumerate(frows):
+        y_ = fz.y + 38 + 16 * k
+        c.line(fz.x + 12, y_ - 11, fz.x + fz.w - 12, y_ - 11, stroke='rgba(46,31,51,0.07)', sw=0.8)
+        c.text(fz.x + 14, y_, a_, size=9, fill=INK, font='sans', weight=600)
+        c.text(fz.x + 170, y_, b_, size=8, fill=SOFT)
+        for x_, m_ in zip(colx.values(), cells.split()):
+            if m_ == 'W':
+                c.rect(x_ - 5, y_ - 8, 10, 10, fill=INK, rx=2)
+            elif m_ == 'r':
+                c.rect(x_ - 5, y_ - 8, 10, 10, fill='none', stroke=INK, sw=1.2, rx=2)
+            elif m_ == 'x':
+                c.line(x_ - 4, y_ - 7, x_ + 4, y_ + 1, stroke=INK, sw=1.4)
+                c.line(x_ - 4, y_ + 1, x_ + 4, y_ - 7, stroke=INK, sw=1.4)
+    # connectors, labels, boxes
+    for x in conns:
+        c.raw(x.draw_line())
+    for x in conns:
+        for m_ in x.masks:
+            c.raw(m_[1])
+    # two file lines drawn by hand: the handlers hop over Session <-> Host; mod-host goes around the device zone to the bottom of the matrix
+    hx_ = 826
+    c.raw(f'<path d="M 784,{r1+76} L {hx_-8},{r1+76} Q {hx_},{r1+76} {hx_},{r1+84} L {hx_},{r2+26} a 6,6 0 0 1 0,12 L {hx_},{r2+50} a 6,6 0 0 1 0,12 L {hx_},898 Q {hx_},906 {hx_+8},906 L {colx["http"]-8},906 Q {colx["http"]},906 {colx["http"]},914 L {colx["http"]},{fz.y}" fill="none" stroke="{INK}" stroke-width="1.4" marker-start="url(#arrow-file)" marker-end="url(#arrow-file)"/>')
+    c.path([(mh.r, r3 + 76), (1790, r3 + 76), (1790, 1160), (colx['mh'], 1160), (colx['mh'], fz.b)], stroke=INK, sw=1.4, marker='arrow-file', start='arrow-file')
+    for e_ in ents:
+        c.raw(e_.draw())
+        c._grow(e_.b)
+    engine.check('architecture-expanded', ents + [fz], conns, W, 1300)
+    c.callout(48, 884, ['A value moved on a pedal or by MIDI reaches the audio', 'first: mod-host applies it, then tells the Host. mod-ui', 'is told afterwards, so a slow UI never delays the sound.'])
+    c.callout(48, 952, ['mod-host also talks to Control Chain and the HMI side', 'without mod-ui: cc_map and pedal values on the CC socket,', 'plugin LEDs and labels through shared memory (/sys_msgs).'])
+    c.legend([('line', MUTED, None, 'arrow', 'Request or command'), ('line', EVENT, '5,4', 'arrow-event', 'Event or way back'), ('line', LINK, None, 'arrow-link', 'HTTP, socket or Internet'), ('line', MIDI, None, 'arrow-midi', 'MIDI'),
+              ('line', MUTED, '4,3', 'arrow', 'Handler skips the Session'), ('line', INK, None, 'arrow-file', 'Reads or writes files'), ('box', INK, INK, None, 'Writes'), ('box', 'none', INK, None, 'Reads'), ('box', ACCENT_TINT, ACCENT, None, 'Holds the running state'), ('box', 'rgba(92,74,100,0.10)', SOFT, None, 'Other process or device'), ('box', 'rgba(46,31,51,0.03)', 'rgba(46,31,51,0.30)', '3,2', 'Internet service')], y=1136)
+    return {'canvas': c}
+
+
 DEEP = [startup, tuner_sequence, cloud_auth, share_flow, remote_load, architecture_detail, jack_graph, license_flow, identity_data,
-        layers_topdown, state_owners, inside_host, persistence]
+        layers_topdown, state_owners, inside_host, persistence, architecture_expanded]

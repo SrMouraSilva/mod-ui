@@ -21,6 +21,8 @@ INK_TINT = 'rgba(46,31,51,0.06)'
 INK_TINT2 = 'rgba(46,31,51,0.12)'
 LINK_TINT = 'rgba(136,57,150,0.10)'
 ACCENT_TINT = 'rgba(168,78,10,0.08)'
+EVENT = '#3f6f96'   # events and return paths (architecture-expanded)
+MIDI = '#4f7a3e'    # the MIDI path (architecture-expanded)
 FONT = {'mono': MONO, 'sans': SANS, 'serif': SERIF}
 
 
@@ -164,7 +166,7 @@ class Canvas:
                '<defs>',
                f'<style>@import url(\'{FONTS_URL}\');</style>',
                f'<pattern id="{slug}-dots" width="22" height="22" patternUnits="userSpaceOnUse"><circle cx="1" cy="1" r="0.9" fill="rgba(46,31,51,0.10)"/></pattern>']
-        for mid, col in (('arrow', MUTED), ('arrow-accent', ACCENT), ('arrow-link', LINK)):
+        for mid, col in (('arrow', MUTED), ('arrow-accent', ACCENT), ('arrow-link', LINK), ('arrow-event', EVENT), ('arrow-midi', MIDI), ('arrow-file', INK)):
             out.append(f'<marker id="{slug}-{mid}" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto-start-reverse"><polygon points="0 0, 8 3, 0 6" fill="{col}"/></marker>')
         out.append(f'<marker id="{slug}-arrow-open" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto"><polyline points="0 0, 8 3, 0 6" fill="none" stroke="{MUTED}" stroke-width="1.2"/></marker>')
         out += ['</defs>', f'<rect width="100%" height="100%" fill="{PAPER}"/>', f'<rect width="100%" height="100%" fill="url(#{slug}-dots)" opacity="0.55"/>']
@@ -306,6 +308,7 @@ def render(d):
 def run(specs, out, index_title, argv, build_py):
     """Like engine.run, for a mix of engine specs and Canvas specs."""
     check_only = '--check' in argv
+    only = argv[argv.index('--only') + 1] if '--only' in argv else None
     sections = []
     for make in specs:
         d = make()
@@ -315,7 +318,8 @@ def run(specs, out, index_title, argv, build_py):
         print(f'{slug}: {w}x{h}')
         if check_only:
             continue
-        (out / f'{slug}.svg').write_text(svg + '\n', encoding='utf-8')
+        if only is None or only == slug:
+            (out / f'{slug}.svg').write_text(svg + '\n', encoding='utf-8')
         sections.append(
             f'    <section id="{slug}">\n      <p class="eyebrow">{html.escape(meta["eyebrow"])}</p>\n      <h1>{html.escape(meta["h1"])}</h1>\n'
             f'      <div class="diagram-container"><object type="image/svg+xml" data="{slug}.svg" style="min-width:{w}px;aspect-ratio:{w}/{h}" '

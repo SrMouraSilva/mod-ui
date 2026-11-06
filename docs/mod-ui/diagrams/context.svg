@@ -120,7 +120,7 @@ classDiagram
 <text x="430.0" y="249" fill="#2e1f33" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">HTTP</text>
 <text x="496.0" y="272" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Webserver</text>
 <text x="496.0" y="288" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">webserver.py · Tornado 4.3</text>
-<text x="496.0" y="302" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">89 routes · 3 sockets</text>
+<text x="496.0" y="302" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">90 routes · 3 sockets</text>
 </g>
 <g>
 <rect x="408" y="352" width="176" height="80" rx="6" fill="#f5f5f5"/>

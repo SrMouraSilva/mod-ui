@@ -3,6 +3,7 @@
 
     python3 docs/mod-ui/diagrams/src/build.py            # writes ../*.svg and ../index.html
     python3 docs/mod-ui/diagrams/src/build.py --check    # only draws and prints geometry warnings, writes nothing
+    python3 docs/mod-ui/diagrams/src/build.py --only <slug>   # writes that one SVG and index.html, leaves the other SVGs as they are
 
 Boxes-and-connectors diagrams use the shared engine of docs/modui-client/diagrams/src/engine.py; the other types (matrix, bars, treemap, lanes,
 sequence, scatter, ...) use kit.py. The numbers come from measure.py (counted from the working tree). Needs only the Python 3 standard library.

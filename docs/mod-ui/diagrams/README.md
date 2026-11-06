@@ -13,13 +13,13 @@ They are about the application, not about the TypeScript packages: for those see
 | `src/kit.py` | The drawing kit for the types that are not boxes and connectors (matrix, bars, treemap, lanes, sequence, scatter, quadrant); `kit.sequence()` draws every sequence diagram. |
 | `src/build.py` | Regenerates the SVGs and `index.html`. Python 3 standard library only. |
 
-The boxes-and-connectors diagrams (`context`, `host-link`, `frontend`, `architecture-detail`, `jack-graph`, `license-flow`, `identity-data`) reuse the engine of the client diagrams
+The boxes-and-connectors diagrams (`context`, `host-link`, `frontend`, `architecture-detail`, `architecture-expanded` (nodes and connectors of the engine on a canvas with panels), `jack-graph`, `license-flow`, `identity-data`) reuse the engine of the client diagrams
 ([`docs/modui-client/diagrams/src/engine.py`](../../modui-client/diagrams/src/engine.py)): nodes, orthogonal connectors, label masks and geometry checks.
 
 ## Changing a diagram
 
 1. Edit the function of the diagram in `src/specs.py` (or the numbers behind it in `src/measure.py`, or the matrix in `src/data.py`).
-2. Run `python3 docs/mod-ui/diagrams/src/build.py` (add `--check` to only look for problems).
+2. Run `python3 docs/mod-ui/diagrams/src/build.py` (add `--check` to only look for problems, or `--only <slug>` to write one SVG and leave the others, whose numbers are recounted on a full build).
 3. Fix every warning it prints (a line passing behind a box, a label touching a line, attach points closer than 12px) and open `diagrams/index.html`.
 4. Commit the changed `.svg` files together with the sources, and re-read the paragraph of the guide that quotes a number.
 
@@ -44,6 +44,7 @@ The boxes-and-connectors diagrams (`context`, `host-link`, `frontend`, `architec
 | `frontend` | Architecture | How is the classic browser code put together? |
 | `improvements` | Quadrant | What to improve first? |
 | `architecture-detail` | Architecture | What runs inside the device and over which protocol does each link talk? |
+| `architecture-expanded` | Architecture | The same with the browser, the cloud, MIDI and both directions of each link: who tells whom what, and who writes which files? |
 | `jack-graph` | Signal path | Which JACK clients surround a pedalboard, and how does mod-ui name their ports? |
 | `startup` | Sequence | What happens from `server.py` to a loaded pedalboard? |
 | `layers-topdown` | Trace | How does one real call travel down the layers and back? (a second reading of `layers`, which stays) |

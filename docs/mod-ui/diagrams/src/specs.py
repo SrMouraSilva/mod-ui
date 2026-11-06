@@ -48,7 +48,7 @@ def context():
     cloud = Node('cloud', 'cloud', 'mod.audio cloud', ['api · plugins · pedalboards', 'TONE3000 (NAM models)'], ax, r0, NW, NH)
     classic = Node('classic', 'legacy', 'Classic UI', ['html/js · jQuery', 'host.js · desktop.js'], ax, r1, NW, NH)
     client = Node('client', 'client', 'modui-client', ['typed fetch + WebSocket', 'new UIs · Node.js'], ax, r2, NW, NH)
-    web = Node('web', 'http', 'Webserver', ['webserver.py · Tornado 4.3', '89 routes · 3 sockets'], bx, r1, NW, NH)
+    web = Node('web', 'http', 'Webserver', ['webserver.py · Tornado 4.3', f'{measure.route_stats()["routes"]} routes · 3 sockets'], bx, r1, NW, NH)
     host = Node('host', 'backend', 'Session + Host', ['session.py · host.py', 'one shared state'], bx, r2, NW, NH, focal=True)
     libs = Node('libs', 'clib', 'libmod_utils', ['modtools/utils.py · ctypes', 'lilv · JACK · ALSA'], bx, r3, NW, NH)
     hmi = Node('hmi', 'ext', 'HMI', ['serial · knobs · screens', 'Duo · Duo X · Dwarf'], cx, r1, NW, NH)
@@ -105,7 +105,7 @@ def layers():
     top = 96
     spec = [  # num, name, subs, kind, height
         (7, 'Browser', ['28 scripts in html/js · jQuery widgets · global variables', 'index.html renders the globals; Mustache templates'], 'legacy', 72),
-        (6, 'Transport', ['webserver.py · 89 routes · 3 WebSockets · uploads', 'also renders pages and talks to the OS (tar, systemctl)'], 'http', 100),
+        (6, 'Transport', [f'webserver.py · {measure.route_stats()["routes"]} routes · 3 WebSockets · uploads', 'also renders pages and talks to the OS (tar, systemctl)'], 'http', 100),
         (5, 'Session', ['session.py · recorder.py · screenshot.py', 'browsers, preferences, recording, thumbnails'], 'backend', 72),
         (4, 'Host', ['host.py · addressings.py · bank.py · profile.py · tempo.py', None], 'backend', 124),
         (3, 'Device links', ['hmi.py · protocol.py · mod_protocol.py · control_chain.py', 'serial and unix-socket protocols of the pedals'], 'backend', 72),
@@ -715,10 +715,10 @@ def frontend():
     r0, r1, r2, r3 = 96, 216, 336, 456
     A = Node('A', 'page', 'index.html', ['rendered by Tornado', 'globals: PLATFORM, ...'], 56, r0, NW, NH)
     I = Node('I', 'unused', 'modui-client', ['index.html loads it', 'no classic script calls it'], 392, r0, NW, NH)
-    B = Node('B', 'legacy', 'Desktop', ['desktop.js · 2,193 lines', 'builds every manager'], 392, 276, NW, NH, focal=True)
+    B = Node('B', 'legacy', 'Desktop', [f'desktop.js · {measure.loc()["js"]["html/js/desktop.js"]:,} lines', 'builds every manager'], 392, 276, NW, NH, focal=True)
     C = Node('C', 'legacy', 'host.js', ['WebSocket router', 'frames → desktop.*'], 56, r3, NW, NH)
-    D = Node('D', 'legacy', 'Pedalboard canvas', ['pedalboard.js · 3,413', 'plugins, cables, drag'], 728, r0, NW, NH)
-    E = Node('E', 'legacy', 'Plugin GUIs', ['modgui.js · 3,114', 'icons, knobs, plugin JS'], 728, r1, NW, NH)
+    D = Node('D', 'legacy', 'Pedalboard canvas', [f'pedalboard.js · {measure.loc()["js"]["html/js/pedalboard.js"]:,}', 'plugins, cables, drag'], 728, r0, NW, NH)
+    E = Node('E', 'legacy', 'Plugin GUIs', [f'modgui.js · {measure.loc()["js"]["html/js/modgui.js"]:,}', 'icons, knobs, plugin JS'], 728, r1, NW, NH)
     F = Node('F', 'legacy', 'Library boxes', ['effects · cloudplugin · banks', 'pedalboards · file_manager'], 728, r2, NW, NH)
     G = Node('G', 'legacy', 'Device panels', ['hardware · snapshot · transport', 'mididevices · cc-manager'], 728, r3, NW, NH)
     H = Node('H', 'lib', 'Third-party stack', ['jQuery 1.9.1 · jQuery UI 1.10.1 · Mustache 0.5 · Lunr · slick · crypto-js', 'plus 3.5 MB under html/js/lib that no page loads'], 56, 636, 848, NH)

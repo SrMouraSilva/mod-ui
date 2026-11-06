@@ -6,7 +6,7 @@ It explains how the pieces fit, which decisions shaped them, what the code is ti
 The TypeScript packages have their own guides: [`modui-client.md`](modui-client.md) and [`modui-plugin-view.md`](modui-plugin-view.md). The HTTP and WebSocket contract is
 [`openapi.yml`](openapi.yml). This guide is about what is *behind* that contract.
 
-**How it was made.** Everything below was read from the working tree at commit `73964caf` (2026-10-15); sections 13 to 17 were added the same day and answer follow-up questions. Numbers are counted by
+**How it was made.** Everything below was read from the working tree at commit `6aafdd82` (2026-11-05), after the merge of upstream; sections 13 to 17 answer follow-up questions. Numbers are counted by
 [`diagrams/src/measure.py`](mod-ui/diagrams/src/measure.py) and redrawn each time the diagrams are built (section 18). Where a statement is a reading of the code that was
 not run on a device, it says *reading of the code*; where it is a judgement, it says *estimate*. No design document of the original authors exists in the repository,
 so the reasons given for a decision are inferred from the code, its comments and `CONTRIBUTING.md`.
@@ -46,11 +46,11 @@ The MOD logo is a registered trademark, and the notice is kept in [`TRADEMARKS.m
 
 | Part | Path | What it is | Size |
 |---|---|---|---|
-| Server | [`mod/`](../mod), [`server.py`](../server.py) | Tornado 4.3 webserver, session, the Host (the running pedalboard), HMI and Control Chain drivers | 16,980 lines of Python in 22 files |
-| Native bridge | [`modtools/`](../modtools), [`utils/`](../utils) | `ctypes` wrapper and the C++ library (lilv, JACK, ALSA), plus the pedalboard thumbnail renderer | 1,052 lines of Python, 7,388 of C++ |
-| Browser UI | [`html/`](../html) | Server-rendered page, 28 jQuery scripts, Mustache templates, CSS | 17,247 lines of JavaScript, 4,064 of HTML |
-| Contract | [`docs/openapi.yml`](openapi.yml) | 93 documented operations, the three sockets, the pages | 3,271 lines |
-| Typed client | [`modui-client/`](../modui-client), [`modui-plugin-view/`](../modui-plugin-view) | TypeScript packages on top of the contract; loaded by `index.html` but used by no classic script (section 10) | 11,053 lines of TypeScript |
+| Server | [`mod/`](../mod), [`server.py`](../server.py) | Tornado 4.3 webserver, session, the Host (the running pedalboard), HMI and Control Chain drivers | 17,128 lines of Python in 22 files |
+| Native bridge | [`modtools/`](../modtools), [`utils/`](../utils) | `ctypes` wrapper and the C++ library (lilv, JACK, ALSA), plus the pedalboard thumbnail renderer | 1,066 lines of Python, 7,407 of C++ |
+| Browser UI | [`html/`](../html) | Server-rendered page, 28 jQuery scripts, Mustache templates, CSS | 17,267 lines of JavaScript, 4,064 of HTML |
+| Contract | [`docs/openapi.yml`](openapi.yml) | 94 documented operations, the three sockets, the pages | 3,338 lines |
+| Typed client | [`modui-client/`](../modui-client), [`modui-plugin-view/`](../modui-plugin-view) | TypeScript packages on top of the contract; loaded by `index.html` but used by no classic script (section 10) | 12,132 lines of TypeScript |
 | Tests | [`test/`](../test) | A few Python `unittest` modules, a jsdom suite for the Desktop seam, a hardware integration test | 1,905 lines |
 | Legacy | `bluetooth.py`, `hmi_debug.py`, `host_debug.py`, [`mod/old/`](../mod/old) | A Python 2 script, debugging scripts, and three modules nothing imports | about 800 lines |
 
@@ -68,14 +68,14 @@ open the sockets `/rplsocket` and `/rpbsocket` to install a plugin or load a ped
 
 | # | Finding | Evidence | Section |
 |---|---|---|---|
-| 1 | The **Host** is the centre of gravity: 7,039 lines (17% of all code), 201 methods in one class; 73 of them handle the HMI. | [`host.py`](../mod/host.py), [layers](mod-ui/diagrams/layers.svg), [code map](mod-ui/diagrams/code-map.svg) | 4 |
-| 2 | The stack holds **in the imports** (50 imports, no upward import, no cycle) and is **crossed at run time**: the handlers call `SESSION.host.*` 51 times, against 47 calls through the Session. | [imports](mod-ui/diagrams/imports.svg), `measure.webserver_reach()` | 4 |
+| 1 | The **Host** is the centre of gravity: 7,065 lines (17% of all code), 202 methods in one class; 73 of them handle the HMI. | [`host.py`](../mod/host.py), [layers](mod-ui/diagrams/layers.svg), [code map](mod-ui/diagrams/code-map.svg) | 4 |
+| 2 | The stack holds **in the imports** (51 imports, no upward import, no cycle) and is **crossed at run time**: the handlers call `SESSION.host.*` 51 times, against 47 calls through the Session. | [imports](mod-ui/diagrams/imports.svg), `measure.webserver_reach()` | 4 |
 | 3 | **One thread, one shared state.** A single Tornado IOLoop serves browsers, mod-host, the HMI and Control Chain; 247 callback-style sites and 24 `os.system` calls that stop the loop. | [event loop](mod-ui/diagrams/event-loop.svg) | 5 |
-| 4 | The Host keeps a **shadow copy** of the pedalboard and replays it: to every browser that connects, and to mod-host after a crash. | [`host.py:2027`](../mod/host.py#L2027) | 5 |
+| 4 | The Host keeps a **shadow copy** of the pedalboard and replays it: to every browser that connects, and to mod-host after a crash. | [`host.py:2034`](../mod/host.py#L2034) | 5 |
 | 5 | The replay after a crash **only runs when a browser connects**; with none open, the sockets come back but every command is dropped (*reading of the code*). | [host link](mod-ui/diagrams/host-link.svg) | 5, 11 |
 | 6 | **Device knowledge lives in three places** (C++ `#ifdef`s, the HMI schema, the soundcard profile) and in a JSON descriptor outside the repository; the same device has **five spellings**. | [devices](mod-ui/diagrams/devices.svg) | 7 |
 | 7 | The code is tied to the **MOD OS image** far more than to any device: 97 fixed paths, 68 fixed JACK names, 56 shell-outs, against 22 device names. | [coupling](mod-ui/diagrams/coupling.svg) | 8 |
-| 8 | There is **no authentication, session or CSRF check** on the local API; 49 of 89 routes accept `GET`, many of them state-changing. The trust model is the local network. | [`webserver.py:2511`](../mod/webserver.py#L2511) | 11 |
+| 8 | There is **no authentication, session or CSRF check** on the local API; 50 of 90 routes accept `GET`, many of them state-changing. The trust model is the local network. | [`webserver.py:2518`](../mod/webserver.py#L2518) | 11 |
 | 9 | Python 3.4 on the device image fixes the **toolchain**: no `async`/`await`, Tornado 4.3, callbacks everywhere. | [`tools/check_py34.py`](../tools/check_py34.py), [dependency age](mod-ui/diagrams/dependency-age.svg) | 9 |
 | 10 | The browser side is **28 global scripts on jQuery 1.9.1**, with 3.5 MB of libraries nothing loads; the typed client is loaded and unused. | [frontend](mod-ui/diagrams/frontend.svg) | 10 |
 
@@ -92,29 +92,29 @@ Each row is a decision visible in the code, with what it costs. The *why* is inf
 | **A control plane in Python, audio elsewhere.** Plugins and audio live in `mod-host` + JACK; mod-ui sends text commands. | [`host.py`](../mod/host.py) (`send_modified`, `process_write_queue`) | A glitch in the UI must never reach the audio thread; plugins can crash without taking the UI down. | mod-ui must **mirror** what mod-host holds (decision 4) and can lose sync when mod-host restarts. |
 | **One process, one thread, callbacks.** Tornado `IOLoop`, `gen.Task`, `@web.asynchronous`. | all of `mod/` | Python 3.4 on the image rules out `async`/`await`; one thread needs no locks. | 247 callback sites; any blocking call freezes everything ([event loop](mod-ui/diagrams/event-loop.svg)). |
 | **Text protocols everywhere.** NUL-terminated commands to mod-host and the HMI, JSON to Control Chain, space-separated frames on the WebSocket. | [`protocol.py`](../mod/protocol.py), [`mod_protocol.py`](../mod/mod_protocol.py), [`host.py`](../mod/host.py) | Easy to debug with `nc` and a serial terminal. | No versioning and no schema; arguments are split on spaces, so values with spaces need care. |
-| **The Host mirrors the running pedalboard** (`plugins`, `connections`, ports, addressings) and replays it on demand. | [`host.py:2027`](../mod/host.py#L2027) (`report_current_state`) | Browsers come and go; mod-host has no "describe yourself" command. | Multi-browser consistency and crash recovery for free; but the Host also writes the pedalboard files, drives the HMI and keeps the transport, so it grows. |
+| **The Host mirrors the running pedalboard** (`plugins`, `connections`, ports, addressings) and replays it on demand. | [`host.py:2034`](../mod/host.py#L2034) (`report_current_state`) | Browsers come and go; mod-host has no "describe yourself" command. | Multi-browser consistency and crash recovery for free; but the Host also writes the pedalboard files, drives the HMI and keeps the transport, so it grows. |
 | **The filesystem is the database.** Pedalboards are LV2 bundles (TTL + JSON + PNG), banks and preferences are JSON, settings are *marker files* (`/data/enable-mod-sdk` exists or not). | [`settings.py`](../mod/settings.py), [`bank.py`](../mod/bank.py) | A read-only root with a writable `/data`; pedalboards must be valid LV2 for mod-host to load them. | No transactions; an atomic-rename helper (`TextFileFlusher`) protects most writes; settings cannot hold a value other than present/absent or one line. |
 | **A C++ library behind `ctypes`.** lilv scanning, pedalboard TTL parsing, JACK and ALSA are in `libmod_utils.so`. | [`utils/`](../utils), [`modtools/utils.py`](../modtools/utils.py) | lilv is a C library and scanning is heavy; JACK and ALSA have C APIs. | The C structs are **repeated by hand** as `ctypes.Structure` (and cached in module globals); a field added in `utils.h` and forgotten in Python corrupts memory silently. |
 | **A hardware descriptor, not a device class.** A JSON file in `/etc` lists capabilities (`hmi_set_pb_name`, `addressing_pages`, `actuators`, ...). | [`mod/__init__.py:203`](../mod/__init__.py#L203) | One image per device family; the descriptor is installed with the OS image. | The only declarative seam (25 keys, 56 reads). It is **outside the repository**, so a reader cannot see what each device allows. |
 | **Fakes instead of mocks.** `FakeHost` and `FakeHMI` stand in when `MOD_DEV_HOST` / `MOD_DEV_HMI` are set or the serial port does not open. | [`development.py`](../mod/development.py), [`session.py:21`](../mod/session.py#L21) | Develop on a laptop with no JACK. | A fake is a *subclass* of the real class, so the real `Host` is imported even in development. |
 | **Singletons by import.** `SESSION = Session()` runs when `mod.session` is imported; `Protocol` keeps its registry in class attributes; `modtools.utils` keeps caches and callbacks in module globals. | [`session.py:482`](../mod/session.py#L482), [`protocol.py:92`](../mod/protocol.py#L92) | Simplest way to share state in a one-thread program. | Importing a module has side effects (it opens the serial port); no two sessions in one process; tests must work around import order. |
-| **The browser brokers the cloud.** The server signs a nonce with the device key and decrypts the token; the browser does the HTTP. | [`webserver.py:2183`](../mod/webserver.py#L2183), [`communication/`](../mod/communication) | The device may be offline or behind a captive network; the browser is the one that has Internet. | The device needs no outbound networking code; the price is that nothing works without a browser (section 11). |
+| **The browser brokers the cloud.** The server signs a nonce with the device key and decrypts the token; the browser does the HTTP. | [`webserver.py:2190`](../mod/webserver.py#L2190), [`communication/`](../mod/communication) | The device may be offline or behind a captive network; the browser is the one that has Internet. | The device needs no outbound networking code; the price is that nothing works without a browser (section 11). |
 | **One code base, a flag for Desktop.** `MOD_DESKTOP=1`, `desktop_app` in templates, `DesktopApp` in JS. | [`CONTRIBUTING.md`](../CONTRIBUTING.md), [`desktop-app.js`](../html/js/desktop-app.js) | One commit ships to devices and to Desktop (the OS build and Desktop pin the same commit). | Every device-only feature needs a Desktop hide-or-replace; a test checks the device page has no Desktop token. |
 | **The page is rendered by the server, then driven by globals.** `index.html` is a Tornado template that writes `PLATFORM`, `HARDWARE_PROFILE`, `PREFERENCES` as JavaScript globals. | [`webserver.py:1783`](../mod/webserver.py#L1783), [`index.html`](../html/index.html) | No build step, no API call before first paint. | The UI cannot be loaded without the server's template; the hardware is known to the UI only through globals. |
 | **Aggressive caching, versioned URLs.** Static files are served with a one-year `max-age` and no ETag; pages redirect to `?v=<image version>`. | [`webserver.py:223`](../mod/webserver.py#L223) | A slow device with a slow flash must not revalidate 100 files per load. | On Desktop and in development the version is the current time, so **every page load busts the cache**. |
 
 ### 3.2 The seven layers
 
-![Layer stack: browser, transport, session, host, device links, native bridge and platform, with lines of code per layer, the Host class split by what its 201 methods are about, and two accent arrows showing that the Tornado handlers skip the Session and the Host](mod-ui/diagrams/layers.svg)
+![Layer stack: browser, transport, session, host, device links, native bridge and platform, with lines of code per layer, the Host class split by what its 202 methods are about, and two accent arrows showing that the Tornado handlers skip the Session and the Host](mod-ui/diagrams/layers.svg)
 
 | Layer | Files | Lines | Role |
 |---|---|---|---|
-| 7 Browser | `html/js/*.js`, `html/*.html` | 17,247 JS + 4,064 HTML | Pedalboard editor, plugin GUIs, panels, WebSocket router |
-| 6 Transport | `webserver.py` | 2,754 | 89 routes, 3 WebSockets, page rendering, uploads, OS commands |
-| 5 Session | `session.py`, `recorder.py`, `screenshot.py` | 697 | Browser registry, preferences, recording, thumbnail queue |
-| 4 Host | `host.py`, `addressings.py`, `bank.py`, `profile.py`, `tuner.py`, `tempo.py` | 9,557 | The running pedalboard, snapshots, presets, banks, addressing, profiles |
+| 7 Browser | `html/js/*.js`, `html/*.html` | 17,267 JS + 4,064 HTML | Pedalboard editor, plugin GUIs, panels, WebSocket router |
+| 6 Transport | `webserver.py` | 2,762 | 90 routes, 3 WebSockets, page rendering, uploads, OS commands |
+| 5 Session | `session.py`, `recorder.py`, `screenshot.py` | 738 | Browser registry, preferences, recording, thumbnail queue |
+| 4 Host | `host.py`, `addressings.py`, `bank.py`, `profile.py`, `tuner.py`, `tempo.py` | 9,583 | The running pedalboard, snapshots, presets, banks, addressing, profiles |
 | 3 Device links | `hmi.py`, `protocol.py`, `mod_protocol.py`, `control_chain.py` | 1,654 | Serial and socket protocols of the pedals |
-| 2 Native bridge | `modtools/utils.py`, `utils/*.cpp` | 1,052 + 7,388 | LV2 scan, pedalboard files, JACK ports, ALSA mixer |
+| 2 Native bridge | `modtools/utils.py`, `utils/*.cpp` | 1,066 + 7,407 | LV2 scan, pedalboard files, JACK ports, ALSA mixer |
 | 1 Platform | mod-host, JACK, ALSA, LV2 bundles, systemd | outside the repository | Audio and the OS image |
 
 The Tornado handlers skip two layers, probably for convenience, and the numbers show it: of the calls they make to the running state, 51 go to `SESSION.host.*` and 7 to `SESSION.hmi.*`,
@@ -125,9 +125,9 @@ The Session is therefore **not the façade** its position suggests; it is one of
 
 ## 4. The layers
 
-### 4.1 Transport: `webserver.py` (2,754 lines)
+### 4.1 Transport: `webserver.py` (2,762 lines)
 
-One file holds **81 handler classes**, 89 routes (49 accept only `GET`, 29 handlers also implement `POST`), the three WebSockets, the page rendering, the file receivers and the signal
+One file holds **82 handler classes**, 90 routes (50 accept only `GET`, 29 handlers also implement `POST`), the three WebSockets, the page rendering, the file receivers and the signal
 handlers. The groups, with the OpenAPI tag that documents them:
 
 | Group | Routes (examples) | Reaches |
@@ -154,7 +154,7 @@ The `Session` is created at import time (`SESSION = Session()`) and owns: the `U
 `msg_callback_broadcast` fan frames out to every socket. A comment in the file says "everything after this line is yet to be documented", and the HMI re-initialisation
 (`hmi_reinit_cb`) is introduced as "very nasty, sorry".
 
-### 4.3 Host: `host.py` (7,039 lines, 201 methods)
+### 4.3 Host: `host.py` (7,065 lines, 202 methods)
 
 The Host holds the running pedalboard and talks to mod-host. What its methods are about (counted by name, `measure.host_methods()`):
 
@@ -165,7 +165,7 @@ The Host holds the running pedalboard and talks to mod-host. What its methods ar
 | Addressing | 27 | `addr_task_*`, `address`, `cv_addressing_plugin_port_add` |
 | Pedalboard files, snapshots, presets | 24 | `load`, `load_pb_plugins`, `save_state_*`, `snapshot_*`, `preset_*` |
 | JACK, MIDI, transport | 21 | `set_midi_devices`, `set_transport_bpm`, `mute`, `unmute` |
-| Socket to mod-host | 14 | `open_connection_if_needed`, `send_modified`, `process_write_queue` |
+| Socket to mod-host | 15 | `open_connection_if_needed`, `send_modified`, `process_write_queue` |
 
 Its state: `plugins` (by numeric instance id, kept in an `InstanceIdMapper` because mod-host knows integers and the browser knows paths such as `/graph/reverb`), `connections`,
 the audio and CV ports, `midiports`, the snapshots, `current_pedalboard_snapshot_id`, the transport, the tuner, the banks, plus the pending HMI messages. **Reserved ids**
@@ -190,7 +190,7 @@ code with reserved negative numbers (`HMI_SNAPSHOTS_OFFSET = 100`).
 
 ### 4.5 Native bridge: `modtools/utils.py` and `utils/`
 
-`libmod_utils.so` (6,062 lines in `utils_lilv.cpp`, 846 in `utils_jack.cpp`) is built by `make -C utils` and loaded by `ctypes` from three candidate paths. It exposes 50-odd functions: plugin
+`libmod_utils.so` (6,079 lines in `utils_lilv.cpp`, 846 in `utils_jack.cpp`) is built by `make -C utils` and loaded by `ctypes` from three candidate paths. It exposes 50-odd functions: plugin
 information and GUI files, pedalboard listing and info, the LV2 bundle set (`add_bundle_to_lilv_world`), preset scanning, JACK ports and aliases, true-bypass and master-volume
 through the ALSA mixer, the JACK buffer size and xrun counters, and a few callbacks into Python. Device selection happens here **at build time** with `-D_MOD_DEVICE_*` macros
 (section 7). `modtools/pedalboard.py` is a separate command (`python3 -m modtools.pedalboard take_screenshot …`) that renders pedalboard thumbnails with Pillow and `aggdraw`; the
@@ -198,13 +198,13 @@ through the ALSA mixer, the JACK buffer size and xrun counters, and a few callba
 
 ### 4.6 The imports
 
-![Dependency matrix of 22 Python modules and 50 imports ordered from the entry point down to the kernel; every square lies right of the diagonal and settings.py and __init__.py are imported by 10 and 9 modules](mod-ui/diagrams/imports.svg)
+![Dependency matrix of 22 Python modules and 51 imports ordered from the entry point down to the kernel; every square lies right of the diagonal and settings.py and __init__.py are imported by 10 and 9 modules](mod-ui/diagrams/imports.svg)
 
 Read the matrix as a layering test. **Every import points down the stack and there is no cycle**, which is better than most programs of this age. The fan-in sits where it should
 (`settings.py`, `__init__.py`). What the matrix cannot show is the coupling that is *not* an import: the shared `SESSION` object, the callbacks the Host receives
 (`msg_callback`, `hmi_initialized_cb`), the module globals of `modtools.utils`, and the class-level `Protocol` registry. That is where the layers meet (section 5).
 
-For a drawing within the nine-node budget, `tuner.py`, `tempo.py` and the leaf modules are shown as rows of a matrix instead of nodes, which keeps all 50 imports.
+For a drawing within the nine-node budget, `tuner.py`, `tempo.py` and the leaf modules are shown as rows of a matrix instead of nodes, which keeps all 51 imports.
 
 ---
 
@@ -224,7 +224,7 @@ For a drawing within the nine-node budget, `tuner.py`, `tempo.py` and the leaf m
   explaining that the older epoll-based version never fired on macOS and Windows.
 - **Timers and signals.** `statstimer` every second (CPU load, xruns), `memtimer` every five (RAM, CPU frequency, temperature), an HMI ping every five seconds *if* `HMI_TIMEOUT > 0`.
   `SIGUSR1` and `SIGUSR2` are **overloaded by marker files**: the handler looks at which file exists under `/root` or `/tmp` to decide whether it means "save the pedalboard",
-  "take an HMI screenshot", "firmware updated", "boot check", "upgrade check" or "disconnect" ([`webserver.py:2677`](../mod/webserver.py#L2677)).
+  "take an HMI screenshot", "firmware updated", "boot check", "upgrade check" or "disconnect" ([`webserver.py:2685`](../mod/webserver.py#L2685)).
 
 ### 5.2 One pedalboard load
 
@@ -242,14 +242,14 @@ That is why `modui-client` has to rebuild the graph from the replay (`/websocket
 
 ![State machine of the Host link: starting, connecting, running, crashed and the exit at start-up; after a crash with no browser open the sockets come back but every command is dropped until a browser opens the UI](mod-ui/diagrams/host-link.svg)
 
-When the write socket to mod-host closes ([`host.py:1278`](../mod/host.py#L1278)) the Host sets `crashed`, stops its timers, sends `stop` to every browser, drains the queue with failed
+When the write socket to mod-host closes ([`host.py:1285`](../mod/host.py#L1285)) the Host sets `crashed`, stops its timers, sends `stop` to every browser, drains the queue with failed
 callbacks, and calls `reconnect_jack` after five seconds. The **replay** (the same `report_current_state` that brings a new browser up to date) re-adds every plugin, reloads their state,
 and restores parameters, MIDI maps, CV maps and connections in mod-host. Reading the code, two paths do not heal:
 
-1. **No browser open.** `report_current_state(None)` returns at once ([`host.py:2028`](../mod/host.py#L2028)), and `crashed` is only reset *after* that check
-   ([`host.py:2049`](../mod/host.py#L2049)). While `crashed` is `True`, `send_modified` and `send_notmodified` return a default answer without sending
-   ([`host.py:1973`](../mod/host.py#L1973), [`1984`](../mod/host.py#L1984)). A device used only through its HMI would therefore stay silent until someone opens the web page.
-2. **JACK not back after five seconds.** `reconnect_jack` returns when `init_jack()` fails and schedules nothing else ([`host.py:1379`](../mod/host.py#L1379)); the next try is a browser connecting.
+1. **No browser open.** `report_current_state(None)` returns at once ([`host.py:2035`](../mod/host.py#L2035)), and `crashed` is only reset *after* that check
+   ([`host.py:2057`](../mod/host.py#L2057)). While `crashed` is `True`, `send_modified` and `send_notmodified` return a default answer without sending
+   ([`host.py:1980`](../mod/host.py#L1980), [`1991`](../mod/host.py#L1991)). A device used only through its HMI would therefore stay silent until someone opens the web page.
+2. **JACK not back after five seconds.** `reconnect_jack` returns when `init_jack()` fails and schedules nothing else ([`host.py:1386`](../mod/host.py#L1386)); the next try is a browser connecting.
 
 Neither was run on hardware. They are the first thing to check on a device by killing `mod-host` while no browser is open (section 12, item 2). The `TODO` at the end of the replay
 ("restore HMI and CC addressings if crashed") shows the authors knew the replay is incomplete.
@@ -258,7 +258,7 @@ Neither was run on hardware. They are the first thing to check on a device by ki
 
 | Channel | Direction | Format | Size of the vocabulary | Where defined |
 |---|---|---|---|---|
-| HTTP | browser → server | query/form/JSON; most handlers answer a bare `true`/`false` | 89 routes (93 documented operations) | [`webserver.py:2511`](../mod/webserver.py#L2511), [`openapi.yml`](openapi.yml) |
+| HTTP | browser → server | query/form/JSON; most handlers answer a bare `true`/`false` | 90 routes (94 documented operations) | [`webserver.py:2518`](../mod/webserver.py#L2518), [`openapi.yml`](openapi.yml) |
 | `/websocket` | browser → server | space-separated text | 14 commands (`param_set`, `plugin_pos`, `patch_set`, `transport-*`, `data_ready`, ...) | [`webserver.py:1246`](../mod/webserver.py#L1246) |
 | `/websocket` | server → browser | space-separated text | about 40 frame names (`add`, `remove`, `connect`, `param_set`, `output_set`, `loading_start`, `loading_end`, `stats`, `hw_add`, ...) | `msg_callback` in `host.py`, `session.py`, `addressings.py` |
 | `/rpbsocket`, `/rplsocket` | `mod.audio` page → server | one message, then close or reply | pedalboard id; a base64 plugin tarball | [`webserver.py:1178`](../mod/webserver.py#L1178), [`1199`](../mod/webserver.py#L1199) |
@@ -356,7 +356,7 @@ Device knowledge is concentrated in **three places** and scattered through one:
 1. **C++ build macros** (`utils/utils_jack.cpp`, `utils_lilv.cpp`): the Duo X mixer controls and S/PDIF mirroring (`#ifdef _MOD_DEVICE_DUOX`, six blocks), the plugin default parameter set
    (`mod:default_duo`, `default_duox`, `default_dwarf`, `default_x64`), and **no external plugin UIs on embedded targets** (`WITH_EXTERNAL_UI_SUPPORT` is undefined for Duo, Duo X and Dwarf).
 2. **The HMI schema** ([`mod_protocol.py:95`](../mod/mod_protocol.py#L95)) and the registration of model-specific callbacks in the Host constructor
-   ([`host.py:526`](../mod/host.py#L526) to [`549`](../mod/host.py#L549)). The one conditional on a real device is `platform != "dwarf"`: only then is `ncp` registered under the `DUO` schema.
+   ([`host.py:527`](../mod/host.py#L527) to [`550`](../mod/host.py#L550)). The one conditional on a real device is `platform != "dwarf"`: only then is `ncp` registered under the `DUO` schema.
 3. **The soundcard profile** ([`profile.py:33`](../mod/profile.py#L33)): the volumes and modes are applied by calling `mod-amixer` with different controls per `MOD_SOUNDCARD`.
 4. **Everything else is delegated to the hardware descriptor** (below), plus the Desktop flag (13 mentions in the server, 59 in the browser).
 
@@ -390,7 +390,7 @@ A new device means touching all of them (section 18.3).
 | `swapped_audio_channels`, `has_noisegate`, `codec_truebypass` | `host.py`, `webserver.py` | Audio routing details of the board |
 
 Two of these decide arithmetic that is easy to get wrong: with `factory_pedalboards` the HMI bank list gets two divider entries and an "all factory pedalboards" bank, and `Host.initialize_hmi`
-works out indices with offsets such as `numUserBanks + 3` ([`host.py:1404`](../mod/host.py#L1404) onward).
+works out indices with offsets such as `numUserBanks + 3` ([`host.py:1411`](../mod/host.py#L1411) onward).
 
 ---
 
@@ -498,7 +498,7 @@ There is no login, session, token or CSRF check on the local routes. The `/auth/
 Checks that do exist: `check_origin` on `/rpbsocket` and `/rplsocket` (origin must be `mod.audio` or `moddevices.com`, plus `localhost:8010` for plugin development), a CORS allow-list on `/hello`
 and `/pedalboard/load_remote`, and Tornado's default same-origin check on `/websocket`. The implications (*reading of the code*):
 
-- Any page that can reach the device can call state-changing routes. 49 of 89 routes accept only `GET`, including `/reset` and `/effect/add`; `POST /system/exechange` runs `reboot`, `restore`, `backup-export`,
+- Any page that can reach the device can call state-changing routes. 50 of 90 routes accept only `GET`, including `/reset` and `/effect/add`; `POST /system/exechange` runs `reboot`, `restore`, `backup-export`,
   `backup-import` and writes the marker files; `POST /system/cleanup` deletes pedalboards, plugins, banks, favourites and license keys with `rm -rf`.
 - A page of `mod.audio` can install a native plugin through `/rplsocket` (`install_package` runs `tar zxf` on a base64 body). The origin header is the only gate; plugins are shared objects loaded into the audio process.
 - Plugin GUIs execute the plugin's JavaScript inside the UI page, with the page's permissions.
@@ -513,11 +513,11 @@ None of these was changed; this guide records them. Evidence links point to the 
 | # | Where | What | Effect |
 |---|---|---|---|
 | 1 | [`profile.py:73`](../mod/profile.py#L73), [`82`](../mod/profile.py#L82), [`93`](../mod/profile.py#L93) | `fill_in_mixer_values` assigns `data['output1volume']` **twice** (reading `out 1` then `out 2`), in all three soundcard branches | The value of output 2 overwrites output 1, and `output2volume` is never read back, so a saved profile restores the wrong output volume |
-| 2 | [`host.py:2028`](../mod/host.py#L2028), [`2049`](../mod/host.py#L2049) | Crash recovery needs a websocket (section 5.3) | HMI-only use after a mod-host crash may stay mute (*reading of the code*) |
-| 3 | [`host.py:1379`](../mod/host.py#L1379) | `reconnect_jack` tries once | If JACK is slow to return, nothing retries |
+| 2 | [`host.py:2035`](../mod/host.py#L2035), [`2057`](../mod/host.py#L2057) | Crash recovery needs a websocket (section 5.3) | HMI-only use after a mod-host crash may stay mute (*reading of the code*) |
+| 3 | [`host.py:1386`](../mod/host.py#L1386) | `reconnect_jack` tries once | If JACK is slow to return, nothing retries |
 | 4 | [`recorder.py:54`](../mod/recorder.py#L54), [`webserver.py:1463`](../mod/webserver.py#L1463), [`1469`](../mod/webserver.py#L1469) | `add_handler(fd, cb, 16)` uses a raw epoll mask; the comment in `run_command` ([`webserver.py:162`](../mod/webserver.py#L162)) says that mask never fires on macOS and Windows | Playback end and "pack bundle" may hang on MOD Desktop (not run there) |
 | 5 | [`session.py:147`](../mod/session.py#L147) | `os.system("hmi-reset; sleep 3")` on the event loop | Three seconds of frozen UI per HMI restart |
-| 6 | [`webserver.py:2193`](../mod/webserver.py#L2193) | `AuthToken` calls `token.decode_and_decrypt` when `token` is `None` (the import is wrapped in `try/except`) | An `AttributeError` and a 500 instead of an empty answer when the crypto module is missing |
+| 6 | [`webserver.py:2200`](../mod/webserver.py#L2200) | `AuthToken` calls `token.decode_and_decrypt` when `token` is `None` (the import is wrapped in `try/except`) | An `AttributeError` and a 500 instead of an empty answer when the crypto module is missing |
 | 7 | [`setup.py`](../setup.py) | Version `0.99.8` (the `CHANGELOG` stops there), license `GPLv3` while `LICENSE` and every header say AGPL-3.0, and `from distutils…` (removed in Python 3.12) | The packaging metadata is stale and does not run on current Python |
 | 8 | [`bluetooth.py`](../bluetooth.py), [`mod/old/`](../mod/old) | Python 2 `print` statements; three modules nothing imports (`host_carla`, `monitor`, `sysmond`) | Dead code that still shows up in searches; `tools/check_py34.py` already excludes `mod/old/` |
 | 9 | [`hmi.py:424`](../mod/hmi.py#L424), [`webserver.py:1522`](../mod/webserver.py#L1522) | `FIXME`s: a hard-coded assignment limit that should come from `max_assigns`; "don't use external tools" for `tar` | Known debts, not defects |
@@ -540,11 +540,11 @@ Effort and impact are **estimates**. The project rules ([`CLAUDE.md`](../CLAUDE.
 | 2 | Heal the mod-host link without a browser | Section 5.3 | Replay the Host state on reconnect regardless of websockets; retry `reconnect_jack` with back-off; first confirm on a device | yes |
 | 3 | Stop blocking the loop | 24 `os.system`, 20 `getoutput` (section 5.1) | Use the async `run_command` already in `webserver.py` for `mod-amixer` and `hmi-reset`; move it to `mod/` so `profile.py` can use it | yes |
 | 4 | One request-queue class | Three copies of the FIFO with an idle flag | A small class with `send(msg, callback)`, an idle flag, an optional timeout; `Host`, `HMI` and `ControlChainDeviceListener` use it | yes |
-| 5 | Protect the local API | 49 `GET` routes, no origin check (section 11.2) | Reject cross-origin requests by `Origin`/`Host` header; move mutations to `POST`; an optional token | yes |
+| 5 | Protect the local API | 50 `GET` routes, no origin check (section 11.2) | Reject cross-origin requests by `Origin`/`Host` header; move mutations to `POST`; an optional token | yes |
 | 6 | Test the server over `FakeHost` | No unit test of `host.py`, `webserver.py` or `addressings.py` | `unittest` with `FakeHost` and `FakeHMI` through Tornado's test client; start with load/save and addressing | no (tests) |
 | 7 | Version the WebSocket frames | About 40 frames, no version | A `hello` frame with a protocol number, documented in `openapi.yml`; keeps `modui-client` honest | yes |
 | 8 | Describe devices as data | Five spellings, three places (section 7.3) | One profile per device (soundcard commands, HMI schema, capabilities, plugin defaults) loaded from a file in the repository; `#ifdef` stays for what is really compile-time | yes |
-| 9 | Split `host.py` | 201 methods, six kinds of work | By seam: mod-host link, plugin graph, pedalboard files, HMI handlers, addressing; keep `Host` as a thin coordinator | yes |
+| 9 | Split `host.py` | 202 methods, six kinds of work | By seam: mod-host link, plugin graph, pedalboard files, HMI handlers, addressing; keep `Host` as a thin coordinator | yes |
 | 10 | `async`/`await` and a current Tornado | 247 callback sites | Only when the image drops Python 3.4; do items 3, 4 and 9 first, they make it cheaper | yes |
 
 Small fixes that do not need a design: the `output1volume` duplication (defect 1), `setup.py` metadata (defect 7), the raw epoll masks (defect 4), `ws://` to follow `location.protocol` in `host.js`,
@@ -589,12 +589,55 @@ creates the `Addressings` object, which creates the Control Chain listener; the 
 **One thread on purpose.** The JACK callbacks of libmod_utils (a port appeared, the buffer size changed, an xrun) run on a JACK thread, but they only append to mutex-protected lists in C++; the
 Python side picks them up when it calls `get_jack_data()` (the one-second `statstimer`), so every Python callback runs on the IOLoop thread.
 
+### 13.1.1 The expanded view: both directions of every link
+
+![Expanded architecture: the browser and the cloud, the modules of the Python process, the HMI, Control Chain, mod-host, JACK and MIDI devices with commands and events drawn separately, plus panels listing what the browser carries, the events on port 5556, the path of a MIDI message and who writes which files](mod-ui/diagrams/architecture-expanded.svg)
+
+The figure above draws only who starts a conversation; this one adds the way back, the browser, the cloud and MIDI (`modui-client` is left out). The facts about mod-host come from its source ([mod-audio/mod-host](https://github.com/mod-audio/mod-host), `src/effects.c`, branch `master`, read on 2026-11-05).
+
+**The way back, per peer:**
+
+| From | Channel | What it says | What mod-ui does |
+|---|---|---|---|
+| mod-host | `:5556`, text | `param_set`, `output_set`, `patch_set`, `midi_mapped`, `midi_program_change`, `transport`, `log`, `data_finish` (`process_read_message_body`) | Updates `Host.plugins`, then `msg_callback`; a program change loads a pedalboard or snapshot; `transport` also updates designated ports and the HMI; the tuner's `output_set` goes to the HMI |
+| Control Chain daemon | unix socket, JSON | `device_status` events (a device appeared or left) | `ControlChainDeviceListener` asks `device_descriptor`, then `Addressings` and `Host` send `hw_add`, `hw_rem`, `hw_con`, `hw_dis`, `act_add`, `act_del` to the browsers |
+| A Control Chain pedal | through mod-host | a new value: the daemon calls mod-host (`cc_client_data_update_cb`, `CCDataUpdate`), which applies it and reports `param_set` on `:5556` | mod-ui does not see pedal values on its own socket |
+| HMI firmware | serial | commands such as `s` (knob), `tn`, `pb` | `Protocol` calls a `Host.hmi_*` method, which writes to mod-host and broadcasts |
+| libmod_utils | polled by `get_jack_data()` every second | JACK ports that appeared or left, buffer size, xruns, true bypass | `add_hw_port`, `remove_hw_port`, `bufsize`, `truebypass`, `stats` frames |
+| Host | `msg_callback` → `Session` → every `/websocket` | about 40 frame names | `host.js` turns them into calls on `desktop` |
+
+**MIDI.** A USB or DIN port appears in JACK (`system:midi_*`, `ttymidi:MIDI_in`). In aggregated mode everything is merged by `mod-midi-merger`, a JACK internal client that mod-host loads, into `mod-host:midi_in` and the raw MIDI ports of the plugins; in separated mode mod-host connects each new physical port to `midi_in` itself, and the pedalboard's cables connect it to plugins. mod-host handles the message **in the audio thread**: a mapped CC or pitch bend sets the port (`midi_map`, or `midi_learn`, which ends in `midi_mapped`), a program change on a monitored channel becomes `midi_program_change`, and clock ticks drive the transport in `transport_sync midi`. mod-ui learns afterwards, on `:5556`, and the browser last, as `param_set`, `midi_map` or `transport` frames. Going the other way, the browser only configures: `/jack/set_midi_devices` picks the ports and the mode, and `/effect/parameter/address` with `/midi-learn` starts a learn. In aggregated mode, plugin MIDI outputs reach devices through `mod-midi-broadcaster`.
+
+**Files.** The earlier figure drew one line from the Host because it was the only one that fit. Here the matrix at the bottom has one column per program, under that program's arrow: a filled square writes, a hollow one reads, a cross only deletes. The handlers, the Session, mod-host and subprocesses all write; `libmod_utils` only reads. Section 16 has the longer matrix.
+
+**The cloud.** Only the browser talks to it, for four kinds of resource: identity (`/devices/nonce`, `/devices/tokens`), JSON that only the page uses (`/lv2/plugins`, `/lv2/bundles`, `/pedalboards/stats`, `/pedalboards/validate/`), files that it relays into the device (plugin bundles, pedalboard archives, Control Chain firmware, OS images), and the upload of a shared pedalboard.
+
+**The mod.audio website.** It is a different thing from the API: pages that open in a browser tab, to which the UI links (`PLUGINS_URL/<plugin>`, `PEDALBOARDS_URL/pedalboards/<id>`, `PEDALBOARDS_URL/?plugin_uri=`). Those pages can reach back to the device through four entry points, all checking where the request comes from:
+
+| Entry point | What the page can do | What mod-ui does |
+|---|---|---|
+| `GET /hello` | Ask whether a device answers, and its version | Answers `online` (a browser is connected) and the image version. The settings page also uses it, to see when the device is back after a controller reflash |
+| `/rpbsocket`, `POST /pedalboard/load_remote/<id>` | **Load** a shared pedalboard on this device | Forwards `load-pb-remote <id>` to the first open UI, which does the rest (section 17.4) |
+| `/rplsocket`, empty message | Ask which binaries this device takes | Answers `bin-compat`, `platform`, `version` |
+| `/rplsocket`, base64 tarball | **Install** a plugin | `install_package`, then a `rescan` frame to the browsers |
+
+**Sharing does not go through these.** A share starts in the device's own UI and goes from the browser to the API (section 17.3); the website is where the result is shown. The website's source is not in this repository, so which of its pages use each entry point is not visible here; only the device's side is.
+
+**Other points of note:**
+
+- **mod-ui is not the only control path.** mod-host is a client of the Control Chain socket too, and it writes plugin LEDs, labels and pop-ups to shared memory (`/sys_msgs`, `sys_serial_write`) without passing through mod-ui. It also reads the compressor, noise gate and pedalboard gain from there. **The program on the other side is in neither repository**; `mod/hmi.py` mentions `mod-system-control`, the `sys_*` commands in `mod_protocol.py` and the virtual port `/dev/ttyHMI` point the same way, so the figure's `shm` arrows to the HMI firmware stand for "the HMI side" and are an inference.
+- **The audio goes first.** A pedal or MIDI value changes the sound before mod-ui hears about it; a stuck UI delays the meters and widgets, not the audio.
+- **Two sources of `param_set` frames.** mod-host does not report values that mod-ui itself set, so the Host and Session broadcast those on their own; a frame can therefore come from `:5556` or from a write, and the sender of a WebSocket `param_set` is skipped.
+- **Pace.** After `data_finish`, mod-host waits for `output_data_ready`. With a browser, the Host asks with `data_ready <n>` and asks again after 2 s if the answer is lost; without one, it answers at most every 0.2 to 0.5 s.
+- **MIDI pedalboard change depends on the browser.** `start_session` sends `monitor_midi_program <channel> 0` for the pedalboard channel when the first browser connects, and `end_session` turns it back on: with the page open, a program change on that channel does not load a pedalboard (the snapshot channel stays on).
+- **A cloud load needs an open page.** `/rpbsocket` and `/pedalboard/load_remote` only forward the id to `SESSION.websockets[0]`; with no browser they answer `false`.
+
 ### 13.2 The JACK graph
 
 ![Signal path: hardware and external inputs on the left, mod-host with one JACK client per plugin in the middle, and mod-monitor, USB, CV and MIDI outputs on the right](mod-ui/diagrams/jack-graph.svg)
 
 mod-ui never makes an audio connection itself: it asks mod-host (`connect`/`disconnect`) or, for hardware ports and the tuner and mute features, calls `jack_connect` through libmod_utils.
-What it owns is the **name translation** (`_fix_host_connection_port`, [`host.py:3354`](../mod/host.py#L3354) onward):
+What it owns is the **name translation** (`_fix_host_connection_port`, [`host.py:3369`](../mod/host.py#L3369) onward):
 
 | Pedalboard port | JACK port | Note |
 |---|---|---|
@@ -624,7 +667,7 @@ Two details of the order matter. The Host is created at **import time**, but its
 
 **The Host stores the current pedalboard, and the Host manages the tuner.** The Session does neither. The two classes look like a pair (a "web session" over a "host"), but they are not symmetrical:
 
-| | **Session** (`session.py`, 482 lines) | **Host** (`host.py`, 7,039 lines) |
+| | **Session** (`session.py`, 482 lines) | **Host** (`host.py`, 7,065 lines) |
 |---|---|---|
 | Created by | `SESSION = Session()` at import | the Session, in its constructor |
 | Is | the *web* side of the application | the *domain* side: the running pedalboard and the device |
@@ -752,7 +795,7 @@ Sending anything to the cloud requires `cloud-terms-accepted` in `prefs.json`; o
 
 ![Sequence of the device authentication: the cloud sends a nonce, mod-ui signs it with the device private key and encrypts it for the cloud, the cloud answers with an encrypted token that mod-ui decrypts, and the browser keeps the token in memory](mod-ui/diagrams/cloud-auth.svg)
 
-The two server routes are in [`webserver.py:2183`](../mod/webserver.py#L2183) and [`communication/token.py`](../mod/communication/token.py). The device signs the cloud's nonce (SHA-1, PKCS#1 v1.5) with its private key and
+The two server routes are in [`webserver.py:2190`](../mod/webserver.py#L2190) and [`communication/token.py`](../mod/communication/token.py). The device signs the cloud's nonce (SHA-1, PKCS#1 v1.5) with its private key and
 sends `{nonce, device_tag, device_uid, image_version, signature}` encrypted with the cloud's public key (RSA-OAEP for a random AES key, AES-EAX for the data). The cloud answers with a message encrypted for the device; for tokens whose
 JWT `version` is 2.3.2 or newer, mod-ui also checks the cloud's signature. The result is the **access token**, which the browser holds in memory (`desktop.cloudAccessToken`) and sends as `Authorization: MOD <token>`.
 Authentication runs when the page loads (once the cloud terms are accepted) and again, lazily, whenever an install, share or remote load finds no token; a share retries once on a `401`. The reply may also say an OS **upgrade** is available, which opens the upgrade window.
@@ -830,7 +873,7 @@ Counts are *occurrences in source text*, not executions; a `getoutput` in a rare
 | Python 3.4 syntax gate | `tools/check_py34.py` (`pycompat.yml`) | f-strings, `async`, annotations, walrus |
 | pylint | `pylint -E mod/*.py` (`pylint.yml`) | errors only; `modtools/` is commented out |
 | OpenAPI lint and docs | `openapi-docs.yml` | `docs/openapi.yml`, published as a Redoc page |
-| TypeScript packages | `modui-packages.yml` | `modui-client` and `modui-plugin-view`: 19 test files in the client |
+| TypeScript packages | `modui-packages.yml` | `modui-client` and `modui-plugin-view`: 22 test files in the client |
 
 The core of the application, `host.py`, `webserver.py`, `addressings.py`, `hmi.py` and the C++ library, has **no automated unit test**; the Desktop seam is the best-tested part.
 

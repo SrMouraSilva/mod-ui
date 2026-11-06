@@ -112,7 +112,7 @@ classDiagram
 <rect x="736" y="104" width="20" height="12" rx="2" fill="transparent" stroke="rgba(46,31,51,0.22)" stroke-width="0.8"/>
 <text x="746.0" y="113" fill="#6f5a78" font-size="7" font-family="'Geist Mono', monospace" text-anchor="middle" letter-spacing="0.08em">JS</text>
 <text x="816.0" y="136" fill="#2e1f33" font-size="12" font-weight="600" font-family="'Geist', sans-serif" text-anchor="middle">Pedalboard canvas</text>
-<text x="816.0" y="152" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pedalboard.js · 3,413</text>
+<text x="816.0" y="152" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">pedalboard.js · 3,420</text>
 <text x="816.0" y="166" fill="#5c4a64" font-size="9" font-family="'Geist Mono', monospace" text-anchor="middle">plugins, cables, drag</text>
 </g>
 <g>
